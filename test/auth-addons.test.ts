@@ -81,14 +81,17 @@ it("the orgs variant adds the organization plugin through the plugins seam", asy
   const tree = await gen({ database: "postgres", orm: "drizzle", auth: "better-auth-orgs" })
   const auth = text(tree, "apps/web/src/server/auth.ts")
   expect(auth).toContain('import { organization } from "better-auth/plugins"')
-  expect(auth).toMatch(/plugins: \[\s*organization\(\)/)
+  expect(auth).toMatch(/plugins: \[[^\]]*organization\(\)/)
   expect(auth).not.toContain("sendInvitationEmail")
-  expect(auth).not.toContain("efforge:auth-plugins")
+  // the anchor stays so later add-ons can append their own plugins
+  expect(auth).toContain("efforge:auth-plugins")
 })
 
 it("the better-auth variant leaves the plugins list empty", async () => {
   const tree = await gen({ database: "postgres", orm: "drizzle", auth: "better-auth" })
-  expect(text(tree, "apps/web/src/server/auth.ts")).toMatch(/plugins: \[\s*\]/)
+  expect(text(tree, "apps/web/src/server/auth.ts")).toContain(
+    "plugins: [/* efforge:auth-plugins */]",
+  )
   expect(tree.has("packages/db/src/auth-schema.ts")).toBe(true)
 })
 

@@ -22,7 +22,8 @@
   ],
   "dependencies": {
     "apps/web": [
-      "@repo/db"
+      "@repo/db",
+      "pg"
     ],
     "packages/db": [
       "@repo/core",
@@ -42,6 +43,9 @@
     ],
     "packages/core": [
       "@cloudflare/workers-types"
+    ],
+    "apps/web": [
+      "@types/pg"
     ]
   },
   "envVars": [
