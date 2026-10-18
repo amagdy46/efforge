@@ -163,7 +163,7 @@ it("addonIdsFor is independent of the order extras were given", () => {
   expect(a).toEqual(b)
 })
 
-it("every template file survives npm pack", async () => {
+it("every template file survives pnpm pack", async () => {
   // pnpm pack silently drops some names (package-lock.json at any depth, .npmrc, ...); the
   // published CLI then fails to load its templates, so check the real file list.
   const root = new URL("..", import.meta.url).pathname
