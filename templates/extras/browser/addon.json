@@ -153,6 +153,21 @@
           "alchemy"
         ]
       }
+    },
+    {
+      "name": "addServerFnMiddleware",
+      "args": {
+        "file": "apps/web/src/server/run-browser.ts",
+        "middleware": "requireSession",
+        "import": "requireSession",
+        "from": "./require-session"
+      },
+      "when": {
+        "auth": [
+          "better-auth",
+          "better-auth-orgs"
+        ]
+      }
     }
   ]
 }

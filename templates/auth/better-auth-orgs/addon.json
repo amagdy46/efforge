@@ -24,6 +24,10 @@
       "target": "apps/web/src/server/session.ts"
     },
     {
+      "path": "../better-auth/files/shared/server/require-session.ts",
+      "target": "apps/web/src/server/require-session.ts"
+    },
+    {
       "path": "files/lib/auth-client.ts",
       "target": "apps/web/src/lib/auth-client.ts"
     },
@@ -387,7 +391,7 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "auth",
-        "content": "## Auth (Better Auth)\n\n- Server: `apps/web/src/server/auth.ts` builds the Better Auth instance (`makeAuth`); `auth-live.ts` provides it and the `Auth` service from `@repo/core`. Read the session in Effect code through `Auth.currentSession`, never from cookies directly.\n- `/api/auth/*` is served by `auth-route.ts` (a `workerRoutes` entry). Client: `authClient` in `apps/web/src/lib/auth-client.ts`.\n- Route guard: `routes/app.tsx` redirects signed-out visitors to `/sign-in?redirect=...`; build redirects with `safeRedirect`, never from raw input.\n- Auth tables are in `packages/db` (`auth-schema.ts` or `migrations/0002_auth.sql`); after changing Better Auth plugins regenerate the schema and add a migration, never edit applied ones.\n- `BETTER_AUTH_SECRET` signs sessions: set it as a Worker secret (`.dev.vars` locally, `.env` / the deploy workflow secret with infra=alchemy). Never log or return it. `BETTER_AUTH_URL` is the public origin; when unset Better Auth infers it from the request.\n\n## Organizations\n\n- The `organization()` plugin is enabled: members, roles (`owner`, `admin`, `member`) and invitations live in the `organization`, `member` and `invitation` tables.\n- The session carries `activeOrganizationId`; new users are sent to `/onboarding` to create their first organization. Scope data by it.\n- Member management is at `/app/settings/members`; invitations are accepted at `/accept-invite/$id` (the invite link is shown to the inviter; no email is sent).\n- Check roles on the server before changing another member's data; the UI hides controls but does not enforce permissions."
+        "content": "## Auth (Better Auth)\n\n- Server: `apps/web/src/server/auth.ts` builds the Better Auth instance (`makeAuth`); `auth-live.ts` provides it and the `Auth` service from `@repo/core`. Read the session in Effect code through `Auth.currentSession`, never from cookies directly.\n- `/api/auth/*` is served by `auth-route.ts` (a `workerRoutes` entry). Client: `authClient` in `apps/web/src/lib/auth-client.ts`.\n- Route guard: `routes/app.tsx` redirects signed-out visitors to `/sign-in?redirect=...`; build redirects with `safeRedirect`, never from raw input.\n- Auth tables are in `packages/db` (`auth-schema.ts` or `migrations/0002_auth.sql`); after changing Better Auth plugins regenerate the schema and add a migration, never edit applied ones.\n- `BETTER_AUTH_SECRET` signs sessions: set it as a Worker secret (`.dev.vars` locally, `.env` / the deploy workflow secret with infra=alchemy). Never log or return it. `BETTER_AUTH_URL` is the public origin; when unset Better Auth infers it from the request.\n\n## Organizations\n\n- The `organization()` plugin is enabled: members, roles (`owner`, `admin`, `member`) and invitations live in the `organization`, `member` and `invitation` tables.\n- The session carries `activeOrganizationId`; new users are sent to `/onboarding` to create their first organization. Scope data by it.\n- Member management is at `/app/settings/members`; invitations are accepted at `/accept-invite/$id` (the invite link is shown to the inviter, and with the `email` extra it is also emailed).\n- Check roles on the server before changing another member's data; the UI hides controls but does not enforce permissions."
       }
     }
   ]

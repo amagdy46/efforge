@@ -163,6 +163,7 @@ export const generate = (
         })
 
       for (const v of manifest.envVars) {
+        if (!matches(v.when, config)) continue
         if (seenEnv.has(v.name)) continue
         seenEnv.add(v.name)
         const group = env.get(manifest.id) ?? { title: manifest.title, vars: [] }

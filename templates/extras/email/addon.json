@@ -1,0 +1,182 @@
+{
+  "id": "extras/email",
+  "title": "Email",
+  "description": "Transactional email: a Mailer service on Cloudflare Email Service, printed to the console in development, plus invitation emails with organizations.",
+  "files": [
+    {
+      "path": "files/core-mailer.ts",
+      "target": "packages/core/src/mailer.ts"
+    },
+    {
+      "path": "files/mailer.ts",
+      "target": "apps/web/src/server/mailer.ts"
+    },
+    {
+      "path": "files/invitation-email.ts",
+      "target": "apps/web/src/server/invitation-email.ts",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ]
+      }
+    }
+  ],
+  "dependencies": {},
+  "devDependencies": {},
+  "envVars": [
+    {
+      "name": "MAIL_FROM",
+      "example": "noreply@example.com",
+      "description": "Sender address; its domain must be enabled for Cloudflare Email Sending (wrangler email sending enable <domain>)"
+    },
+    {
+      "name": "MAIL_TRANSPORT",
+      "example": "cloudflare",
+      "description": "cloudflare (default) sends through the EMAIL binding; console prints emails instead (used by .dev.vars)"
+    }
+  ],
+  "requires": [],
+  "conflicts": [],
+  "transforms": [
+    {
+      "name": "addExport",
+      "args": {
+        "file": "packages/core/src/index.ts",
+        "export": "*",
+        "from": "./mailer"
+      }
+    },
+    {
+      "name": "addLayer",
+      "args": {
+        "file": "apps/web/src/server/layers.ts",
+        "import": "MailerLive",
+        "from": "./mailer",
+        "layer": "MailerLive"
+      }
+    },
+    {
+      "name": "addDevVar",
+      "args": {
+        "name": "MAIL_TRANSPORT",
+        "value": "console"
+      }
+    },
+    {
+      "name": "addDevVar",
+      "args": {
+        "name": "MAIL_FROM",
+        "value": "noreply@localhost"
+      }
+    },
+    {
+      "name": "addAuthPlugin",
+      "args": {
+        "mergeInto": "organization",
+        "property": "sendInvitationEmail",
+        "value": "sendInvitationEmail",
+        "import": "sendInvitationEmail",
+        "from": "./invitation-email"
+      },
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ]
+      }
+    },
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "send_email",
+        "value": "{\"name\":\"EMAIL\"}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "addImport",
+      "args": {
+        "file": "infra/alchemy.run.ts",
+        "import": "* as Config",
+        "from": "effect/Config"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "email",
+        "code": "const email = Cloudflare.Email.SendEmail(\"Email\")",
+        "binding": "EMAIL"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "mailFrom",
+        "code": "const mailFrom = yield* Config.String(\"MAIL_FROM\")",
+        "binding": "MAIL_FROM"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "mailTransport",
+        "code": "// local stages print emails to the console; every other stage sends them\nconst mailTransport = yield* Config.String(\"MAIL_TRANSPORT\").pipe(\n  Config.withDefault((yield* Alchemy.Stack).stage.startsWith(\"dev\") ? \"console\" : \"cloudflare\"),\n)",
+        "binding": "MAIL_TRANSPORT"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addWorkflowSecret",
+      "args": {
+        "name": "MAIL_FROM"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "email",
+        "content": "## Email\n\n- Send mail through the `Mailer` service from `@repo/core` (`send({ to, subject, text, html? })`); do not use the `EMAIL` binding directly. Always send a `text` body.\n- `apps/web/src/server/mailer.ts` picks the transport from `MAIL_TRANSPORT`: `console` (set in `.dev.vars`) prints the message to the dev server log, anything else sends through Cloudflare Email Service with the `EMAIL` `send_email` binding. `MAIL_FROM` must be an address on a domain enabled for sending: `wrangler email sending enable <domain>`.\n- Transactional mail only (invitations, receipts, password resets); use a dedicated platform for marketing or bulk sends."
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "email-invitations",
+        "content": "### Invitation emails\n\n- `organization({ sendInvitationEmail })` in `auth.ts` calls `invitation-email.ts`, which emails the `/accept-invite/<id>` link through the `Mailer`. A failed send is logged and does not fail the invitation; the link is still shown to the inviter."
+      },
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ]
+      }
+    }
+  ]
+}

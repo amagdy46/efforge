@@ -201,6 +201,30 @@ const stacks: Array<[string, Parameters<typeof withDefaults>[0]]> = [
     },
   ],
   [
+    "house",
+    {
+      name: "house",
+      database: "postgres",
+      orm: "drizzle",
+      auth: "better-auth-orgs",
+      infra: "alchemy",
+      ai: "effect-ai-byok",
+      extras: ["workflows", "realtime", "browser", "storage", "email"],
+    },
+  ],
+  [
+    "d1-ai-email",
+    {
+      name: "d1-ai-email",
+      database: "d1",
+      orm: "effect-sql",
+      auth: "better-auth-orgs",
+      infra: "none",
+      ai: "effect-ai-byok",
+      extras: ["email"],
+    },
+  ],
+  [
     "pg-drizzle-extras-alchemy",
     {
       name: "pg-drizzle-extras-alchemy",

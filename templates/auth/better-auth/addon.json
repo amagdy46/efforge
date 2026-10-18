@@ -24,6 +24,10 @@
       "target": "apps/web/src/server/session.ts"
     },
     {
+      "path": "../better-auth/files/shared/server/require-session.ts",
+      "target": "apps/web/src/server/require-session.ts"
+    },
+    {
       "path": "files/lib/auth-client.ts",
       "target": "apps/web/src/lib/auth-client.ts"
     },

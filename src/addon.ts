@@ -43,6 +43,7 @@ export const AddonManifest = Schema.Struct({
       name: Schema.String,
       example: Schema.String,
       description: Schema.String,
+      when: Schema.optionalKey(When),
     }),
   ),
   requires: Strings,

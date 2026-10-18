@@ -52,7 +52,8 @@ export const addAuthPlugin: Transform = (tree, args) =>
       const target = args.mergeInto
       const property = req(args, "property", "addAuthPlugin")
       const value = req(args, "value", "addAuthPlugin")
-      const snippet = `In ${AUTH_FILE}, in the ${target}(...) plugin options add:\n  ${property}: ${value}`
+      const entry = property === value ? property : `${property}: ${value}`
+      const snippet = `In ${AUTH_FILE}, in the ${target}(...) plugin options add:\n  ${entry}`
       const call = plugins
         .getElements()
         .find(
@@ -63,7 +64,7 @@ export const addAuthPlugin: Transform = (tree, args) =>
       const first = call.getArguments()[0]
       if (first === undefined) {
         const open = text.indexOf("(", call.getExpression().getEnd())
-        const next = `${text.slice(0, open + 1)}{ ${property}: ${value} }${text.slice(open + 1)}`
+        const next = `${text.slice(0, open + 1)}{ ${entry} }${text.slice(open + 1)}`
         return withFile(tree, AUTH_FILE, withImport(next, args))
       }
       if (!Node.isObjectLiteralExpression(first))
@@ -75,7 +76,7 @@ export const addAuthPlugin: Transform = (tree, args) =>
         first.getStart(),
         first.getEnd() - 1,
         props.at(-1)?.getEnd(),
-        `${property}: ${value}`,
+        entry,
       )
       return withFile(tree, AUTH_FILE, withImport(next, args))
     }

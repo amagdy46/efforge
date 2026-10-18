@@ -69,7 +69,7 @@ it("every auth x database x orm combination generates the server, UI and schema"
         const schema = text(tree, "packages/db/src/auth-schema.ts")
         expect(schema.includes("export const organization"), where).toBe(hasOrgs)
         expect(text(tree, "packages/db/src/index.ts"), where).toContain("./auth-schema")
-        expect(text(tree, "packages/db/drizzle.config.ts"), where).toContain("auth-schema")
+        expect(text(tree, "packages/db/drizzle.config.ts"), where).toContain("*schema.ts")
       } else {
         const sql = text(tree, "packages/db/migrations/0002_auth.sql")
         expect(sql.includes('create table "organization"'), where).toBe(hasOrgs)
