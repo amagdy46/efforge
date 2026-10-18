@@ -68,7 +68,8 @@ export const addAlchemyResource: Transform = (tree, args) =>
             .split("\n")
             .map((l) => (l === "" ? l : indent + l))
             .join("\n")
-          return `${t.slice(0, lineStart)}${block}\n${t.slice(lineStart)}`
+          const eol = t.includes("\r\n") ? "\r\n" : "\n"
+          return `${t.slice(0, lineStart)}${block.replace(/\n/g, eol)}${eol}${t.slice(lineStart)}`
         },
       })
     }

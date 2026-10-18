@@ -42,6 +42,7 @@ export const appendListItem = (
   lastEnd: number | undefined,
   item: string,
 ): string => {
+  const eol = text.includes("\r\n") ? "\r\n" : "\n"
   const inner = text.slice(open + 1, close)
   if (lastEnd === undefined) {
     if (inner.trim() === "") {
@@ -54,8 +55,8 @@ export const appendListItem = (
       const closeIndent = /\n([ \t]*)$/.exec(inner)?.[1]
       const pad = closeIndent === undefined ? `${indent}  ` : `${closeIndent}  `
       const head = text.slice(0, close).replace(/[ \t]*$/, "")
-      const nl = head.endsWith("\n") ? "" : "\n"
-      return `${head}${nl}${pad}${item},\n${closeIndent ?? indent}${text.slice(close)}`
+      const nl = head.endsWith("\n") ? "" : eol
+      return `${head}${nl}${pad}${item},${eol}${closeIndent ?? indent}${text.slice(close)}`
     }
     return `${text.slice(0, close)} ${item}${text.slice(close)}`
   }
@@ -64,11 +65,17 @@ export const appendListItem = (
   if (!inner.includes("\n")) return `${text.slice(0, lastEnd)}, ${item}${text.slice(lastEnd)}`
   const lineStart = text.lastIndexOf("\n", lastEnd - 1) + 1
   const indent = /^[ \t]*/.exec(text.slice(lineStart))?.[0] ?? ""
+  // a trailing same-line comment belongs to the previous item, so insert after it
+  const trailing = (from: number) =>
+    from +
+    (/^[ \t]*(?:\/\/[^\r\n]*|\/\*[^\r\n]*?\*\/)?(?=[ \t]*\r?\n)/.exec(text.slice(from))?.[0]
+      .length ?? 0)
   if (comma) {
-    const at = lastEnd + comma[0].length
-    return `${text.slice(0, at)}\n${indent}${item},${text.slice(at)}`
+    const at = trailing(lastEnd + comma[0].length)
+    return `${text.slice(0, at)}${eol}${indent}${item},${text.slice(at)}`
   }
-  return `${text.slice(0, lastEnd)},\n${indent}${item}${text.slice(lastEnd)}`
+  const at = trailing(lastEnd)
+  return `${text.slice(0, lastEnd)},${text.slice(lastEnd, at)}${eol}${indent}${item}${text.slice(at)}`
 }
 
 /** Adds `spec` (`Name`, `A, B as C`, `* as NS` or `default Name`) from `from`; undefined if already imported. */
@@ -105,6 +112,17 @@ export const addImportText = (
   )
   const fresh = names.filter((n) => !have.has(n.split(/\s+as\s+/).at(-1) as string))
   if (fresh.length === 0) return undefined
+  // `import type { X }` plus `import { X }` would redeclare X, so promote it to a value import
+  for (const d of decls.filter((d) => d.isTypeOnly())) {
+    for (const n of d.getNamedImports()) {
+      if (fresh.includes(n.getText())) {
+        n.remove()
+        added = true
+      }
+    }
+    if (d.getNamedImports().length === 0 && d.getDefaultImport() === undefined) d.remove()
+  }
+  if (added) return addImportText(file, sf.getFullText(), spec, from) ?? sf.getFullText()
   if (target) {
     for (const n of fresh) target.addNamedImport(n)
     added = true
@@ -116,7 +134,8 @@ export const addImportText = (
 
 const insertImport = (sf: SourceFile, text: string, stmt: string): string => {
   const last = sf.getImportDeclarations().at(-1)
-  if (last === undefined) return `${stmt}\n${text}`
+  if (last === undefined) return `${stmt}${text.includes("\r\n") ? "\r\n" : "\n"}${text}`
   const end = last.getEnd()
-  return `${text.slice(0, end)}\n${stmt}${text.slice(end)}`
+  const eol = text.includes("\r\n") ? "\r\n" : "\n"
+  return `${text.slice(0, end)}${eol}${stmt}${text.slice(end)}`
 }
