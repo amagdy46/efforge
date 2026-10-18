@@ -94,3 +94,67 @@ it("toCommand includes non-defaults", () => {
     toCommand(withDefaults({ name: "a", database: "none", extras: ["storage", "email"] })),
   ).toBe("npm create efforge a -- --database=none --extras=storage,email")
 })
+
+it("ProjectName rejects unscoped slash and empty, accepts scoped", () => {
+  const dec = Schema.decodeUnknownOption(ProjectName)
+  expect(Option.isNone(dec("a/b"))).toBe(true)
+  expect(Option.isNone(dec(""))).toBe(true)
+  expect(Option.isSome(dec("@scope/name"))).toBe(true)
+})
+
+it("d1, workflows, realtime and browser require cloudflare", () => {
+  const other = { runtime: "other" } as unknown as Parameters<typeof available>[1]
+  expect(ids(available("database", other))).toEqual(["postgres", "none"])
+  expect(ids(available("extras", other))).toEqual(["storage", "email"])
+  const cf = { runtime: "cloudflare" } as const
+  expect(ids(available("database", cf))).toContain("d1")
+  expect(ids(available("extras", cf))).toEqual([
+    "workflows",
+    "realtime",
+    "browser",
+    "storage",
+    "email",
+  ])
+})
+
+it.effect("validate rejects cloudflare-only options on another runtime", () =>
+  Effect.gen(function* () {
+    const bad = {
+      ...withDefaults({ name: "a" }),
+      runtime: "other",
+      extras: ["workflows"],
+    } as unknown as Parameters<typeof validate>[0]
+    const err = yield* Effect.flip(validate(bad))
+    expect(err.slot).toBe("runtime")
+  }),
+)
+
+it("toCommand output round-trips through withDefaults", () => {
+  const cfgs = [
+    withDefaults({ name: "a" }),
+    withDefaults({ name: "a", database: "none", infra: "alchemy" }),
+    withDefaults({
+      name: "a",
+      database: "d1",
+      orm: "effect-sql",
+      auth: "none",
+      ai: "effect-ai-byok",
+    }),
+    withDefaults({ name: "a", orm: "none", extras: ["workflows", "email"] }),
+  ]
+  for (const c of cfgs) {
+    const flags = Object.fromEntries(
+      (toCommand(c).split(" -- ")[1] ?? "")
+        .split(" ")
+        .filter(Boolean)
+        .map((f) => f.slice(2).split("=") as [string, string]),
+    )
+    const { extras, ...rest } = flags
+    const back = withDefaults({
+      name: c.name,
+      ...rest,
+      ...(extras ? { extras: extras.split(",") } : {}),
+    } as never)
+    expect(back).toEqual(c)
+  }
+})
