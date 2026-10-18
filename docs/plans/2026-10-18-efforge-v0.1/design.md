@@ -51,6 +51,7 @@ Why now: Spoorline is about to start M0 (auth, workspaces, DB, infra, deploy). T
 
   | Package | Version |
   |---|---|
+  | drizzle-orm / drizzle-kit | 1.0.0-rc.4 (Effect 4 drivers) |
   | effect / @effect/* | 4.0.5 |
   | alchemy | 2.0.0-beta.83 |
   | better-auth | 1.7.10 |
@@ -116,6 +117,7 @@ Why now: Spoorline is about to start M0 (auth, workspaces, DB, infra, deploy). T
   |---|---|
   | runtime | `cloudflare` |
   | database | `postgres` (any URL; Hyperdrive on Cloudflare), `d1`, `none` |
+| orm | `drizzle`, `effect-sql` (when database≠none) |
   | auth | `better-auth-orgs`, `better-auth`, `none` |
   | infra | `none` (generates a `wrangler.jsonc`), `alchemy` |
   | ai | `none`, `effect-ai-byok` (an `Llm` service; keys encrypted per organization when auth has orgs) |
@@ -125,8 +127,13 @@ Why now: Spoorline is about to start M0 (auth, workspaces, DB, infra, deploy). T
 - **CI tiers:** unit tests on the rules and generator, plus snapshot tests of generated trees. On every PR, one curated set of about 6 stacks is fully installed, typechecked and built. Live deploys stay out of CI. (my call)
 - **No telemetry in v0.1. If it's added later, it's opt-in.** (my call)
 
-- **Database client:** `@effect/sql-pg` (Postgres, via Hyperdrive on Cloudflare) or `@effect/sql-d1` behind one `Database` service. There is no ORM. Migrations are plain SQL files run by the Effect migrator. (my call)
-- **The better-auth schema** is generated once with the better-auth CLI and committed as a migration. Its tables are owned by `packages/db` like any other. (my call)
+- **ORM is its own slot.** It is only asked when `database≠none`. (user asked for ORM options; options are my call)
+  - **`drizzle` (default):** Drizzle 1.0 (`1.0.0-rc.4`, pinned) has native Effect 4 drivers (`drizzle-orm/effect-postgres`, `effect-d1`, `effect-schema`) built on `@effect/sql-pg` / `@effect/sql-d1`. Queries return Effects, migrations come from drizzle-kit, and better-auth has a first-party Drizzle adapter.
+  - **`effect-sql`:** plain `@effect/sql` with tagged-template SQL and Effect Schema, plus SQL migrations run by the Effect migrator. Lightest, and the most "pure Effect".
+  - **`prisma`:** v0.2. Prisma 7 runs on Workers through driver adapters, but it isn't Effect-native, so it would need a wrapper service.
+  - **`kysely`:** not planned. `@effect/sql-kysely` still targets Effect 3.
+  - Whichever ORM is chosen, it sits behind the same `Database` service, so app code doesn't change.
+- **The better-auth schema** is generated with the better-auth CLI. With Drizzle it becomes Drizzle schema files and migrations. With `effect-sql` it is committed as a SQL migration. Either way `packages/db` owns those tables. (my call)
 - **Invites:** without the `email` extra, an invite produces a copyable link. With it, the link is also sent by email. (my call)
 - **What each extra provides:**
 
