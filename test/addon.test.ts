@@ -49,7 +49,7 @@ it("fixtures: manifests carry requires, when and transforms", async () => {
   ])
   expect(addons.get("orm/drizzle")?.manifest.requires).toEqual(["database/postgres"])
   expect(addons.get("extras/email")?.manifest.files[1]?.when).toEqual({ database: ["postgres"] })
-  expect(addons.get("orm/drizzle")?.manifest.transforms[0]?.name).toBe("add-layer")
+  expect(addons.get("orm/drizzle")?.manifest.transforms[0]?.name).toBe("addImport")
 })
 
 it.todo("every non-none option in slots has a template folder (enabled in Task 10)")

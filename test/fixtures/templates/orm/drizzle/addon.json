@@ -8,5 +8,10 @@
   "envVars": [],
   "requires": ["database/postgres"],
   "conflicts": [],
-  "transforms": [{ "name": "add-layer", "args": { "layer": "DrizzleLive" } }]
+  "transforms": [
+    {
+      "name": "addImport",
+      "args": { "file": "apps/web/src/schema.ts", "import": "DrizzleLive", "from": "drizzle-live" }
+    }
+  ]
 }

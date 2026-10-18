@@ -201,13 +201,13 @@ Anchors:
 Each transform is a no-op when its edit is already present.
 **Blocked by:** 4
 
-- [ ] Write failing tests for each transform:
+- [x] Write failing tests for each transform:
   - Applied once, it produces the expected output.
   - Applied twice, the result is identical to applying it once.
   - With the anchor missing, it fails with `TransformAnchorMissing` containing the snippet.
   - `addLayer` on a file where the user has added their own layer and reformatted the code still appends correctly.
-- [ ] Implement; wire it into `generate`; run `pnpm test`; expect pass
-- [ ] Commit
+- [x] Implement; wire it into `generate`; run `pnpm test`; expect pass
+- [x] Commit
 
 ### Task 6: Base template, the "minimal" stack builds
 

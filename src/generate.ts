@@ -66,6 +66,7 @@ export const generate = (
     const env = new Map<string, { title: string; vars: string[] }>()
     const seenEnv = new Set<string>()
 
+    const loaded: LoadedAddon[] = []
     for (const id of addonIdsFor(config)) {
       const addon = addons.get(id)
       if (addon === undefined)
@@ -73,8 +74,11 @@ export const generate = (
           reason: "unknown-addon",
           message: `add-on "${id}" is not loaded`,
         })
-      const { manifest, dir } = addon
+      loaded.push(addon)
+    }
 
+    // 1. every overlay, in add-on order, so a later overlay can never clobber an earlier edit
+    for (const { manifest, dir } of loaded) {
       for (const f of manifest.files) {
         if (!matches(f.when, config)) continue
         const content = yield* fs
@@ -87,7 +91,10 @@ export const generate = (
         tree = new Map(tree).set(f.target, content)
         overlay.add(f.target)
       }
+    }
 
+    // 2. dependencies and env vars
+    for (const { manifest } of loaded) {
       for (const [key, section] of [
         ["dependencies", manifest.dependencies],
         ["devDependencies", manifest.devDependencies],
@@ -132,7 +139,10 @@ export const generate = (
         group.vars.push(`${v.name}=${v.example}`)
         env.set(manifest.id, group)
       }
+    }
 
+    // 3. every transform, in add-on order
+    for (const { manifest } of loaded) {
       for (const t of manifest.transforms) {
         if (!matches(t.when, config)) continue
         const before = tree

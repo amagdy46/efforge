@@ -93,8 +93,7 @@ it("efforge.jsonc round-trips through EfforgeManifest and hashes match overlay t
     "apps/web/src/db.ts",
     "apps/web/src/mailer.ts",
     "apps/web/src/outbox.ts",
-    "apps/web/src/schema.ts",
-  ])
+  ]) // schema.ts is edited by a transform, so it is a seam file and not hash-tracked
   for (const [target, h] of Object.entries(m.files))
     expect(h).toBe(hash(tree.get(target) as string))
   expect(hash("x")).toHaveLength(16)
@@ -151,4 +150,21 @@ it("fails with invalid-json when a package.json is malformed", async () => {
     }).pipe(Effect.scoped),
   )
   expect(r).toMatchObject({ _tag: "GenerateError", reason: "invalid-json" })
+})
+
+it("applies all overlays before any transform, so a later overlay cannot clobber a transform", async () => {
+  const tree = await gen(pg, (a) =>
+    patch(a, "base", {
+      transforms: [
+        {
+          name: "addImport",
+          args: { file: "apps/web/src/db.ts", import: "Effect", from: "effect" },
+        },
+      ],
+    }),
+  )
+  // database/postgres overlays db.ts after base declared the transform
+  expect(tree.get("apps/web/src/db.ts")).toBe(
+    'import { Effect } from "effect"\nexport const db = "postgres"\n',
+  )
 })
