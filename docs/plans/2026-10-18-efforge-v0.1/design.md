@@ -118,12 +118,46 @@ Why now: Spoorline is about to start M0 (auth, workspaces, DB, infra, deploy). T
   | database | `postgres` (any URL; Hyperdrive on Cloudflare), `d1`, `none` |
   | auth | `better-auth-orgs`, `better-auth`, `none` |
   | infra | `none` (generates a `wrangler.jsonc`), `alchemy` |
-  | ai | `none`, `effect-ai-byok` |
+  | ai | `none`, `effect-ai-byok` (an `Llm` service; keys encrypted per organization when auth has orgs) |
   | extras | `workflows`, `realtime`, `browser`, `storage`, `email` |
 
   Neon and Supabase become `database.provider` hints in v0.2. (my call)
 - **CI tiers:** unit tests on the rules and generator, plus snapshot tests of generated trees. On every PR, one curated set of about 6 stacks is fully installed, typechecked and built. Live deploys stay out of CI. (my call)
 - **No telemetry in v0.1. If it's added later, it's opt-in.** (my call)
+
+- **Database client:** `@effect/sql-pg` (Postgres, via Hyperdrive on Cloudflare) or `@effect/sql-d1` behind one `Database` service. There is no ORM. Migrations are plain SQL files run by the Effect migrator. (my call)
+- **The better-auth schema** is generated once with the better-auth CLI and committed as a migration. Its tables are owned by `packages/db` like any other. (my call)
+- **Invites:** without the `email` extra, an invite produces a copyable link. With it, the link is also sent by email. (my call)
+- **What each extra provides:**
+
+  | Extra | Generates |
+  |---|---|
+  | `workflows` | A `Jobs` service plus an example Workflow |
+  | `realtime` | A `Realtime` service backed by a Durable Object with hibernating WebSockets, plus a `useRoom` hook |
+  | `browser` | A `Browser` service with `apps/browser`: a Dockerfile with Playwright and Chromium, run as a Cloudflare Container. CI builds the image, but only for stacks that include `browser`, and never pushes it. |
+  | `storage` | A `Storage` service on R2 |
+  | `email` | A `Mailer` service on Cloudflare Email |
+
+  (my call)
+- **Compatibility rules for v0.1:**
+  - `auth≠none` requires `database≠none`.
+  - `workflows`, `realtime`, `browser` and `d1` require `runtime=cloudflare`.
+  - With `infra=none`, every binding goes into `wrangler.jsonc`. With `infra=alchemy`, they go into `infra/alchemy.run.ts`, and no `wrangler.jsonc` is generated.
+  - All other combinations are valid. (my call)
+- **Seam files vs overlays during `add`:**
+  - The hash check applies only to overlay files.
+  - Seam files are always edited through transforms, even after the user has changed them.
+  - A transform finds its anchor (an import list, the `Layer.mergeAll(...)` call, the plugin array). If the anchor is missing, `add` stops, names the file, and prints the snippet to paste by hand. (my call)
+- **Cloudflare bindings in the generated app** come from `effect-cf`, which provides them as layers. App code never reads `env` directly. (my call)
+- **Alchemy previews:**
+  - Picking alchemy also generates `.github/workflows/deploy.yml`. It deploys `prod` on main and `pr-<n>` on each PR, and destroys the PR stage on close.
+  - Secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `ALCHEMY_PASSWORD` and `DATABASE_URL`. With "Postgres, any URL", every PR preview shares one preview database; per-PR database branches arrive with the Neon provider in v0.2.
+  - Live deploys are verified by hand, not in CI. (my call)
+- **Versions:** `@effect/sql-pg`, `@effect/sql-d1`, `@effect/vitest` and `@effect/ai-anthropic`/`-openai`/`-openrouter` are all at 4.0.5, and Effect 4's AI core lives in `effect` itself. `@effect/ai` 0.37 is the old v3 package; don't use it. Tooling: magicast 0.5.5, ts-morph 28.0.0.
+- **Spoorline integration:**
+  - `packages/decoders` and `apps/cli` are plain TypeScript with no Effect, so they work alongside the generated code as they are.
+  - The only integration point is the `packages/*` / `apps/*` workspace globs.
+  - Spoorline is regenerated on a branch of its existing repo, so its history is kept. (my call)
 
 ## Left to the builder
 
