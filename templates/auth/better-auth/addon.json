@@ -1,0 +1,305 @@
+{
+  "id": "auth/better-auth",
+  "title": "Better Auth",
+  "description": "Email and password sign-in with Better Auth, a guarded /app and a user menu.",
+  "files": [
+    {
+      "path": "files/core/Auth.ts",
+      "target": "packages/core/src/Auth.ts"
+    },
+    {
+      "path": "files/shared/server/auth.ts",
+      "target": "apps/web/src/server/auth.ts"
+    },
+    {
+      "path": "files/server/auth-live.ts",
+      "target": "apps/web/src/server/auth-live.ts"
+    },
+    {
+      "path": "files/shared/server/auth-route.ts",
+      "target": "apps/web/src/server/auth-route.ts"
+    },
+    {
+      "path": "files/server/session.ts",
+      "target": "apps/web/src/server/session.ts"
+    },
+    {
+      "path": "files/lib/auth-client.ts",
+      "target": "apps/web/src/lib/auth-client.ts"
+    },
+    {
+      "path": "files/shared/lib/redirect.ts",
+      "target": "apps/web/src/lib/redirect.ts"
+    },
+    {
+      "path": "files/shared/components/auth-card.tsx",
+      "target": "apps/web/src/components/auth-card.tsx"
+    },
+    {
+      "path": "files/shared/components/user-menu.tsx",
+      "target": "apps/web/src/components/user-menu.tsx"
+    },
+    {
+      "path": "files/shared/routes/sign-in.tsx",
+      "target": "apps/web/src/routes/sign-in.tsx"
+    },
+    {
+      "path": "files/shared/routes/sign-up.tsx",
+      "target": "apps/web/src/routes/sign-up.tsx"
+    },
+    {
+      "path": "files/shared/routes/app/index.tsx",
+      "target": "apps/web/src/routes/app/index.tsx"
+    },
+    {
+      "path": "files/routes/app.tsx",
+      "target": "apps/web/src/routes/app.tsx"
+    },
+    {
+      "path": "files/routeTree.gen.ts",
+      "target": "apps/web/src/routeTree.gen.ts"
+    },
+    {
+      "path": "files/shared/dev.vars",
+      "target": ".dev.vars"
+    },
+    {
+      "path": "files/shared/server/db/pg-drizzle.ts",
+      "target": "apps/web/src/server/auth-database.ts",
+      "when": {
+        "database": [
+          "postgres"
+        ],
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "path": "files/shared/server/db/pg-effect-sql.ts",
+      "target": "apps/web/src/server/auth-database.ts",
+      "when": {
+        "database": [
+          "postgres"
+        ],
+        "orm": [
+          "effect-sql"
+        ]
+      }
+    },
+    {
+      "path": "files/schema/pg/auth-schema.ts",
+      "target": "packages/db/src/auth-schema.ts",
+      "when": {
+        "database": [
+          "postgres"
+        ],
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "path": "files/shared/drizzle/pg/drizzle.config.ts",
+      "target": "packages/db/drizzle.config.ts",
+      "when": {
+        "database": [
+          "postgres"
+        ],
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "path": "files/drizzle/pg/20261018161053_auth/migration.sql",
+      "target": "packages/db/drizzle/20261018161053_auth/migration.sql",
+      "when": {
+        "database": [
+          "postgres"
+        ],
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "path": "files/drizzle/pg/20261018161053_auth/snapshot.json",
+      "target": "packages/db/drizzle/20261018161053_auth/snapshot.json",
+      "when": {
+        "database": [
+          "postgres"
+        ],
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "path": "files/sql/pg/0002_auth.sql",
+      "target": "packages/db/migrations/0002_auth.sql",
+      "when": {
+        "database": [
+          "postgres"
+        ],
+        "orm": [
+          "effect-sql"
+        ]
+      }
+    },
+    {
+      "path": "files/shared/server/db/d1-drizzle.ts",
+      "target": "apps/web/src/server/auth-database.ts",
+      "when": {
+        "database": [
+          "d1"
+        ],
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "path": "files/shared/server/db/d1-effect-sql.ts",
+      "target": "apps/web/src/server/auth-database.ts",
+      "when": {
+        "database": [
+          "d1"
+        ],
+        "orm": [
+          "effect-sql"
+        ]
+      }
+    },
+    {
+      "path": "files/schema/d1/auth-schema.ts",
+      "target": "packages/db/src/auth-schema.ts",
+      "when": {
+        "database": [
+          "d1"
+        ],
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "path": "files/shared/drizzle/d1/drizzle.config.ts",
+      "target": "packages/db/drizzle.config.ts",
+      "when": {
+        "database": [
+          "d1"
+        ],
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "path": "files/drizzle/d1/20261018161054_auth/migration.sql",
+      "target": "packages/db/drizzle/20261018161054_auth/migration.sql",
+      "when": {
+        "database": [
+          "d1"
+        ],
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "path": "files/drizzle/d1/20261018161054_auth/snapshot.json",
+      "target": "packages/db/drizzle/20261018161054_auth/snapshot.json",
+      "when": {
+        "database": [
+          "d1"
+        ],
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "path": "files/sql/d1/0002_auth.sql",
+      "target": "packages/db/migrations/0002_auth.sql",
+      "when": {
+        "database": [
+          "d1"
+        ],
+        "orm": [
+          "effect-sql"
+        ]
+      }
+    }
+  ],
+  "dependencies": {
+    "apps/web": [
+      "better-auth"
+    ]
+  },
+  "devDependencies": {},
+  "envVars": [
+    {
+      "name": "BETTER_AUTH_SECRET",
+      "example": "change-me-to-a-long-random-string",
+      "description": "Signs sessions and cookies (local: .dev.vars; production: wrangler secret put BETTER_AUTH_SECRET)"
+    },
+    {
+      "name": "BETTER_AUTH_URL",
+      "example": "http://localhost:5173",
+      "description": "Public origin of the app, used for redirects and trusted origins (a Worker var in production)"
+    }
+  ],
+  "requires": [],
+  "conflicts": [],
+  "transforms": [
+    {
+      "name": "addExport",
+      "args": {
+        "file": "packages/core/src/index.ts",
+        "export": "*",
+        "from": "./Auth"
+      }
+    },
+    {
+      "name": "addImport",
+      "args": {
+        "file": "apps/web/src/server/layers.ts",
+        "import": "AuthLive",
+        "from": "./auth-live"
+      }
+    },
+    {
+      "name": "addLayer",
+      "args": {
+        "file": "apps/web/src/server/layers.ts",
+        "import": "AuthLive",
+        "from": "./auth-live",
+        "layer": "AuthLive"
+      }
+    },
+    {
+      "name": "addArrayItem",
+      "args": {
+        "file": "apps/web/src/server/routes.ts",
+        "name": "workerRoutes",
+        "item": "authRoute",
+        "import": "authRoute",
+        "from": "./auth-route"
+      }
+    },
+    {
+      "name": "addExport",
+      "args": {
+        "file": "packages/db/src/index.ts",
+        "export": "*",
+        "from": "./auth-schema.ts"
+      },
+      "when": {
+        "orm": [
+          "drizzle"
+        ]
+      }
+    }
+  ]
+}
