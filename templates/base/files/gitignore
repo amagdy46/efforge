@@ -3,6 +3,7 @@ dist
 .turbo
 .wrangler
 .alchemy
+routeTree.gen.ts
 .dev.vars
 .env
 .env.local

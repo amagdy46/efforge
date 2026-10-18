@@ -9,7 +9,7 @@ Rules for AI agents (and humans) working in this repo. Read this before changing
 - `apps/web/src/server/runtime.ts`: runs an Effect against `AppLayer`; server functions go through it.
 - `apps/web/src/server.ts`: the Worker entry. Durable Object and Workflow classes are exported from here.
 - `apps/web/src/server/routes.ts`: Worker-level routes (`workerRoutes`) tried before TanStack Start.
-- `apps/web/src/routes`: TanStack Router file routes. `routeTree.gen.ts` is generated; never edit it.
+- `apps/web/src/routes`: TanStack Router file routes. `routeTree.gen.ts` is generated (and gitignored); never edit it.
 - `apps/web/src/components/ui`: shadcn components.
 - `efforge.jsonc`: the stack choices. `efforge add` reads it; leave it alone.
 
@@ -50,12 +50,17 @@ Rules for AI agents (and humans) working in this repo. Read this before changing
 | `pnpm check`     | Format check, lint (incl. Effect diagnostics), types |
 | `pnpm format`    | Apply formatting (oxfmt via Vite+)                   |
 | `pnpm lint`      | Lint only                                            |
-| `pnpm typecheck` | Type-check every workspace                           |
+| `pnpm typecheck` | Regenerate the route tree, then type-check every workspace |
+| `pnpm --filter web routes` | Regenerate `routeTree.gen.ts` after adding or moving a route file |
 | `pnpm test`      | Tests (`@effect/vitest`)                             |
 | `pnpm build`     | Build every workspace                                |
 
 Lint and format are configured in the root `vite.config.ts`. The Effect rules need the
 patched install that `pnpm install` performs (`prepare` script); re-run it if they go quiet.
+`routeTree.gen.ts` is not committed: `pnpm install` generates it (`postinstall` in `apps/web`),
+`pnpm dev` and `pnpm build` keep it current, and `pnpm typecheck` regenerates it first, so a fresh
+clone works after `pnpm install`. Run `pnpm --filter web routes` after adding a route file if
+your editor reports a stale route tree.
 
 ## Before you finish
 

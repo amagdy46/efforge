@@ -7,7 +7,9 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "routes": "tsr generate",
+    "postinstall": "tsr generate",
+    "typecheck": "tsr generate && tsc --noEmit",
     "deploy": "pnpm build && wrangler deploy"
   }
 }

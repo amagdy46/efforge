@@ -5,6 +5,7 @@ import { describe, it } from "@effect/vitest"
 import { Effect, FileSystem, Path } from "effect"
 import { loadAddons } from "../../src/addon.ts"
 import { generate } from "../../src/generate.ts"
+import { ROUTE_TREE_COMMAND } from "../../src/routeTree.ts"
 import { type StackConfig, withDefaults } from "../../src/stack.ts"
 import type { Tree } from "../../src/tree.ts"
 
@@ -43,8 +44,9 @@ const generateStack = (config: StackConfig): Effect.Effect<string, unknown> =>
     yield* Effect.try(() => {
       sh(dir, "pnpm install --no-frozen-lockfile")
       // what `create` runs after installing: git init (own repo root, so a parent's ignore rules
-      // don't apply), then format
+      // don't apply), generate the route tree, then format
       sh(dir, "git init -q")
+      sh(dir, ROUTE_TREE_COMMAND)
       sh(dir, "pnpm format")
     })
     return dir

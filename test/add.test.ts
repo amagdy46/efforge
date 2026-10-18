@@ -21,8 +21,10 @@ import { unifiedDiff } from "../src/diff.ts"
 import { generate } from "../src/generate.ts"
 import { hash } from "../src/manifest.ts"
 import { scriptedPromptIO } from "../src/prompts/navigable.ts"
+import { ROUTE_TREE_COMMAND } from "../src/routeTree.ts"
 import { withDefaults } from "../src/stack.ts"
 import { writeTree } from "../src/write.ts"
+import { recordingSpawner } from "./recordingSpawner.ts"
 
 const fixtures = new URL("./fixtures/templates", import.meta.url).pathname
 const env = Layer.mergeAll(NodeServices.layer, Layer.succeed(TemplatesDir, fixtures))
@@ -211,6 +213,23 @@ it("all-or-nothing: a conflict in a later overlay leaves earlier ones unwritten"
   expect(e._tag).toBe("OverlayConflict")
   expect(e.file).toBe("apps/web/src/outbox.ts")
   expect(snapshot()).toEqual(before)
+})
+
+it("after installing, add generates the route tree (and does neither with --no-install)", async () => {
+  const calls: string[] = []
+  const recorded = Layer.mergeAll(
+    NodeServices.layer,
+    Layer.succeed(TemplatesDir, fixtures),
+    recordingSpawner(calls),
+  )
+  await runIn(recorded as never, addAddons(dir, ["email"], { overwrite: false, dryRun: false }))
+  expect(calls).toEqual(["pnpm install", ROUTE_TREE_COMMAND])
+  calls.length = 0
+  await runIn(
+    recorded as never,
+    addAddons(dir, ["extras/email"], { overwrite: false, dryRun: false }),
+  )
+  expect(calls).toEqual([])
 })
 
 it("a second add is a no-op: all skipped, no install", async () => {

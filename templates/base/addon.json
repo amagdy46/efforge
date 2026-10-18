@@ -112,10 +112,6 @@
       "target": "apps/web/src/lib/utils.ts"
     },
     {
-      "path": "files/web/src/routeTree.gen.ts",
-      "target": "apps/web/src/routeTree.gen.ts"
-    },
-    {
       "path": "files/web/src/router.tsx",
       "target": "apps/web/src/router.tsx"
     },
@@ -196,6 +192,7 @@
       "@tailwindcss/vite",
       "@types/react",
       "@types/react-dom",
+      "@tanstack/router-cli",
       "@vitejs/plugin-react",
       "tailwindcss",
       "typescript",

@@ -8,6 +8,7 @@ import { exec } from "../exec.ts"
 import { generate } from "../generate.ts"
 import { askStack, DEFAULT_NAME, type StackFlags } from "../prompts/flow.ts"
 import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
+import { generateRouteTree } from "../routeTree.ts"
 import { slots } from "../slots.ts"
 import { type StackConfig, toCommand } from "../stack.ts"
 import { TargetNotEmpty, writeTree } from "../write.ts"
@@ -56,7 +57,7 @@ const silentIO = (io: PromptIOShape): PromptIOShape => ({
 /** Files `vp fmt` can format; the lockfile and dotfiles like .gitignore are left alone. */
 const formattable = /\.(?:tsx?|jsx?|json|jsonc|css|md)$/
 
-/** validate -> generate -> (dry-run | write -> git init -> pnpm install -> format -> commit). */
+/** validate -> generate -> (dry-run | write -> git init -> pnpm install -> route tree -> format -> commit). */
 export const create = (opts: CreateOptions) =>
   Effect.gen(function* () {
     const live = yield* PromptIO
@@ -126,6 +127,16 @@ export const create = (opts: CreateOptions) =>
       : false
     if (opts.install) {
       yield* io.step("Installing dependencies (pnpm install)", exec("pnpm", ["install"], dir))
+      // routeTree.gen.ts isn't committed to templates: write it now, so typecheck and format see it.
+      yield* io
+        .step("Generating the route tree (tsr generate)", generateRouteTree(dir))
+        .pipe(
+          Effect.catchTag("CommandFailed", (e) =>
+            io.info(
+              `route tree skipped: ${e.command} failed. ${e.output.trim().split("\n")[0] ?? ""}; \`pnpm typecheck\` regenerates it`,
+            ),
+          ),
+        )
       // Transforms insert code and bindings unformatted, so tidy them now: the first `pnpm check`
       // passes. Without a repo of its own, a parent repo's ignore rules could hide every file, so
       // name the files: explicit paths bypass ignore files. Anything oxfmt can't fix is the user's to see.

@@ -31,6 +31,8 @@ export const versions: Record<string, string> = {
   "@cloudflare/workers-types": "5.20261016.1",
   "@tailwindcss/vite": "4.3.3",
   "@tanstack/react-router": "1.170.45",
+  // router-cli is versioned with @tanstack/router-generator (1.167.x), the generator @tanstack/react-start's plugin pins
+  "@tanstack/router-cli": "1.167.45",
   "@types/node": "26.6.5",
   "@types/pg": "8.23.1",
   "@types/react": "19.3.0",

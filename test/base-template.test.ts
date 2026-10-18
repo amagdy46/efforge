@@ -43,10 +43,14 @@ it("the minimal stack has the seam files and wrangler.jsonc", async () => {
     "packages/core/src/index.ts",
     "wrangler.jsonc",
     "apps/web/vite.config.ts",
-    "apps/web/src/routeTree.gen.ts",
   ])
     expect(tree.has(f), f).toBe(true)
+  expect(tree.has("apps/web/src/routeTree.gen.ts")).toBe(false)
+  expect(tree.get(".gitignore")).toContain("routeTree.gen.ts")
   const app = JSON.parse(tree.get("apps/web/package.json") as string)
+  expect(app.devDependencies["@tanstack/router-cli"]).toBe("catalog:")
+  expect(app.scripts.typecheck).toMatch(/^tsr generate && /)
+  expect(app.scripts.postinstall).toBe("tsr generate")
   expect(app.dependencies["@tanstack/react-start"]).toBe("catalog:")
   expect(tree.get("pnpm-workspace.yaml")).toContain('"@tanstack/react-start": 1.169.3')
 })

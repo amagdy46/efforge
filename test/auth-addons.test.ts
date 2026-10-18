@@ -47,10 +47,10 @@ it("every auth x database x orm combination generates the server, UI and schema"
         "apps/web/src/routes/sign-in.tsx",
         "apps/web/src/routes/sign-up.tsx",
         "apps/web/src/routes/app.tsx",
-        "apps/web/src/routeTree.gen.ts",
         ".dev.vars",
       ])
         expect(tree.has(file), `${where}: ${file}`).toBe(true)
+      expect(tree.has("apps/web/src/routeTree.gen.ts"), where).toBe(false)
       // the notes list on /app survives the dashboard overlay
       expect(text(tree, "apps/web/src/routes/app/index.tsx"), where).toContain("listNotes")
       const layers = text(tree, "apps/web/src/server/layers.ts")

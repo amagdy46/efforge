@@ -10,6 +10,7 @@ import { type CommandFailed, exec } from "../exec.ts"
 import { GenerateError, isComputed, matches } from "../generate.ts"
 import { EfforgeManifest, hash, renderManifest } from "../manifest.ts"
 import { applyProjectName } from "../projectName.ts"
+import { generateRouteTree } from "../routeTree.ts"
 import { IncompatibleStack, validate } from "../rules.ts"
 import { type SlotDef, slots } from "../slots.ts"
 import { type StackConfig, toCommand } from "../stack.ts"
@@ -409,7 +410,11 @@ export const addAddons = (
       yield* fs.makeDirectory(path.dirname(abs), { recursive: true }).pipe(io(rel))
       yield* fs.writeFileString(abs, content).pipe(io(rel))
     }
-    if (out.size > 0 && opts.install !== false) yield* exec("pnpm", ["install"], dir)
+    if (out.size > 0 && opts.install !== false) {
+      yield* exec("pnpm", ["install"], dir)
+      // add-ons may add or replace routes
+      yield* generateRouteTree(dir)
+    }
     return result
   })
 
