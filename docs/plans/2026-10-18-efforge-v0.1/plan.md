@@ -136,14 +136,14 @@ design: ./design.md
 Templates live in `templates/<slot>/<option>/`, plus `templates/base/`.
 **Blocked by:** 2
 
-- [ ] Write failing tests:
+- [x] Write failing tests:
   - Loading `templates/` decodes every `addon.json`.
   - Every `requires`/`conflicts` id exists in the map.
   - Every `files[].path` exists on disk.
   - Every non-`none` option in `slots` has a folder. Mark this one `it.todo` until Task 10, and turn it on there.
   - `addonIdsFor(withDefaults({name:"a"}))` equals the expected array.
-- [ ] Implement; run `pnpm test addon`; expect pass
-- [ ] Commit
+- [x] Implement; run `pnpm test addon`; expect pass
+- [x] Commit
 
 ### Task 4: Virtual tree and generator core
 

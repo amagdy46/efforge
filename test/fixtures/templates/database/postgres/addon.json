@@ -1,0 +1,18 @@
+{
+  "id": "database/postgres",
+  "title": "Postgres",
+  "description": "Fixture postgres.",
+  "files": [{ "path": "files/db.ts", "target": "apps/web/src/db.ts" }],
+  "dependencies": { "apps/web": ["@effect/sql-pg"] },
+  "devDependencies": {},
+  "envVars": [
+    {
+      "name": "DATABASE_URL",
+      "example": "postgres://localhost/app",
+      "description": "Postgres connection string"
+    }
+  ],
+  "requires": [],
+  "conflicts": ["database/d1"],
+  "transforms": []
+}

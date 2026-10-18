@@ -1,0 +1,12 @@
+{
+  "id": "orm/drizzle",
+  "title": "Drizzle",
+  "description": "Fixture drizzle.",
+  "files": [{ "path": "files/schema.ts", "target": "apps/web/src/schema.ts" }],
+  "dependencies": { "apps/web": ["drizzle-orm"] },
+  "devDependencies": { "apps/web": ["drizzle-kit"] },
+  "envVars": [],
+  "requires": ["database/postgres"],
+  "conflicts": [],
+  "transforms": [{ "name": "add-layer", "args": { "layer": "DrizzleLive" } }]
+}

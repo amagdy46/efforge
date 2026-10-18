@@ -1,0 +1,12 @@
+{
+  "id": "database/d1",
+  "title": "D1",
+  "description": "Fixture d1.",
+  "files": [],
+  "dependencies": {},
+  "devDependencies": {},
+  "envVars": [],
+  "requires": [],
+  "conflicts": ["database/postgres"],
+  "transforms": []
+}

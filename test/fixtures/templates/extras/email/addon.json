@@ -1,0 +1,19 @@
+{
+  "id": "extras/email",
+  "title": "Email",
+  "description": "Fixture email.",
+  "files": [
+    { "path": "files/mailer.ts", "target": "apps/web/src/mailer.ts" },
+    {
+      "path": "files/pg-outbox.ts",
+      "target": "apps/web/src/outbox.ts",
+      "when": { "database": ["postgres"] }
+    }
+  ],
+  "dependencies": {},
+  "devDependencies": {},
+  "envVars": [],
+  "requires": [],
+  "conflicts": [],
+  "transforms": []
+}

@@ -1,0 +1,12 @@
+{
+  "id": "base",
+  "title": "Base",
+  "description": "Monorepo skeleton shared by every stack.",
+  "files": [],
+  "dependencies": {},
+  "devDependencies": {},
+  "envVars": [],
+  "requires": [],
+  "conflicts": [],
+  "transforms": []
+}

@@ -1,0 +1,12 @@
+{
+  "id": "base",
+  "title": "Base",
+  "description": "Fixture base.",
+  "files": [{ "path": "files/package.json", "target": "package.json" }],
+  "dependencies": {},
+  "devDependencies": {},
+  "envVars": [],
+  "requires": [],
+  "conflicts": [],
+  "transforms": []
+}
