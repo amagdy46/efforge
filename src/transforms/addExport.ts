@@ -21,7 +21,12 @@ export const addExport: Transform = (tree, args) =>
     const sf = parseTs(file, text)
     const decls = sf.getExportDeclarations().filter((d) => d.getModuleSpecifierValue() === from)
     if (spec === "*") {
-      if (decls.some((d) => d.isNamespaceExport() && d.getNamespaceExport() === undefined))
+      // `export type * from` re-exports no values, so it doesn't satisfy `export *`
+      if (
+        decls.some(
+          (d) => !d.isTypeOnly() && d.isNamespaceExport() && d.getNamespaceExport() === undefined,
+        )
+      )
         return tree
       return withFile(tree, file, append(text, `export * from "${from}"`))
     }
@@ -32,9 +37,14 @@ export const addExport: Transform = (tree, args) =>
       .filter(Boolean)
     const target = decls.find((d) => !d.isTypeOnly() && !d.isNamespaceExport())
     const have = new Set(
-      decls.flatMap((d) =>
-        d.getNamedExports().map((n) => n.getAliasNode()?.getText() ?? n.getName()),
-      ),
+      decls
+        .filter((d) => !d.isTypeOnly())
+        .flatMap((d) =>
+          d
+            .getNamedExports()
+            .filter((n) => !n.isTypeOnly())
+            .map((n) => n.getAliasNode()?.getText() ?? n.getName()),
+        ),
     )
     const fresh = names.filter((n) => !have.has(n.split(/\s+as\s+/).at(-1) as string))
     if (fresh.length === 0) return tree

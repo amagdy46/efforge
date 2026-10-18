@@ -12,8 +12,14 @@ export interface StoredObject {
 }
 
 export interface StoredFile extends StoredObject {
-  readonly body: ArrayBuffer
+  /** Streamed from the bucket, not buffered; it can be read once. */
+  readonly body: ReadableStream
 }
+
+/** The Storage layer could not be built: a required secret is missing or too weak. */
+export class StorageConfigError extends Data.TaggedError("StorageConfigError")<{
+  readonly message: string
+}> {}
 
 export interface PutOptions {
   readonly contentType?: string
@@ -29,7 +35,11 @@ export interface SignedUrlOptions {
  *
  * R2 bindings can't presign URLs (that needs S3 API credentials), so `signedUrl` returns a path on
  * this Worker (`/files/<key>?expires=..&signature=..`) that serves the object while the HMAC
- * signature is valid. `verify` checks one.
+ * signature is valid. `verify` checks one (constant-time, rejects expired and malformed ones).
+ *
+ * Keys are opaque: generate them on the server (for example `crypto.randomUUID()`), never from
+ * raw user input, because anyone holding a signed URL can read exactly that key. The Worker serves
+ * files as attachments with `nosniff`, and inline only for raster images.
  */
 export class Storage extends Context.Service<
   Storage,

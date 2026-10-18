@@ -1,38 +1,37 @@
-import { Storage, StorageError } from "@repo/core"
+import { Storage, StorageConfigError, StorageError } from "@repo/core"
+import { MIN_SECRET_LENGTH, signPayload, verifyPayload } from "@repo/core/storage-security"
 import { Config, ConfigProvider, Effect, Layer, Option, Redacted } from "effect"
 import { R2, WorkerConfig } from "effect-cf"
 import { WorkerEnvLive } from "./cloudflare"
 
 class StorageBucket extends R2.Tag<StorageBucket>()("StorageBucket") {}
 
-const encoder = new TextEncoder()
-const hex = (buffer: ArrayBuffer) =>
-  [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, "0")).join("")
-
-/** HMAC-SHA256 over `<key>\n<expires>`, keyed by the STORAGE_SIGNING_SECRET secret. */
-const sign = (provider: ConfigProvider.ConfigProvider, key: string, expires: string) =>
-  Effect.gen(function* () {
-    const secret = yield* Config.Redacted("STORAGE_SIGNING_SECRET")
-    const cryptoKey = yield* Effect.promise(() =>
-      crypto.subtle.importKey(
-        "raw",
-        encoder.encode(Redacted.value(secret)),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["sign"],
-      ),
-    )
-    const mac = yield* Effect.promise(() =>
-      crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(`${key}\n${expires}`)),
-    )
-    return hex(mac)
-  }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, provider))
+/** The signing secret, read once when the layer is built. Fails with a clear message if unusable. */
+const loadSecret = (provider: ConfigProvider.ConfigProvider) =>
+  Config.Redacted("STORAGE_SIGNING_SECRET").pipe(
+    Effect.provideService(ConfigProvider.ConfigProvider, provider),
+    Effect.mapError(
+      () =>
+        new StorageConfigError({
+          message:
+            "STORAGE_SIGNING_SECRET is not set. Set it to a random string of at least 32 characters (wrangler secret put STORAGE_SIGNING_SECRET, or .dev.vars locally).",
+        }),
+    ),
+    Effect.map(Redacted.value),
+    Effect.filterOrFail(
+      (secret) => secret.length >= MIN_SECRET_LENGTH,
+      () =>
+        new StorageConfigError({
+          message: `STORAGE_SIGNING_SECRET is too short: use at least ${MIN_SECRET_LENGTH} characters.`,
+        }),
+    ),
+  )
 
 const fail = (operation: string) => (cause: unknown) => new StorageError({ operation, cause })
 
 const make = Effect.gen(function* () {
   const bucket = yield* StorageBucket
-  const provider = yield* WorkerConfig.provider
+  const secret = yield* loadSecret(yield* WorkerConfig.provider)
   return Storage.of({
     put: (key, body, options) =>
       bucket
@@ -56,26 +55,24 @@ const make = Effect.gen(function* () {
         const found = yield* bucket.get(key)
         if (Option.isNone(found)) return Option.none()
         const object = found.value
-        const body = yield* object.arrayBuffer
         return Option.some({
           key,
           size: object.size,
           contentType: object.httpMetadata?.contentType,
-          body,
+          body: object.body,
         })
       }).pipe(Effect.mapError(fail("get"))),
     delete: (key) => bucket.delete(key).pipe(Effect.mapError(fail("delete"))),
     signedUrl: (key, options) =>
       Effect.gen(function* () {
         const expires = String(Math.floor(Date.now() / 1000) + (options?.expiresInSeconds ?? 3600))
-        const signature = yield* sign(provider, key, expires)
+        const signature = yield* Effect.promise(() => signPayload(secret, key, expires))
         return `/files/${encodeURIComponent(key)}?expires=${expires}&signature=${signature}`
       }).pipe(Effect.mapError(fail("signedUrl"))),
     verify: (key, expires, signature) =>
       Effect.gen(function* () {
         if (expires === null || signature === null) return false
-        if (Number(expires) * 1000 < Date.now()) return false
-        return (yield* sign(provider, key, expires)) === signature
+        return yield* Effect.promise(() => verifyPayload(secret, key, expires, signature))
       }).pipe(Effect.mapError(fail("verify"))),
   })
 })

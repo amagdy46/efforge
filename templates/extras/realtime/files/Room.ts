@@ -1,3 +1,4 @@
+import { isMessageTooLarge, MAX_ROOM_CONNECTIONS } from "@repo/core/realtime-limits"
 import { Effect, Layer, Schema } from "effect"
 import { DurableObject, DurableObjectState, DurableObjectWebSocket, Worker } from "effect-cf"
 
@@ -31,9 +32,15 @@ export class Room extends RoomNamespace.make(Layer.empty, {
     const request = yield* Worker.NativeRequest
     if (request.headers.get("Upgrade") !== "websocket")
       return new Response("Expected a WebSocket upgrade", { status: 426 })
+    if ((yield* sockets).length >= MAX_ROOM_CONNECTIONS)
+      return new Response("Room is full", { status: 503 })
     return (yield* DurableObjectWebSocket.acceptUpgrade()).response
   }),
-  webSocketMessage: (_socket, message) =>
-    typeof message === "string" ? broadcast(message) : Effect.void,
+  // binary frames are ignored; oversized text closes the sender (1009 = message too big)
+  webSocketMessage: (socket, message) => {
+    if (typeof message !== "string") return Effect.void
+    if (isMessageTooLarge(message)) return Effect.ignore(socket.close(1009, "Message too big"))
+    return broadcast(message)
+  },
   webSocketClose: (socket, code, reason) => Effect.ignore(socket.close(code, reason)),
 }) {}

@@ -36,6 +36,14 @@
       "target": "apps/browser/tsconfig.json"
     },
     {
+      "path": "files/app/package-lock.json",
+      "target": "apps/browser/package-lock.json"
+    },
+    {
+      "path": "files/app/src/url-policy.ts",
+      "target": "apps/browser/src/url-policy.ts"
+    },
+    {
       "path": "files/app/src/server.ts",
       "target": "apps/browser/src/server.ts"
     }

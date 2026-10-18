@@ -1,3 +1,4 @@
+import { MAX_KEPT_MESSAGES, reconnectDelay } from "@repo/core/realtime-limits"
 import { useCallback, useEffect, useRef, useState } from "react"
 
 export interface RoomMessage {
@@ -11,7 +12,7 @@ export type RoomStatus = "connecting" | "open" | "closed"
 const PING = "effect-cf:ping"
 const PONG = "effect-cf:pong"
 
-/** Connects to a room and returns its messages. Reconnects after a drop. */
+/** Connects to a room and returns its last 200 messages. Reconnects with exponential backoff and jitter (up to 30 s). */
 export function useRoom(roomId: string) {
   const [messages, setMessages] = useState<ReadonlyArray<RoomMessage>>([])
   const [status, setStatus] = useState<RoomStatus>("connecting")
@@ -20,6 +21,7 @@ export function useRoom(roomId: string) {
 
   useEffect(() => {
     let closed = false
+    let attempt = 0
     let retry: ReturnType<typeof setTimeout> | undefined
     let ping: ReturnType<typeof setInterval> | undefined
 
@@ -32,18 +34,19 @@ export function useRoom(roomId: string) {
       socket.current = ws
       ws.addEventListener("open", () => {
         setStatus("open")
+        attempt = 0
         ping = setInterval(() => ws.send(PING), 30_000)
       })
       ws.addEventListener("message", ({ data }: MessageEvent) => {
         if (typeof data === "string" && data !== PONG) {
           const id = nextId.current++
-          setMessages((all) => [...all, { id, text: data }])
+          setMessages((all) => [...all, { id, text: data }].slice(-MAX_KEPT_MESSAGES))
         }
       })
       ws.addEventListener("close", () => {
         clearInterval(ping)
         setStatus("closed")
-        if (!closed) retry = setTimeout(connect, 1000)
+        if (!closed) retry = setTimeout(connect, reconnectDelay(attempt++))
       })
     }
     connect()

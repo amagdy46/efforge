@@ -340,6 +340,20 @@ it("addExport appends a re-export, merges names into an existing one, and is ide
   )
 })
 
+it("addExport treats type-only re-exports as distinct from value re-exports", async () => {
+  const star = await once({ "w.ts": 'export type * from "./room"\n' }, exp("*"))
+  expect(star.get("w.ts")).toBe('export type * from "./room"\nexport * from "./room"\n')
+  const named = await once({ "w.ts": 'export type { Room } from "./room"\n' }, exp("Room"))
+  expect(named.get("w.ts")).toBe(
+    'export type { Room } from "./room"\nexport { Room } from "./room"\n',
+  )
+  const inline = await once({ "w.ts": 'export { type Room } from "./room"\n' }, exp("Room"))
+  expect(inline.get("w.ts")).toContain("Room")
+  expect((inline.get("w.ts") as string).match(/Room/g)?.length).toBeGreaterThan(1)
+  const done = await once({ "w.ts": 'export * from "./room"\n' }, exp("*"))
+  expect(done.get("w.ts")).toBe('export * from "./room"\n')
+})
+
 it("addExport fails on a missing file", async () => {
   const e = await fail(new Map(), exp("Room", "./room", "nope.ts"))
   expect(e).toBeInstanceOf(TransformAnchorMissing)
@@ -389,6 +403,16 @@ it("setWranglerValue sets a dotted path when absent, keeps comments, and never o
   expect(parse(tree.get(WF) as string).dev).toEqual({ enable_containers: false })
   const mine = await once({ [WF]: '{ "dev": { "enable_containers": true } }' }, setDev)
   expect(parse(mine.get(WF) as string).dev.enable_containers).toBe(true)
+})
+
+it("setWranglerValue reports a value that is not JSON instead of crashing", async () => {
+  const e = (await fail(new Map([[WF, "{}"]]), {
+    name: "setWranglerValue",
+    args: { key: "dev.x", value: "{oops" },
+  })) as TransformAnchorMissing
+  expect(e).toBeInstanceOf(TransformAnchorMissing)
+  expect(e.anchor).toContain("valid JSON value")
+  expect(e.anchor).toContain("{oops")
 })
 
 it("setWranglerValue reports a missing file", async () => {
