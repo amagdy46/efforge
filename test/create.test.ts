@@ -11,7 +11,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { afterEach, beforeEach, expect, it, vi } from "@effect/vitest"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Sink, Stream } from "effect"
+import { ChildProcessSpawner } from "effect/process"
 import { runWith } from "../src/cli.ts"
 import { TemplatesDir } from "../src/commands/create.ts"
 import { type Answer, scriptedPromptIO } from "../src/prompts/navigable.ts"
@@ -180,4 +181,67 @@ it("--json without --dry-run keeps stdout JSON-only and writes the project", asy
   expect(s.output).toEqual([])
   expect(Object.keys(JSON.parse(logs.join("\n"))).sort()).toEqual(["command", "files", "stack"])
   expect(existsSync(join(tmp, "app", "efforge.jsonc"))).toBe(true)
+})
+
+/** A spawner that records `cmd args` and succeeds, so create's step order can be asserted. */
+const recordingSpawner = (calls: string[]) =>
+  Layer.succeed(
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make((command) => {
+      const c = command as unknown as { command: string; args: string[] }
+      calls.push([c.command, ...c.args].join(" "))
+      return Effect.succeed(
+        ChildProcessSpawner.makeHandle({
+          pid: ChildProcessSpawner.ProcessId(1),
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+          isRunning: Effect.succeed(false),
+          kill: () => Effect.void,
+          stdin: Sink.drain,
+          stdout: Stream.empty,
+          stderr: Stream.empty,
+          all: Stream.empty,
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+          unref: Effect.succeed(Effect.void),
+        }),
+      )
+    }),
+  )
+
+const runRecorded = (args: string[]) => {
+  const calls: string[] = []
+  const s = scriptedPromptIO([])
+  return runWith(args)
+    .pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          NodeServices.layer,
+          s.layer,
+          Layer.succeed(TemplatesDir, fixtures),
+          recordingSpawner(calls),
+        ),
+      ),
+      Effect.runPromise,
+    )
+    .then(() => calls)
+}
+
+it("git init runs before pnpm format, and the commit comes after it", async () => {
+  const calls = await runRecorded(["app", "-y", ...stackFlags])
+  expect(calls).toEqual([
+    "git init",
+    "pnpm install",
+    "pnpm format",
+    "git add -A",
+    "git commit -m Initial commit from efforge",
+  ])
+})
+
+it("without git, format names the files so a parent repo's ignore rules cannot hide them", async () => {
+  const calls = await runRecorded(["app", "-y", "--no-git", ...stackFlags])
+  expect(calls.map((c) => c.split(" ").slice(0, 2).join(" "))).toEqual([
+    "pnpm install",
+    "pnpm format",
+  ])
+  expect(calls[1]).toContain("package.json")
 })

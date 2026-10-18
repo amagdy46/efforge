@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process"
-import { mkdtempSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { NodeFileSystem } from "@effect/platform-node"
 import { describe, it } from "@effect/vitest"
 import { Effect, FileSystem, Path } from "effect"
@@ -10,6 +9,8 @@ import { type StackConfig, withDefaults } from "../../src/stack.ts"
 import type { Tree } from "../../src/tree.ts"
 
 const templates = new URL("../../templates", import.meta.url).pathname
+// Under the repo (gitignored), not os.tmpdir(): /tmp is often a small tmpfs.
+const e2eRoot = new URL("../../.e2e", import.meta.url).pathname
 
 const writeTree = (dir: string, tree: Tree) =>
   Effect.gen(function* () {
@@ -36,11 +37,13 @@ const sh = (cwd: string, command: string) => {
 const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
   Effect.gen(function* () {
     const tree = yield* generate(config, yield* loadAddons(templates))
-    const dir = mkdtempSync(`${tmpdir()}/efforge-${config.name}-`)
+    mkdirSync(e2eRoot, { recursive: true })
+    const dir = mkdtempSync(`${e2eRoot}/${config.name}-`)
     yield* writeTree(dir, tree)
     yield* Effect.try(() => {
       sh(dir, "pnpm install --no-frozen-lockfile")
-      // what `create` runs after installing, before the project's first check
+      // what `create` runs: git init (own repo root, so a parent's ignore rules don't apply), then format
+      sh(dir, "git init -q")
       sh(dir, "pnpm format")
       sh(dir, "pnpm typecheck && pnpm check && pnpm build")
     })

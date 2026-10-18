@@ -53,7 +53,10 @@ const silentIO = (io: PromptIOShape): PromptIOShape => ({
   step: (_label, eff) => eff,
 })
 
-/** validate -> generate -> (dry-run | write -> pnpm install -> git init + commit). */
+/** Files `vp fmt` can format; the lockfile and dotfiles like .gitignore are left alone. */
+const formattable = /\.(?:tsx?|jsx?|json|jsonc|css|md)$/
+
+/** validate -> generate -> (dry-run | write -> git init -> pnpm install -> format -> commit). */
 export const create = (opts: CreateOptions) =>
   Effect.gen(function* () {
     const live = yield* PromptIO
@@ -106,21 +109,37 @@ export const create = (opts: CreateOptions) =>
     }
 
     yield* io.step("Writing files", writeTree(dir, tree))
+    // Init before formatting: oxfmt honors .gitignore files up the directory tree, so a project
+    // outside any repo would otherwise pick up a parent's ignore rules (a `*` hides every file).
+    // A failure here must not fail the scaffold.
+    const gitReady = opts.git
+      ? yield* io.step("Initializing git", exec("git", ["init"], dir)).pipe(
+          Effect.as(true),
+          Effect.catchTag("CommandFailed", (e) =>
+            io
+              .info(
+                `git setup skipped: ${e.command} failed. ${e.output.trim().split("\n")[0] ?? ""}`,
+              )
+              .pipe(Effect.as(false)),
+          ),
+        )
+      : false
     if (opts.install) {
       yield* io.step("Installing dependencies (pnpm install)", exec("pnpm", ["install"], dir))
-      // Transforms insert code and bindings unformatted, so tidy
-      // them now: the first `pnpm check` then passes. Anything oxfmt can't fix is the user's to see.
+      // Transforms insert code and bindings unformatted, so tidy them now: the first `pnpm check`
+      // passes. Without a repo of its own, a parent repo's ignore rules could hide every file, so
+      // name the files: explicit paths bypass ignore files. Anything oxfmt can't fix is the user's to see.
+      const targets = gitReady ? [] : files.filter((f) => formattable.test(f))
       yield* io
-        .step("Formatting (vp fmt)", exec("pnpm", ["format"], dir))
+        .step("Formatting (vp fmt)", exec("pnpm", ["format", ...targets], dir))
         .pipe(Effect.catchTag("CommandFailed", () => Effect.void))
     }
-    if (opts.git) {
-      // Plain commit: whatever identity git is configured with. A failure here must not fail the scaffold.
+    if (gitReady) {
+      // Plain commit: whatever identity git is configured with.
       yield* io
         .step(
-          "Initializing git",
+          "Creating the initial commit",
           Effect.gen(function* () {
-            yield* exec("git", ["init"], dir)
             yield* exec("git", ["add", "-A"], dir)
             yield* exec("git", ["commit", "-m", "Initial commit from efforge"], dir)
           }),
@@ -128,7 +147,7 @@ export const create = (opts: CreateOptions) =>
         .pipe(
           Effect.catchTag("CommandFailed", (e) =>
             io.info(
-              `git setup skipped: ${e.command} failed. ${e.output.trim().split("\n")[0] ?? ""}`,
+              `git commit skipped: ${e.command} failed. ${e.output.trim().split("\n")[0] ?? ""}`,
             ),
           ),
         )

@@ -121,7 +121,7 @@ it("no template mentions Biome, and add-on sections reach AGENTS.md exactly once
     database: "postgres",
     orm: "drizzle",
     auth: "none",
-    infra: "none",
+    infra: "alchemy",
     ai: "none",
     extras: ["storage", "realtime"],
   })
