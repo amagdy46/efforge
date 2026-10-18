@@ -13,6 +13,6 @@ node scripts/bump.ts [--write]       # pins vs npm latest
 
 efforge lints and formats itself with Vite+ (`pnpm lint`, `pnpm format`, `pnpm check`). CI runs the unit checks, one e2e job per stack in `scripts/e2e-cases.ts`, a browser-image build and the browser flow against Postgres.
 
-- All dependency versions are exact pins in `src/versions.ts`.
+- Generated-project dependency versions are exact pins in `src/versions.ts`; efforge's own dependencies are pinned in `package.json`.
 - Templates live in `templates/<slot>/<option>/`, each with an `addon.json`. `pnpm pack` drops some file names (nested `package-lock.json`, `.npmrc`), so store those under another name and map them with `target`; `test/addon.test.ts` checks every template file ships.
 - Design decisions are recorded in `docs/decisions/`.

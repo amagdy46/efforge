@@ -1,7 +1,24 @@
 {
   "name": "create-efforge",
   "version": "0.1.0",
+  "description": "Start an Effect app with database, auth, and Cloudflare services already wired together",
+  "keywords": [
+    "cloudflare",
+    "cloudflare-workers",
+    "create",
+    "effect",
+    "scaffold",
+    "tanstack-start",
+    "template",
+    "typescript"
+  ],
+  "homepage": "https://github.com/amagdy46/efforge#readme",
+  "bugs": "https://github.com/amagdy46/efforge/issues",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amagdy46/efforge.git"
+  },
   "bin": {
     "create-efforge": "dist/bin.js",
     "efforge": "dist/bin.js"
