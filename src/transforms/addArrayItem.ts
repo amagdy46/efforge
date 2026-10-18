@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { SyntaxKind } from "ts-morph"
+import { Node, SyntaxKind } from "ts-morph"
 import {
   addImportText,
   appendListItem,
@@ -25,10 +25,11 @@ export const addArrayItem: Transform = (tree, args) =>
     const text = tree.get(file)
     if (text === undefined) return yield* missing(file, "file", snippet)
 
-    const array = parseTs(file, text)
-      .getVariableDeclaration(name)
-      ?.getInitializer()
-      ?.asKind(SyntaxKind.ArrayLiteralExpression)
+    // `[...] as const` and `[...] satisfies T` still hold the array literal
+    let init = parseTs(file, text).getVariableDeclaration(name)?.getInitializer()
+    while (init !== undefined && (Node.isAsExpression(init) || Node.isSatisfiesExpression(init)))
+      init = init.getExpression()
+    const array = init?.asKind(SyntaxKind.ArrayLiteralExpression)
     if (array === undefined) return yield* missing(file, `${name} = [...]`, snippet)
 
     const elements = array.getElements()

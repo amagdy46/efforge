@@ -493,3 +493,55 @@ it("addWorkflowSecret appends to an env map without CI, matching its indentation
     `on: push\nenv:\n    A: \${{ secrets.A }} # keep\n    B: \${{ secrets.B }}\njobs: {}\n`,
   )
 })
+
+// ---- addArrayItem on `as const` arrays
+it("addArrayItem appends to an `as const` array", async () => {
+  const t = await once(
+    { "a.ts": 'export const tabs = [\n  { to: "/a" },\n] as const\n' },
+    { name: "addArrayItem", args: { file: "a.ts", name: "tabs", item: '{ to: "/b" }' } },
+  )
+  expect(t.get("a.ts")).toContain('{ to: "/b" }')
+  expect(t.get("a.ts")).toContain("] as const")
+})
+
+// ---- addServerFnMiddleware
+const fns = `import { createServerFn } from "@tanstack/react-start"
+
+export const a = createServerFn({ method: "POST" })
+  .validator(v)
+  .handler(() => 1)
+
+export const b = createServerFn({ method: "GET" }).handler(() => 2)
+`
+const gate: TransformCall = {
+  name: "addServerFnMiddleware",
+  args: { file: "f.ts", middleware: "requireSession", import: "requireSession", from: "./rs" },
+}
+
+it("addServerFnMiddleware gates every server fn once and adds the import", async () => {
+  const t = await once({ "f.ts": fns }, gate)
+  const text = t.get("f.ts") ?? ""
+  expect(text.match(/\.middleware\(\[requireSession\]\)/g)).toHaveLength(2)
+  expect(text).toContain('import { requireSession } from "./rs"')
+})
+
+it("addServerFnMiddleware leaves an already gated server fn alone and reports missing anchors", async () => {
+  const gated = "export const a = createServerFn().middleware([mine]).handler(() => 1)\n"
+  const t = await once({ "f.ts": gated }, gate)
+  expect(t.get("f.ts")).not.toContain("requireSession]")
+  const e = await fail(new Map([["f.ts", "export const x = 1\n"]]), gate)
+  expect(e).toBeInstanceOf(TransformAnchorMissing)
+})
+
+// ---- addDevVar
+it("addDevVar creates .dev.vars, appends, and never overwrites", async () => {
+  const dv = (name: string, value: string): TransformCall => ({
+    name: "addDevVar",
+    args: { name, value },
+  })
+  const t1 = await once({}, dv("A", "1"))
+  expect(t1.get(".dev.vars")).toMatch(/^# Local development secrets[\s\S]*\nA=1\n$/)
+  const t2 = await run(t1, dv("B", "2"))
+  const t3 = await run(t2, dv("A", "other"))
+  expect(t3.get(".dev.vars")).toMatch(/A=1\nB=2\n$/)
+})

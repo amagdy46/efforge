@@ -3,9 +3,11 @@ import type { Tree } from "../tree.ts"
 import { addAlchemyResource } from "./addAlchemyResource.ts"
 import { addArrayItem } from "./addArrayItem.ts"
 import { addAuthPlugin } from "./addAuthPlugin.ts"
+import { addDevVar } from "./addDevVar.ts"
 import { addExport } from "./addExport.ts"
 import { addImport } from "./addImport.ts"
 import { addLayer } from "./addLayer.ts"
+import { addServerFnMiddleware } from "./addServerFnMiddleware.ts"
 import { addWorkflowSecret } from "./addWorkflowSecret.ts"
 import { addWranglerBinding } from "./addWranglerBinding.ts"
 import { appendAgentsSection } from "./appendAgentsSection.ts"
@@ -32,6 +34,8 @@ const registry: Readonly<Record<string, Transform>> = {
   addWorkflowSecret,
   addWranglerBinding,
   setWranglerValue,
+  addServerFnMiddleware,
+  addDevVar,
 }
 
 export const runTransform = (

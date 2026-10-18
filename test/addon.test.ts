@@ -2,6 +2,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { expect, it } from "@effect/vitest"
 import { Effect, FileSystem, Path } from "effect"
 import { AddonLoadError, addonIdsFor, loadAddons } from "../src/addon.ts"
+import { slots } from "../src/slots.ts"
 import { withDefaults } from "../src/stack.ts"
 
 const real = new URL("../templates", import.meta.url).pathname
@@ -53,7 +54,12 @@ it("fixtures: manifests carry requires, when and transforms", async () => {
   expect(addons.get("orm/drizzle")?.manifest.transforms[0]?.name).toBe("addImport")
 })
 
-it.todo("every non-none option in slots has a template folder (enabled in Task 10)")
+it("every non-none option in slots has a template folder", async () => {
+  const addons = await run(loadAddons(real))
+  for (const slot of slots)
+    for (const option of slot.options)
+      if (option.id !== "none") expect(addons.has(`${slot.id}/${option.id}`), option.id).toBe(true)
+})
 
 const scratch = (files: Record<string, string>) =>
   Effect.gen(function* () {

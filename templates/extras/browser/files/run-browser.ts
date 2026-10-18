@@ -9,8 +9,9 @@ const RunInput = Schema.Struct({
 
 /**
  * Loads `url` in the browser container and returns the page title and request count. The
- * container refuses private and local addresses (see apps/browser/src/server.ts); add your own
- * auth check before exposing this to anonymous users.
+ * container refuses private and local addresses (see apps/browser/src/server.ts). With an auth
+ * add-on this function is gated by `requireSession`; without one, add your own check before
+ * exposing it to anonymous users.
  */
 export const runBrowser = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(RunInput))

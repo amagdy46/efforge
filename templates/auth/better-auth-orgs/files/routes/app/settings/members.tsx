@@ -127,7 +127,7 @@ function Members() {
           <CardHeader>
             <CardTitle>Invite a member</CardTitle>
             <CardDescription>
-              Share the link with them. Sending invitation emails comes with the email extra.
+              Share the link with them. With the email extra they also get it by email.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
