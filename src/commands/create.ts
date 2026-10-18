@@ -71,7 +71,7 @@ export const create = (opts: CreateOptions) =>
 
     if (!quiet)
       yield* io.intro(
-        `${pc.bgCyan(pc.black(" create-efforge "))}${pc.dim("  opinionated, every part replaceable")}`,
+        `${pc.bgCyan(pc.black(" create-efforge "))}${pc.dim("  Effect apps on Cloudflare, already wired")}`,
       )
 
     const stack = yield* askStack(opts.flags, io, { yes })

@@ -6,7 +6,7 @@ import { efforgeVersion } from "./versions.ts"
 /** Root behaves as `create`; `efforge create` is an explicit alias, `efforge add` is separate. */
 export const root = Command.make("create-efforge", createConfig, createHandler).pipe(
   Command.withDescription(
-    "Opinionated Effect + TanStack Start + Cloudflare apps, every part replaceable",
+    "Scaffold an Effect + TanStack Start app on Cloudflare with database, auth and services already wired together",
   ),
   Command.withSubcommands([createCommand, addCommand]),
 )
