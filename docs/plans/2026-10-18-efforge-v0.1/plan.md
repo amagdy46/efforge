@@ -101,7 +101,7 @@ design: ./design.md
 
 **Blocked by:** 1
 
-- [ ] Write failing tests:
+- [x] Write failing tests:
   - `available("orm", {database:"none"})` returns only `none`.
   - `available("auth", {database:"none"})` returns only `none`.
   - `withDefaults({name:"a"})` equals the default row of the slot table.
@@ -109,9 +109,9 @@ design: ./design.md
   - `validate` with `auth:"better-auth", database:"none"` fails with `IncompatibleStack{slot:"auth"}`.
   - `Schema.decodeUnknownEither(ProjectName)("My App")` is a Left, and so is `"../x"`.
   - `toCommand(withDefaults({name:"a"}))` equals `"npm create efforge a"`.
-- [ ] Run `pnpm test rules`; expect failures
-- [ ] Implement; run; expect pass
-- [ ] Commit
+- [x] Run `pnpm test rules`; expect failures
+- [x] Implement; run; expect pass
+- [x] Commit
 
 ### Task 3: Add-on manifest and loader
 
