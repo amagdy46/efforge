@@ -1,11 +1,14 @@
 import { Jobs } from "@repo/core"
 import { createServerFn } from "@tanstack/react-start"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { runtime } from "./runtime"
+
+const StartInput = Schema.Struct({ name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)) })
+const StatusInput = Schema.Struct({ id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)) })
 
 /** Starts the example workflow; returns its instance id. */
 export const startExampleJob = createServerFn({ method: "POST" })
-  .validator((input: { name: string }) => input)
+  .validator(Schema.toStandardSchemaV1(StartInput))
   .handler(({ data }) =>
     runtime.runPromise(
       Effect.gen(function* () {
@@ -16,7 +19,7 @@ export const startExampleJob = createServerFn({ method: "POST" })
   )
 
 export const getExampleJobStatus = createServerFn({ method: "GET" })
-  .validator((input: { id: string }) => input)
+  .validator(Schema.toStandardSchemaV1(StatusInput))
   .handler(({ data }) =>
     runtime.runPromise(
       Effect.gen(function* () {

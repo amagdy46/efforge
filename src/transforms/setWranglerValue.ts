@@ -12,6 +12,12 @@ export const setWranglerValue: Transform = (tree, args) =>
     const key = req(args, "key", "setWranglerValue")
     const raw = req(args, "value", "setWranglerValue")
     const snippet = `In ${WRANGLER_FILE}, set "${key}" to ${raw}`
+    let value: unknown
+    try {
+      value = JSON.parse(raw)
+    } catch {
+      return yield* missing(WRANGLER_FILE, `valid JSON value for "${key}" (got ${raw})`, snippet)
+    }
     const text = tree.get(WRANGLER_FILE)
     if (text === undefined) return yield* missing(WRANGLER_FILE, "file", snippet)
 
@@ -28,7 +34,7 @@ export const setWranglerValue: Transform = (tree, args) =>
     }
     if (cur !== undefined) return tree
 
-    const edits = modify(text, path, JSON.parse(raw), {
+    const edits = modify(text, path, value, {
       formattingOptions: { insertSpaces: true, tabSize: 2 },
     })
     return withFile(tree, WRANGLER_FILE, applyEdits(text, edits))

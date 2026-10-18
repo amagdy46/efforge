@@ -5,7 +5,7 @@ import { WorkerEnvLive } from "./cloudflare"
 
 class BrowserNamespace extends ContainerNamespace.Tag<BrowserNamespace>()("BrowserNamespace") {}
 
-const RunResult = Schema.Struct({ title: Schema.String, requests: Schema.Number })
+const RunResult = Schema.Struct({ title: Schema.String, requests: Schema.Finite })
 const decode = Schema.decodeUnknownEffect(RunResult)
 
 const fail = (operation: string) => (cause: unknown) => new BrowserError({ operation, cause })

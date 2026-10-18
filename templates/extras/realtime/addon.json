@@ -26,6 +26,14 @@
     {
       "path": "files/realtime-demo.tsx",
       "target": "apps/web/src/components/realtime-demo.tsx"
+    },
+    {
+      "path": "files/realtime-limits.ts",
+      "target": "packages/core/src/realtime-limits.ts"
+    },
+    {
+      "path": "files/realtime-limits.test.ts",
+      "target": "packages/core/test/realtime-limits.test.ts"
     }
   ],
   "dependencies": {},
