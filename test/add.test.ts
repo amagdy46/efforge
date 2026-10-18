@@ -1,4 +1,13 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
@@ -17,12 +26,17 @@ import { writeTree } from "../src/write.ts"
 
 const fixtures = new URL("./fixtures/templates", import.meta.url).pathname
 const env = Layer.mergeAll(NodeServices.layer, Layer.succeed(TemplatesDir, fixtures))
-const run = <A, E>(eff: Effect.Effect<A, E, any>) =>
-  Effect.runPromise(eff.pipe(Effect.provide(env)) as Effect.Effect<A, E>)
-const fail = async (eff: Effect.Effect<any, any, any>) => {
-  const exit = await Effect.runPromise(Effect.flip(eff.pipe(Effect.provide(env)) as never))
-  return exit as { _tag: string } & Record<string, any>
-}
+type Env = Layer.Success<typeof env>
+const runIn = <A, E>(layer: Layer.Layer<Env>, eff: Effect.Effect<A, E, Env>) =>
+  Effect.runPromise(eff.pipe(Effect.provide(layer)))
+const run = <A, E>(eff: Effect.Effect<A, E, Env>) => runIn(env, eff)
+const failIn = async <A, E extends { _tag: string }>(
+  layer: Layer.Layer<Env>,
+  eff: Effect.Effect<A, E, Env>,
+) =>
+  (await Effect.runPromise(Effect.flip(eff.pipe(Effect.provide(layer))))) as E &
+    Record<string, unknown>
+const fail = <A, E extends { _tag: string }>(eff: Effect.Effect<A, E, Env>) => failIn(env, eff)
 
 let tmp: string
 let dir: string
@@ -188,4 +202,65 @@ it("unifiedDiff shows context and hunks", () => {
     "--- f (on disk)\n+++ f (efforge)\n@@ -1,3 +1,3 @@\n a\n-b\n+B\n c\n",
   )
   expect(unifiedDiff("f", "a\n", "a\n")).toBe("")
+})
+
+it("all-or-nothing: a conflict in a later overlay leaves earlier ones unwritten", async () => {
+  put("apps/web/src/outbox.ts", "export const mine = true\n")
+  const before = snapshot()
+  const e = await fail(addAddons(dir, ["email"], opts))
+  expect(e._tag).toBe("OverlayConflict")
+  expect(e.file).toBe("apps/web/src/outbox.ts")
+  expect(snapshot()).toEqual(before)
+})
+
+it("a second add is a no-op: all skipped, no install", async () => {
+  await run(addAddons(dir, ["email"], opts))
+  const first = snapshot()
+  const again = await run(addAddons(dir, ["email"], { overwrite: false, dryRun: false }))
+  expect(again).toEqual({ written: [], transformed: [], skipped: ["extras/email"] })
+  expect(snapshot()).toEqual(first)
+})
+
+it("a user-edited non-addon file is untouched", async () => {
+  put("apps/web/src/other.ts", "export const x = 1\n")
+  put("README.md", "mine\n")
+  await run(addAddons(dir, ["email"], opts))
+  expect(file("apps/web/src/other.ts")).toBe("export const x = 1\n")
+  expect(file("README.md")).toBe("mine\n")
+})
+
+it("--cwd may be relative", async () => {
+  const prev = process.cwd()
+  process.chdir(tmp)
+  try {
+    await run(addAddons("app", ["email"], opts))
+  } finally {
+    process.chdir(prev)
+  }
+  expect(file("apps/web/src/mailer.ts")).toContain("MailerLive")
+})
+
+it("running from a subdirectory is a clear NotAnEfforgeProject", async () => {
+  const e = await fail(addAddons(join(dir, "apps/web"), ["email"], opts))
+  expect(e._tag).toBe("NotAnEfforgeProject")
+  expect(String(e.reason)).toContain("efforge.jsonc")
+})
+
+it("rejects add-on targets that escape the project", async () => {
+  for (const target of ["../outside.ts", "/tmp/efforge-abs-outside.ts"]) {
+    const tpl = join(tmp, "tpl")
+    rmSync(tpl, { recursive: true, force: true })
+    cpSync(fixtures, tpl, { recursive: true })
+    const p = join(tpl, "extras/email/addon.json")
+    const j = JSON.parse(readFileSync(p, "utf8"))
+    j.files[0].target = target
+    writeFileSync(p, JSON.stringify(j))
+    const layer = Layer.mergeAll(NodeServices.layer, Layer.succeed(TemplatesDir, tpl))
+    const before = snapshot()
+    const e = await failIn(layer, addAddons(dir, ["email"], opts))
+    expect(e._tag).toBe("GenerateError")
+    expect(snapshot()).toEqual(before)
+    expect(existsSync(join(tmp, "outside.ts"))).toBe(false)
+    expect(existsSync("/tmp/efforge-abs-outside.ts")).toBe(false)
+  }
 })

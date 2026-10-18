@@ -216,6 +216,23 @@ export const addAddons = (
           yield* fs.readFileString(path.join(addonDir, f.path)).pipe(io(f.path)),
         )
       }
+    const safe = (rel: string) => {
+      const r = path.relative(dir, path.resolve(dir, rel))
+      return (
+        rel !== "" &&
+        !path.isAbsolute(rel) &&
+        r !== "" &&
+        !r.startsWith("..") &&
+        !path.isAbsolute(r)
+      )
+    }
+    for (const target of overlays.keys())
+      if (!safe(target))
+        return yield* new GenerateError({
+          reason: "unsafe-path",
+          path: target,
+          message: `add-on target "${target}" is outside the project directory`,
+        })
     const tree = new Map<string, string>()
     const conflicts: Array<{ file: string; diff: string }> = []
     for (const [target, content] of applyProjectName(overlays, stack.name)) {
@@ -247,7 +264,16 @@ export const addAddons = (
       m.transforms.filter((t) => matches(t.when, stack)),
     )
     const wanted = new Set([ALCHEMY_FILE, AUTH_FILE, WRANGLER_FILE])
-    for (const t of active) if (t.args.file !== undefined) wanted.add(t.args.file)
+    for (const t of active)
+      if (t.args.file !== undefined) {
+        if (!safe(t.args.file))
+          return yield* new GenerateError({
+            reason: "unsafe-path",
+            path: t.args.file,
+            message: `transform file "${t.args.file}" is outside the project directory`,
+          })
+        wanted.add(t.args.file)
+      }
     for (const rel of wanted) {
       const text = yield* read(rel)
       if (text !== undefined && !tree.has(rel)) tree.set(rel, text)

@@ -15,6 +15,7 @@ import { efforgeVersion, versions } from "./versions.ts"
 
 export class GenerateError extends Schema.TaggedError<GenerateError>()("GenerateError", {
   reason: Schema.Literals([
+    "unsafe-path",
     "unpinned",
     "missing-package-json",
     "invalid-json",
