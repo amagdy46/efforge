@@ -52,11 +52,11 @@ const generateStack = (config: StackConfig): Effect.Effect<string, unknown> =>
     return dir
   }).pipe(Effect.provide(NodeFileSystem.layer), Effect.provide(Path.layer))
 
-/** Generates `config` into a tmp dir, installs, then typechecks, lints and builds it. */
+/** Generates `config` into a tmp dir, installs, then runs the generated project's full gate: typecheck, check, test, build. */
 const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
   Effect.gen(function* () {
     const dir = yield* generateStack(config)
-    yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm build"))
+    yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
     rmSync(dir, { recursive: true, force: true })
   })
 

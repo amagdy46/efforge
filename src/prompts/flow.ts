@@ -80,7 +80,7 @@ export const askStack = (
     let i = 0
     while (i < slots.length) {
       const slot = slots[i] as (typeof slots)[number]
-      const options = available(slot.id, draft as Partial<StackConfig>)
+      const options = available(slot.id, draft)
       const ids = options.map((o) => o.id)
       const flag = flags[slot.id as keyof StackFlags]
 
@@ -91,7 +91,7 @@ export const askStack = (
             return yield* new IncompatibleStack({ slot: slot.id, value, allowed: ids })
           }
         }
-        draft[slot.id] = slot.multi ? values : (flag as string)
+        draft[slot.id] = slot.multi ? values : flag
         i++
         continue
       }

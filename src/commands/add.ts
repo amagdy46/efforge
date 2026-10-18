@@ -112,7 +112,7 @@ const applyIds = (
         if (next.extras.includes(option as never)) skipped.push(`extras/${option}`)
         else {
           const order = slot.options.map((o) => o.id)
-          const extras = [...next.extras, option as never].sort(
+          const extras = [...next.extras, option as never].toSorted(
             (a, b) => order.indexOf(a) - order.indexOf(b),
           )
           next = { ...next, extras }
@@ -121,7 +121,7 @@ const applyIds = (
       }
       const current = next[slot.id]
       if (current === option) skipped.push(`${slot.id}/${option}`)
-      else if (current === "none") next = { ...next, [slot.id]: option } as StackConfig
+      else if (current === "none") next = { ...next, [slot.id]: option }
       else
         return yield* incompatible(
           slot.id,
@@ -337,7 +337,7 @@ export const addAddons = (
           // keep the user's order unless they were already sorted
           const keys = Object.keys(existing)
           const ordered = keys.every((k, i) => i === 0 || byName(keys[i - 1] as string, k) <= 0)
-            ? Object.fromEntries(Object.entries(deps).sort(([a], [b]) => byName(a, b)))
+            ? Object.fromEntries(Object.entries(deps).toSorted(([a], [b]) => byName(a, b)))
             : deps
           const indent = /^([ \t]+)"/m.exec(text)?.[1] ?? "  "
           packages.set(
@@ -354,7 +354,7 @@ export const addAddons = (
     if (used.size > 0) {
       const text = (yield* read("pnpm-workspace.yaml")) ?? "packages:\n  - apps/*\n  - packages/*\n"
       const doc = parseDocument(text)
-      for (const name of [...used].sort())
+      for (const name of [...used].toSorted())
         if (!doc.hasIn(["catalog", name])) doc.setIn(["catalog", name], versions[name])
       const next = doc.toString()
       if (next !== text) {
@@ -390,7 +390,7 @@ export const addAddons = (
           files: Object.fromEntries(
             Object.entries({ ...manifest.files, ...hashes })
               .filter(([file]) => !seams.has(file))
-              .sort(([a], [b]) => byName(a, b)),
+              .toSorted(([a], [b]) => byName(a, b)),
           ),
         }),
       )
@@ -398,9 +398,9 @@ export const addAddons = (
     }
 
     const result: AddResult = {
-      written: [...written].sort(),
-      transformed: [...transformed].sort(),
-      skipped: skipped.sort(),
+      written: [...written].toSorted(),
+      transformed: [...transformed].toSorted(),
+      skipped: skipped.toSorted(),
     }
     if (opts.dryRun) return result
 

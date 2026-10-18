@@ -149,7 +149,7 @@ it.effect("same failure with --yes", () =>
 
 it.effect("unknown flag value is IncompatibleStack, not a crash", () =>
   Effect.gen(function* () {
-    const { result } = run({ name: "app", database: "mysql" as never }, [])
+    const { result } = run({ name: "app", database: "mysql" }, [])
     const err = yield* result.pipe(Effect.flip)
     expect(err).toMatchObject({ _tag: "IncompatibleStack", slot: "database", value: "mysql" })
   }),

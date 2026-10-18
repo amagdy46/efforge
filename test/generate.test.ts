@@ -57,7 +57,7 @@ it("merges deps from several add-ons as catalog:, sorted", async () => {
     effect: "catalog:",
     "zod-existing": "1.0.0",
   })
-  expect(Object.keys(pkg.dependencies)).toEqual(Object.keys(pkg.dependencies).sort())
+  expect(Object.keys(pkg.dependencies)).toEqual(Object.keys(pkg.dependencies).toSorted())
   expect(pkg.devDependencies).toEqual({ "drizzle-kit": "catalog:" })
 })
 
@@ -142,7 +142,7 @@ it("is deterministic: same input gives a byte-identical tree", async () => {
   const a = await gen(pg)
   const b = await gen(pg)
   expect([...a]).toEqual([...b])
-  expect([...a.keys()]).toEqual([...a.keys()].sort())
+  expect([...a.keys()]).toEqual([...a.keys()].toSorted())
 })
 
 it("fails with unpinned for a package missing from versions", async () => {

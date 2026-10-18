@@ -107,7 +107,7 @@ export const loadAddons = (
     }
 
     const addons = new Map<string, LoadedAddon>()
-    for (const { id, dir } of dirs.sort((a, b) => a.id.localeCompare(b.id))) {
+    for (const { id, dir } of dirs.toSorted((a, b) => a.id.localeCompare(b.id))) {
       const file = path.join(dir, "addon.json")
       const text = yield* io(id, fs.readFileString(file))
       const json = yield* Effect.try({
@@ -146,8 +146,10 @@ export const addonIdsFor = (config: StackConfig): string[] => {
   for (const slot of slots) {
     if (slot.id === "extras") {
       // canonical slot-option order, so overlay order doesn't depend on the order extras were given
-      const order = slot.options.map((o) => o.id as string)
-      const chosen = [...new Set(config.extras)].sort((a, b) => order.indexOf(a) - order.indexOf(b))
+      const order = slot.options.map((o) => o.id)
+      const chosen = [...new Set(config.extras)].toSorted(
+        (a, b) => order.indexOf(a) - order.indexOf(b),
+      )
       ids.push(...chosen.map((e) => `extras/${e}`))
     } else if (config[slot.id] !== "none") ids.push(`${slot.id}/${config[slot.id]}`)
   }

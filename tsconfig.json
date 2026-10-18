@@ -14,6 +14,6 @@
     "outDir": "dist",
     "rootDir": "."
   },
-  "include": ["src", "test", "*.config.ts"],
+  "include": ["src", "test", "scripts", "*.config.ts"],
   "exclude": ["node_modules", "dist", "test/fixtures/templates"]
 }

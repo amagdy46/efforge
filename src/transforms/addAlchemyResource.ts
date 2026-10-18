@@ -6,7 +6,7 @@ export const ALCHEMY_FILE = "infra/alchemy.run.ts"
 const MARKER = "// efforge:resources"
 
 /** The Worker props that hold bindings: Alchemy v2 calls it `env`; `bindings` is accepted too. */
-const BINDING_PROPS = ["env", "bindings"]
+const BINDING_PROPS = new Set(["env", "bindings"])
 
 /**
  * args: `{ name, code, binding? }` — inserts `code` before the `// efforge:resources` marker and
@@ -36,8 +36,7 @@ export const addAlchemyResource: Transform = (tree, args) =>
         .getDescendantsOfKind(SyntaxKind.PropertyAssignment)
         .find(
           (p) =>
-            BINDING_PROPS.includes(p.getName()) &&
-            Node.isObjectLiteralExpression(p.getInitializer()),
+            BINDING_PROPS.has(p.getName()) && Node.isObjectLiteralExpression(p.getInitializer()),
         )
         ?.getInitializer()
     const bindings = findBindings(sf)
@@ -80,6 +79,6 @@ export const addAlchemyResource: Transform = (tree, args) =>
         },
       })
     }
-    for (const e of edits.sort((a, b) => b.at - a.at)) next = e.apply(next)
+    for (const e of edits.toSorted((a, b) => b.at - a.at)) next = e.apply(next)
     return withFile(tree, ALCHEMY_FILE, next)
   })

@@ -13,7 +13,9 @@ const lines = (text: string): string[] => {
 const script = (a: string[], b: string[]): Op[] => {
   const n = a.length
   const m = b.length
-  const table: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0))
+  const table: number[][] = Array.from({ length: n + 1 }, () =>
+    Array.from<number>({ length: m + 1 }).fill(0),
+  )
   for (let i = n - 1; i >= 0; i--)
     for (let j = m - 1; j >= 0; j--)
       (table[i] as number[])[j] =

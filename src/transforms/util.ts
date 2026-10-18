@@ -113,7 +113,7 @@ export const addImportText = (
   const fresh = names.filter((n) => !have.has(n.split(/\s+as\s+/).at(-1) as string))
   if (fresh.length === 0) return undefined
   // `import type { X }` plus `import { X }` would redeclare X, so promote it to a value import
-  for (const d of decls.filter((d) => d.isTypeOnly())) {
+  for (const d of decls.filter((decl) => decl.isTypeOnly())) {
     for (const n of d.getNamedImports()) {
       if (fresh.includes(n.getText())) {
         n.remove()

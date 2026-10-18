@@ -84,7 +84,7 @@ export const create = (opts: CreateOptions) =>
     }
     const addons = yield* loadAddons(templatesDir)
     const tree = yield* generate(stack, addons)
-    const files = [...tree.keys()].sort()
+    const files = [...tree.keys()].toSorted()
 
     if (opts.dryRun) {
       if (opts.json) {

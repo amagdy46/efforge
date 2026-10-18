@@ -78,3 +78,14 @@ task's decision rule we keep Turborepo and revisit only if it hurts.
   above it with `appendAgentsSection { id, content }` (idempotent per id).
 - Sandbox note: `/tmp` here is quota-limited and a parent `.gitignore` of `*` makes
   oxfmt see no files, so verify in a dir outside `$HOME` and `/tmp` (e.g. `/var/tmp`).
+
+## Single vitest copy (added with Task 13)
+
+Stacks with `alchemy` installed two vitest copies, so `@effect/vitest` failed with
+"vitest is imported directly without running vitest" (`pnpm why vitest`: 2 instances of
+one version). Cause: vitest peers on `vite`; `alchemy`'s runtime depends on `vite` aliased
+to `@voidzero-dev/vite-plus-core`, while `apps/web` uses real `vite`, so pnpm built one
+vitest per peer set. Fix: `overrides: { vite: "catalog:" }` in the generated
+`pnpm-workspace.yaml` (from `templates/base`) so every `vite` is the catalog one. Tests
+still run via plain `vitest`; the record's test-running decision is unchanged. `dedupePeers`
+alone did not fix it.

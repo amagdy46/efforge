@@ -3,8 +3,20 @@ on:
   pull_request:
   push:
     branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CI: "1"
+
 jobs:
-  check:
+  unit:
+    name: unit (typecheck, lint, test, build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,4 +28,106 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      - run: pnpm format --check
       - run: pnpm test
+      - run: pnpm build
+
+  # Lists the e2e cases (from test/e2e/stacks.test.ts) so the matrix never drifts from the suite.
+  setup:
+    name: list e2e cases
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.cases.outputs.matrix }}
+      has-house: ${{ steps.cases.outputs.has-house }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - id: cases
+        run: |
+          matrix="$(node scripts/e2e-cases.ts)"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          if echo "$matrix" | grep -q '"house"'; then
+            echo "has-house=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-house=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Each case generates a stack, installs it and runs its full gate: typecheck, check, test, build.
+  e2e:
+    name: e2e (${{ matrix.case }})
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # anchored: `pg-drizzle` must not also select `pg-drizzle-orgs`
+      - run: pnpm test:e2e -t "stacks build ${{ matrix.case }}$"
+
+  # The Browser extra ships a container image (apps/browser); make sure it builds.
+  # Skipped until the `house` e2e case exists on the branch.
+  browser-image:
+    name: browser image (house)
+    needs: setup
+    if: needs.setup.outputs.has-house == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate the house stack
+        run: |
+          cd "$RUNNER_TEMP"
+          node "$GITHUB_WORKSPACE/src/bin.ts" house-app -y --no-install --no-git \
+            --database=postgres --orm=drizzle --auth=better-auth-orgs --infra=alchemy \
+            --ai=effect-ai-byok --extras=workflows,realtime,browser,storage,email
+      - run: docker build "$RUNNER_TEMP/house-app/apps/browser"
+
+  # Drives the generated pg-drizzle-orgs app in Chromium against a real Postgres:
+  # sign up, create an org, invite, accept, both members visible.
+  browser-flow:
+    name: browser flow (pg-drizzle-orgs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      EFFORGE_E2E_BROWSER: "1"
+      EFFORGE_E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e -t "browser flow"

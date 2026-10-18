@@ -41,7 +41,7 @@ export const matches = (when: When | undefined, config: StackConfig): boolean =>
 
 const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`
 const sortKeys = (o: Record<string, string>): Record<string, string> =>
-  Object.fromEntries(Object.entries(o).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+  Object.fromEntries(Object.entries(o).toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
 
 const computedNames = new Set(["pnpm-workspace.yaml", ".env.example", "efforge.jsonc"])
 export const isComputed = (target: string) =>
@@ -138,7 +138,7 @@ export const generate = (
           // a Docker build context can't see the root catalog, so such a package pins exact versions
           const standalone = tree.has(`${pkgDir === "." ? "" : `${pkgDir}/`}Dockerfile`)
           yield* editPackage(pkgDir, (pkg) => {
-            const deps = { ...((pkg[key] as Record<string, string> | undefined) ?? {}) }
+            const deps = { ...(pkg[key] as Record<string, string> | undefined) }
             for (const name of names) {
               if (isWorkspace(name)) {
                 deps[name] = "workspace:*"
@@ -157,7 +157,7 @@ export const generate = (
       for (const [pkgDir, scripts] of Object.entries(manifest.scripts ?? {}))
         yield* editPackage(pkgDir, (pkg) => {
           pkg.scripts = {
-            ...((pkg.scripts as Record<string, string> | undefined) ?? {}),
+            ...(pkg.scripts as Record<string, string> | undefined),
             ...scripts,
           }
         })
@@ -189,7 +189,7 @@ export const generate = (
     const workspace = out.get("pnpm-workspace.yaml")
     const { packages = DEFAULT_PACKAGES, ...rest } =
       workspace === undefined ? {} : ((parse(workspace) as { packages?: string[] } | null) ?? {})
-    const catalog = Object.fromEntries([...used].sort().map((n) => [n, versions[n] as string]))
+    const catalog = Object.fromEntries([...used].toSorted().map((n) => [n, versions[n] as string]))
     // keep the template's other keys (e.g. `allowBuilds`); `catalog` is always computed
     out.set("pnpm-workspace.yaml", stringify({ packages, ...rest, catalog }))
 
@@ -202,7 +202,7 @@ export const generate = (
     const files = Object.fromEntries(
       [...overlay]
         .filter((t) => !isComputed(t) && !seams.has(t) && out.has(t))
-        .sort()
+        .toSorted()
         .map((t) => [t, hash(out.get(t) as string)]),
     )
     out.set(
@@ -210,5 +210,5 @@ export const generate = (
       renderManifest({ efforgeVersion, stack: config, command: toCommand(config), files }),
     )
 
-    return new Map([...out].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+    return new Map([...out].toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
   })
