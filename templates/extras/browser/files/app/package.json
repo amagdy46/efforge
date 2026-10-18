@@ -1,0 +1,9 @@
+{
+  "name": "browser",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/server.ts",
+    "typecheck": "tsc --noEmit"
+  }
+}

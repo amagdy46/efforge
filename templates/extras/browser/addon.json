@@ -1,0 +1,137 @@
+{
+  "id": "extras/browser",
+  "title": "Browser",
+  "description": "A headless browser: a Browser service on a Cloudflare Container that runs Playwright (apps/browser).",
+  "files": [
+    {
+      "path": "files/core-browser.ts",
+      "target": "packages/core/src/browser.ts"
+    },
+    {
+      "path": "files/BrowserContainer.ts",
+      "target": "apps/web/src/browser/BrowserContainer.ts"
+    },
+    {
+      "path": "files/browser.ts",
+      "target": "apps/web/src/server/browser.ts"
+    },
+    {
+      "path": "files/run-browser.ts",
+      "target": "apps/web/src/server/run-browser.ts"
+    },
+    {
+      "path": "files/app/Dockerfile",
+      "target": "apps/browser/Dockerfile"
+    },
+    {
+      "path": "files/app/dockerignore",
+      "target": "apps/browser/.dockerignore"
+    },
+    {
+      "path": "files/app/package.json",
+      "target": "apps/browser/package.json"
+    },
+    {
+      "path": "files/app/tsconfig.json",
+      "target": "apps/browser/tsconfig.json"
+    },
+    {
+      "path": "files/app/src/server.ts",
+      "target": "apps/browser/src/server.ts"
+    }
+  ],
+  "dependencies": {
+    "apps/web": [
+      "@cloudflare/containers"
+    ],
+    "apps/browser": [
+      "@effect/platform-node",
+      "effect",
+      "playwright"
+    ]
+  },
+  "devDependencies": {
+    "apps/browser": [
+      "@types/node",
+      "typescript"
+    ]
+  },
+  "envVars": [],
+  "requires": [],
+  "conflicts": [],
+  "transforms": [
+    {
+      "name": "addExport",
+      "args": {
+        "file": "packages/core/src/index.ts",
+        "export": "*",
+        "from": "./browser"
+      }
+    },
+    {
+      "name": "addExport",
+      "args": {
+        "file": "apps/web/src/server.ts",
+        "export": "BrowserContainer",
+        "from": "./browser/BrowserContainer"
+      }
+    },
+    {
+      "name": "addLayer",
+      "args": {
+        "file": "apps/web/src/server/layers.ts",
+        "import": "BrowserLive",
+        "from": "./browser",
+        "layer": "BrowserLive"
+      }
+    },
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "durable_objects.bindings",
+        "value": "{\"name\":\"BROWSER\",\"class_name\":\"BrowserContainer\"}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "migrations",
+        "value": "{\"tag\":\"browser-v1\",\"new_sqlite_classes\":[\"BrowserContainer\"]}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "containers",
+        "value": "{\"class_name\":\"BrowserContainer\",\"image\":\"./apps/browser/Dockerfile\",\"max_instances\":2}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "setWranglerValue",
+      "args": {
+        "key": "dev.enable_containers",
+        "value": "false"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    }
+  ]
+}
