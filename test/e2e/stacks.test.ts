@@ -69,6 +69,30 @@ const stacks: Array<[string, Parameters<typeof withDefaults>[0]]> = [
     { name: "d1-effect-sql", database: "d1", orm: "effect-sql", auth: "none", infra: "none" },
   ],
   [
+    "pg-drizzle-orgs",
+    {
+      name: "pg-drizzle-orgs",
+      database: "postgres",
+      orm: "drizzle",
+      auth: "better-auth-orgs",
+      infra: "none",
+    },
+  ],
+  [
+    "pg-effect-sql-orgs",
+    {
+      name: "pg-effect-sql-orgs",
+      database: "postgres",
+      orm: "effect-sql",
+      auth: "better-auth-orgs",
+      infra: "none",
+    },
+  ],
+  [
+    "d1-drizzle-auth",
+    { name: "d1-drizzle-auth", database: "d1", orm: "drizzle", auth: "better-auth", infra: "none" },
+  ],
+  [
     "extras-no-db",
     {
       name: "extras-no-db",
