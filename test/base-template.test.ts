@@ -84,3 +84,18 @@ it("addLayer appends to the base AppLayer, idempotently", async () => {
   const twice = await run(runTransform(once, { name: "addLayer", args: layerArgs }))
   expect(twice.get(layerArgs.file)).toBe(text)
 })
+
+it("names the project: package.json, wrangler.jsonc and README heading, with consistent hashes", async () => {
+  const { hash } = await import("../src/manifest.ts")
+  const tree = await run(
+    Effect.gen(function* () {
+      return yield* generate({ ...minimal, name: "spoorline" }, yield* loadAddons(templates))
+    }),
+  )
+  expect(JSON.parse(tree.get("package.json") as string).name).toBe("spoorline")
+  expect(tree.get("wrangler.jsonc")).toContain('"name": "spoorline"')
+  expect((tree.get("README.md") as string).split("\n")[0]).toBe("# spoorline")
+  const manifest = JSON.parse((tree.get("efforge.jsonc") as string).replace(/^\/\/.*\n/, ""))
+  expect(manifest.files["README.md"]).toBe(hash(tree.get("README.md") as string))
+  expect(manifest.files["wrangler.jsonc"]).toBe(hash(tree.get("wrangler.jsonc") as string))
+})

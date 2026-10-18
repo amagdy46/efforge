@@ -3,6 +3,7 @@ import { parse, stringify } from "yaml"
 import type { LoadedAddon, When } from "./addon.ts"
 import { addonIdsFor } from "./addon.ts"
 import { hash, renderManifest } from "./manifest.ts"
+import { applyProjectName } from "./projectName.ts"
 import { SlotId, type StackConfig, toCommand } from "./stack.ts"
 import {
   runTransform,
@@ -152,7 +153,9 @@ export const generate = (
       }
     }
 
-    const out = new Map(tree)
+    // Built-in post-step, after transforms and before hashing, so manifest hashes cover the
+    // final (named) content and `add` sees an unedited README/wrangler.jsonc as unchanged.
+    const out = new Map(applyProjectName(tree, config.name))
 
     const workspace = out.get("pnpm-workspace.yaml")
     const { packages = DEFAULT_PACKAGES, ...rest } =
