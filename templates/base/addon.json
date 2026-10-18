@@ -1,7 +1,7 @@
 {
   "id": "base",
   "title": "Base",
-  "description": "Monorepo skeleton shared by every stack: pnpm, Turborepo, Biome, TanStack Start, Tailwind v4 and shadcn/ui.",
+  "description": "Monorepo skeleton shared by every stack: pnpm, Turborepo, Vite+ (oxlint/oxfmt), TanStack Start, Tailwind v4 and shadcn/ui.",
   "files": [
     {
       "path": "files/README.md",
@@ -32,12 +32,12 @@
       "target": "pnpm-workspace.yaml"
     },
     {
-      "path": "files/root/biome.json",
-      "target": "biome.json"
-    },
-    {
       "path": "files/root/package.json",
       "target": "package.json"
+    },
+    {
+      "path": "files/root/vite.config.ts",
+      "target": "vite.config.ts"
     },
     {
       "path": "files/root/tsconfig.base.json",
@@ -177,9 +177,12 @@
   },
   "devDependencies": {
     ".": [
-      "@biomejs/biome",
+      "@effect/tsgo",
+      "oxlint",
+      "oxlint-tsgolint",
       "turbo",
-      "typescript"
+      "typescript",
+      "vite-plus"
     ],
     "apps/web": [
       "@tailwindcss/vite",
