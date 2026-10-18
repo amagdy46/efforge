@@ -136,12 +136,16 @@ export const loadAddons = (
     return addons
   })
 
-/** `base`, then one id per slot whose value isn't `none`, then the extras, in slot order. */
+/** `base`, then one id per slot whose value isn't `none`, then the extras, all in slot order (later overlays win). */
 export const addonIdsFor = (config: StackConfig): string[] => {
   const ids = ["base"]
   for (const slot of slots) {
-    if (slot.id === "extras") ids.push(...config.extras.map((e) => `extras/${e}`))
-    else if (config[slot.id] !== "none") ids.push(`${slot.id}/${config[slot.id]}`)
+    if (slot.id === "extras") {
+      // canonical slot-option order, so overlay order doesn't depend on the order extras were given
+      const order = slot.options.map((o) => o.id as string)
+      const chosen = [...new Set(config.extras)].sort((a, b) => order.indexOf(a) - order.indexOf(b))
+      ids.push(...chosen.map((e) => `extras/${e}`))
+    } else if (config[slot.id] !== "none") ids.push(`${slot.id}/${config[slot.id]}`)
   }
   return ids
 }

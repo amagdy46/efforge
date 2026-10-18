@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect, it } from "@effect/vitest"
-import { Effect, type FileSystem, Path, Schema } from "effect"
+import { Effect, FileSystem, Path, Schema } from "effect"
 import { parse } from "yaml"
 import { type LoadedAddon, loadAddons } from "../src/addon.ts"
 import { generate } from "../src/generate.ts"
@@ -131,4 +131,24 @@ it("fails with missing-package-json when the target package.json is absent", asy
     reason: "missing-package-json",
     path: "apps/nope/package.json",
   })
+})
+
+it("fails with invalid-json when a package.json is malformed", async () => {
+  const r = await run(
+    Effect.gen(function* () {
+      const addons = new Map(yield* loadAddons(fixtures))
+      const fs = yield* FileSystem.FileSystem
+      const dir = yield* fs.makeTempDirectoryScoped().pipe(Effect.orDie)
+      yield* fs.writeFileString(`${dir}/bad.json`, "{").pipe(Effect.orDie)
+      addons.set("database/postgres", {
+        dir,
+        manifest: {
+          ...(addons.get("database/postgres") as LoadedAddon).manifest,
+          files: [{ path: "bad.json", target: "apps/web/package.json" }],
+        },
+      })
+      return yield* Effect.flip(generate(pg, addons))
+    }).pipe(Effect.scoped),
+  )
+  expect(r).toMatchObject({ _tag: "GenerateError", reason: "invalid-json" })
 })

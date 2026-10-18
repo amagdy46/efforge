@@ -13,7 +13,13 @@ import type { Tree } from "./tree.ts"
 import { efforgeVersion, versions } from "./versions.ts"
 
 export class GenerateError extends Schema.TaggedError<GenerateError>()("GenerateError", {
-  reason: Schema.Literals(["unpinned", "missing-package-json", "unknown-addon", "io"]),
+  reason: Schema.Literals([
+    "unpinned",
+    "missing-package-json",
+    "invalid-json",
+    "unknown-addon",
+    "io",
+  ]),
   package: Schema.optionalKey(Schema.String),
   path: Schema.optionalKey(Schema.String),
   message: Schema.String,
@@ -55,6 +61,7 @@ export const generate = (
     const path = yield* Path.Path
     let tree: Tree = new Map()
     const overlay = new Set<string>()
+    const seams = new Set<string>()
     const used = new Set<string>()
     const env = new Map<string, { title: string; vars: string[] }>()
     const seenEnv = new Set<string>()
@@ -94,7 +101,15 @@ export const generate = (
               path: target,
               message: `${manifest.id} adds dependencies to ${target}, which does not exist`,
             })
-          const pkg = JSON.parse(text) as Record<string, unknown>
+          const pkg = yield* Effect.try({
+            try: () => JSON.parse(text) as Record<string, unknown>,
+            catch: (e) =>
+              new GenerateError({
+                reason: "invalid-json",
+                path: target,
+                message: `${target} is not valid JSON: ${String(e)}`,
+              }),
+          })
           const deps = { ...((pkg[key] as Record<string, string> | undefined) ?? {}) }
           for (const name of names) {
             if (versions[name] === undefined)
@@ -119,7 +134,11 @@ export const generate = (
       }
 
       for (const t of manifest.transforms) {
-        if (matches(t.when, config)) tree = yield* runTransform(tree, t)
+        if (!matches(t.when, config)) continue
+        const before = tree
+        tree = yield* runTransform(tree, t)
+        // seam files are always re-edited by transforms, never hash-checked by `add`
+        for (const [file, content] of tree) if (before.get(file) !== content) seams.add(file)
       }
     }
 
@@ -141,7 +160,7 @@ export const generate = (
 
     const files = Object.fromEntries(
       [...overlay]
-        .filter((t) => !isComputed(t) && out.has(t))
+        .filter((t) => !isComputed(t) && !seams.has(t) && out.has(t))
         .sort()
         .map((t) => [t, hash(out.get(t) as string)]),
     )

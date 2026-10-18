@@ -143,7 +143,13 @@ it("addonIdsFor lists base, non-none slots, then extras in slot order", () => {
     "runtime/cloudflare",
     "infra/alchemy",
     "ai/effect-ai-byok",
-    "extras/email",
     "extras/storage",
+    "extras/email",
   ])
+})
+
+it("addonIdsFor is independent of the order extras were given", () => {
+  const a = addonIdsFor(withDefaults({ name: "a", extras: ["email", "workflows", "storage"] }))
+  const b = addonIdsFor(withDefaults({ name: "a", extras: ["storage", "email", "workflows"] }))
+  expect(a).toEqual(b)
 })
