@@ -142,9 +142,12 @@ it("git init + add + commit runs (commit may be skipped without a configured ide
   expect(existsSync(join(tmp, "app", ".git"))).toBe(true)
 })
 
-it("add is registered and prints a placeholder", async () => {
-  await cli(["add"]).p
-  expect(logs.join("\n")).toContain("not implemented yet")
+it("add is registered and reports a directory that is not an efforge project", async () => {
+  const errors: string[] = []
+  vi.spyOn(console, "error").mockImplementation((...a: unknown[]) => void errors.push(a.join(" ")))
+  await cli(["add", "email", "--no-install"]).p
+  expect(errors.join("\n")).toContain("not an efforge project")
+  expect(process.exitCode).toBe(1)
 })
 
 it.effect("writeTree fails with TargetNotEmpty on a non-empty dir, accepts an empty one", () =>

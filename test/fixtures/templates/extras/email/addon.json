@@ -33,5 +33,15 @@
   ],
   "requires": [],
   "conflicts": [],
-  "transforms": []
+  "transforms": [
+    {
+      "name": "addLayer",
+      "args": {
+        "file": "apps/web/src/layers.ts",
+        "import": "MailerLive",
+        "from": "./mailer.ts",
+        "layer": "MailerLive"
+      }
+    }
+  ]
 }

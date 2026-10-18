@@ -1,0 +1,12 @@
+{
+  "id": "ai/effect-ai-byok",
+  "title": "AI",
+  "description": "Fixture ai.",
+  "files": [{ "path": "files/ai.ts", "target": "apps/web/src/ai.ts" }],
+  "dependencies": {},
+  "devDependencies": {},
+  "envVars": [],
+  "requires": [],
+  "conflicts": [],
+  "transforms": []
+}

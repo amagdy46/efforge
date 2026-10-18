@@ -43,7 +43,7 @@ const sortKeys = (o: Record<string, string>): Record<string, string> =>
   Object.fromEntries(Object.entries(o).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
 
 const computedNames = new Set(["pnpm-workspace.yaml", ".env.example", "efforge.jsonc"])
-const isComputed = (target: string) =>
+export const isComputed = (target: string) =>
   computedNames.has(target) || target === "package.json" || target.endsWith("/package.json")
 
 const DEFAULT_PACKAGES = ["apps/*", "packages/*"]
