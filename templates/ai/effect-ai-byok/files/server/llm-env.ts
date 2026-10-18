@@ -16,7 +16,9 @@ const loadSettings = (provider: ConfigProvider.ConfigProvider) =>
       model: Config.String("LLM_MODEL").parse(provider),
       apiKey: Config.option(Config.Redacted("LLM_API_KEY")).parse(provider),
       baseUrl: Config.option(Config.String("LLM_BASE_URL")).parse(provider),
-    }).pipe(Effect.mapError(() => notConfigured("Set LLM_PROVIDER and LLM_MODEL (and LLM_API_KEY).")))
+    }).pipe(
+      Effect.mapError(() => notConfigured("Set LLM_PROVIDER and LLM_MODEL (and LLM_API_KEY).")),
+    )
     const name: LlmProvider = yield* decodeProvider(config.provider).pipe(
       Effect.mapError(() =>
         notConfigured(`LLM_PROVIDER must be one of: ${llmProviders.join(", ")}.`),

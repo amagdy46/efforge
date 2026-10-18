@@ -46,7 +46,8 @@ export const MailerLive = Layer.unwrap(
       () => "cloudflare",
     )
     const from = yield* Config.option(Config.String("MAIL_FROM")).parse(provider)
-    if (transport === "console") return ConsoleMailer(Option.getOrElse(from, () => "noreply@localhost"))
+    if (transport === "console")
+      return ConsoleMailer(Option.getOrElse(from, () => "noreply@localhost"))
     if (Option.isNone(from) || from.value === "")
       return yield* new MailerConfigError({
         message:

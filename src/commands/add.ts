@@ -7,18 +7,17 @@ import { parseDocument } from "yaml"
 import { type AddonLoadError, addonIdsFor, loadAddons } from "../addon.ts"
 import { unifiedDiff } from "../diff.ts"
 import { type CommandFailed, exec } from "../exec.ts"
-import { GenerateError, isComputed, matches } from "../generate.ts"
+import { GenerateError, generate, isComputed, matches } from "../generate.ts"
 import { EfforgeManifest, hash, renderManifest } from "../manifest.ts"
 import { applyProjectName } from "../projectName.ts"
 import { generateRouteTree } from "../routeTree.ts"
 import { IncompatibleStack, validate } from "../rules.ts"
 import { type SlotDef, slots } from "../slots.ts"
 import { type StackConfig, toCommand } from "../stack.ts"
-import { ALCHEMY_FILE } from "../transforms/addAlchemyResource.ts"
-import { AUTH_FILE } from "../transforms/addAuthPlugin.ts"
 import { WRANGLER_FILE } from "../transforms/addWranglerBinding.ts"
 import {
   runTransform,
+  transformTargets,
   type TransformAnchorMissing,
   type UnknownTransform,
 } from "../transforms/index.ts"
@@ -50,6 +49,8 @@ export interface AddResult {
   readonly transformed: string[]
   /** Ids already in the stack, and overlays that already match. */
   readonly skipped: string[]
+  /** Generated files the add-on replaces (e.g. wrangler.jsonc for infra/alchemy). */
+  readonly removed: string[]
 }
 
 export type AddError =
@@ -72,6 +73,8 @@ const incompatible = (
 const allIds = slots.flatMap((s) =>
   s.options.filter((o) => o.id !== "none").map((o) => `${s.id}/${o.id}`),
 )
+
+const isNewPackageJson = (target: string) => target.endsWith("/package.json")
 
 const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
@@ -192,15 +195,22 @@ export const addAddons = (
     const newIds = addonIdsFor(stack).filter((id) => !before.has(id))
     const addons = yield* loadAddons(templatesDir)
     const fresh = []
-    for (const id of newIds) {
+    // every add-on of the new stack, in generate order: new ones apply fully, existing ones only
+    // what the new choice switches on (e.g. infra=alchemy turns on their workflow secrets)
+    const scope = []
+    for (const id of addonIdsFor(stack)) {
       const a = addons.get(id)
       if (a === undefined)
         return yield* new GenerateError({
           reason: "unknown-addon",
           message: `add-on "${id}" is not loaded`,
         })
-      fresh.push(a)
+      scope.push(a)
+      if (!before.has(id)) fresh.push(a)
     }
+    const newSet = new Set(newIds)
+    const switchedOn = (id: string, when: Parameters<typeof matches>[0]) =>
+      matches(when, stack) && (newSet.has(id) || !matches(when, manifest.stack))
 
     const skipped: string[] = [...alreadyThere]
     const out = new Map<string, string>() // path -> new content, everything to write
@@ -209,9 +219,12 @@ export const addAddons = (
 
     // 2. overlays: write if absent, replace if still what efforge generated, else conflict
     const overlays = new Map<string, string>()
-    for (const { manifest: m, dir: addonDir } of fresh)
+    for (const { manifest: m, dir: addonDir } of scope)
       for (const f of m.files) {
-        if (!matches(f.when, stack) || isComputed(f.target)) continue
+        if (!switchedOn(m.id, f.when)) continue
+        // package.json files are merged, not replaced: only a new workspace package's is created
+        if (isComputed(f.target) && !(isNewPackageJson(f.target) && !(yield* read(f.target))))
+          continue
         overlays.set(
           f.target,
           yield* fs.readFileString(path.join(addonDir, f.path)).pipe(io(f.path)),
@@ -251,7 +264,7 @@ export const addAddons = (
         conflicts.push({ file: target, diff: unifiedDiff(target, existing, content) })
         continue
       }
-      hashes[target] = hash(content)
+      if (!isComputed(target)) hashes[target] = hash(content)
       tree.set(target, content)
     }
     if (conflicts.length > 0)
@@ -260,20 +273,42 @@ export const addAddons = (
         diff: conflicts.map((c) => c.diff).join("\n"),
       })
 
+    // 2b. files the new stack no longer generates (wrangler.jsonc once alchemy declares the Worker)
+    const removed = new Set<string>()
+    if (
+      newIds.includes("infra/alchemy") &&
+      manifest.stack.infra === "none" &&
+      (yield* read(WRANGLER_FILE)) !== undefined
+    ) {
+      const existing = (yield* read(WRANGLER_FILE)) as string
+      const generated = (yield* generate(manifest.stack, addons)).get(WRANGLER_FILE)
+      if (
+        opts.overwrite ||
+        existing === generated ||
+        manifest.files[WRANGLER_FILE] === hash(existing)
+      )
+        removed.add(WRANGLER_FILE)
+      else
+        return yield* new OverlayConflict({
+          file: WRANGLER_FILE,
+          diff: unifiedDiff(WRANGLER_FILE, existing, generated ?? ""),
+        })
+    }
+
     // 3. transforms, against the current disk content of the seam files
-    const active = fresh.flatMap(({ manifest: m }) =>
-      m.transforms.filter((t) => matches(t.when, stack)),
+    const active = scope.flatMap(({ manifest: m }) =>
+      m.transforms.filter((t) => switchedOn(m.id, t.when)),
     )
-    const wanted = new Set([ALCHEMY_FILE, AUTH_FILE, WRANGLER_FILE])
+    const wanted = new Set<string>()
     for (const t of active)
-      if (t.args.file !== undefined) {
-        if (!safe(t.args.file))
+      for (const file of transformTargets(t)) {
+        if (!safe(file))
           return yield* new GenerateError({
             reason: "unsafe-path",
-            path: t.args.file,
-            message: `transform file "${t.args.file}" is outside the project directory`,
+            path: file,
+            message: `transform file "${file}" is outside the project directory`,
           })
-        wanted.add(t.args.file)
+        wanted.add(file)
       }
     for (const rel of wanted) {
       const text = yield* read(rel)
@@ -305,7 +340,7 @@ export const addAddons = (
       for (const key of ["dependencies", "devDependencies"] as const)
         for (const [pkgDir, names] of Object.entries(m[key])) {
           const target = pkgDir === "." ? "package.json" : `${pkgDir}/package.json`
-          const text = packages.get(target) ?? (yield* read(target))
+          const text = packages.get(target) ?? tree.get(target) ?? (yield* read(target))
           if (text === undefined)
             return yield* new GenerateError({
               reason: "missing-package-json",
@@ -323,15 +358,24 @@ export const addAddons = (
           })
           const existing = (pkg[key] as Record<string, string> | undefined) ?? {}
           const deps = { ...existing }
+          // a Docker build context can't see the root catalog, so such a package pins exact versions
+          const pkgPrefix = pkgDir === "." ? "" : `${pkgDir}/`
+          const standalone =
+            tree.has(`${pkgPrefix}Dockerfile`) ||
+            (yield* read(`${pkgPrefix}Dockerfile`)) !== undefined
           for (const name of names) {
+            if (name.startsWith("@repo/")) {
+              if (!(name in deps)) deps[name] = "workspace:*"
+              continue
+            }
             if (versions[name] === undefined)
               return yield* new GenerateError({
                 reason: "unpinned",
                 package: name,
                 message: `${m.id} uses "${name}", which has no entry in versions.ts`,
               })
-            used.add(name)
-            if (!(name in deps)) deps[name] = "catalog:"
+            if (!standalone) used.add(name)
+            if (!(name in deps)) deps[name] = standalone ? versions[name] : "catalog:"
           }
           if (Object.keys(deps).length === Object.keys(existing).length) continue
           // keep the user's order unless they were already sorted
@@ -345,6 +389,23 @@ export const addAddons = (
             `${JSON.stringify({ ...pkg, [key]: ordered }, null, indent)}${text.endsWith("\n") ? "\n" : ""}`,
           )
         }
+    // scripts of the new add-ons (they replace same-named ones, like generate does)
+    for (const { manifest: m } of fresh)
+      for (const [pkgDir, scripts] of Object.entries(m.scripts ?? {})) {
+        const target = pkgDir === "." ? "package.json" : `${pkgDir}/package.json`
+        const text = packages.get(target) ?? tree.get(target) ?? (yield* read(target))
+        if (text === undefined)
+          return yield* new GenerateError({
+            reason: "missing-package-json",
+            path: target,
+            message: `${m.id} adds scripts to ${target}, which does not exist`,
+          })
+        const pkg = JSON.parse(text) as Record<string, unknown>
+        const merged = { ...(pkg.scripts as Record<string, string> | undefined), ...scripts }
+        const indent = /^([ \t]+)"/m.exec(text)?.[1] ?? "  "
+        const next = `${JSON.stringify({ ...pkg, scripts: merged }, null, indent)}${text.endsWith("\n") ? "\n" : ""}`
+        if (next !== text) packages.set(target, next)
+      }
     for (const [target, text] of packages) {
       out.set(target, text)
       written.add(target)
@@ -354,8 +415,14 @@ export const addAddons = (
     if (used.size > 0) {
       const text = (yield* read("pnpm-workspace.yaml")) ?? "packages:\n  - apps/*\n  - packages/*\n"
       const doc = parseDocument(text)
-      for (const name of [...used].toSorted())
-        if (!doc.hasIn(["catalog", name])) doc.setIn(["catalog", name], versions[name])
+      const catalog = {
+        ...(doc.getIn(["catalog"]) as { toJSON(): Record<string, string> } | null)?.toJSON(),
+      }
+      for (const name of used) catalog[name] ??= versions[name] as string
+      doc.setIn(
+        ["catalog"],
+        Object.fromEntries(Object.entries(catalog).toSorted(([a], [b]) => byName(a, b))),
+      )
       const next = doc.toString()
       if (next !== text) {
         out.set("pnpm-workspace.yaml", next)
@@ -367,8 +434,8 @@ export const addAddons = (
     const envText = (yield* read(".env.example")) ?? ""
     const have = new Set(envText.split("\n").map((l) => l.split("=")[0]?.trim()))
     const groups: string[] = []
-    for (const { manifest: m } of fresh) {
-      const vars = m.envVars.filter((v) => !have.has(v.name))
+    for (const { manifest: m } of scope) {
+      const vars = m.envVars.filter((v) => switchedOn(m.id, v.when) && !have.has(v.name))
       for (const v of vars) have.add(v.name)
       if (vars.length > 0)
         groups.push(`# ${m.title}\n${vars.map((v) => `${v.name}=${v.example}`).join("\n")}`)
@@ -389,7 +456,7 @@ export const addAddons = (
           command: toCommand(stack),
           files: Object.fromEntries(
             Object.entries({ ...manifest.files, ...hashes })
-              .filter(([file]) => !seams.has(file))
+              .filter(([file]) => !seams.has(file) && !removed.has(file))
               .toSorted(([a], [b]) => byName(a, b)),
           ),
         }),
@@ -401,16 +468,18 @@ export const addAddons = (
       written: [...written].toSorted(),
       transformed: [...transformed].toSorted(),
       skipped: skipped.toSorted(),
+      removed: [...removed].toSorted(),
     }
     if (opts.dryRun) return result
 
     // all-or-nothing: only now touch the disk
+    for (const rel of removed) yield* fs.remove(path.join(dir, rel), { force: true }).pipe(io(rel))
     for (const [rel, content] of out) {
       const abs = path.join(dir, rel)
       yield* fs.makeDirectory(path.dirname(abs), { recursive: true }).pipe(io(rel))
       yield* fs.writeFileString(abs, content).pipe(io(rel))
     }
-    if (out.size > 0 && opts.install !== false) {
+    if ((out.size > 0 || removed.size > 0) && opts.install !== false) {
       yield* exec("pnpm", ["install"], dir)
       // add-ons may add or replace routes
       yield* generateRouteTree(dir)
@@ -489,8 +558,11 @@ export const addHandler = (input: {
       [
         ...section(input.dryRun ? "Would write" : "Wrote", result.written),
         ...section(input.dryRun ? "Would edit" : "Edited", result.transformed),
+        ...section(input.dryRun ? "Would remove" : "Removed", result.removed),
         ...section("Unchanged", result.skipped),
-        ...(result.written.length === 0 && result.transformed.length === 0
+        ...(result.written.length === 0 &&
+        result.transformed.length === 0 &&
+        result.removed.length === 0
           ? ["Nothing to do."]
           : []),
         ...(input.dryRun ? [pc.dim("dry run: nothing written")] : []),

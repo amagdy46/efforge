@@ -1,9 +1,10 @@
 import { spawn, spawnSync } from "node:child_process"
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
-import { NodeFileSystem } from "@effect/platform-node"
+import { NodeFileSystem, NodeServices } from "@effect/platform-node"
 import { describe, it } from "@effect/vitest"
 import { Effect, FileSystem, Path } from "effect"
 import { loadAddons } from "../../src/addon.ts"
+import { addAddons } from "../../src/commands/add.ts"
 import { generate } from "../../src/generate.ts"
 import { ROUTE_TREE_COMMAND } from "../../src/routeTree.ts"
 import { type StackConfig, withDefaults } from "../../src/stack.ts"
@@ -225,6 +226,28 @@ const stacks: Array<[string, Parameters<typeof withDefaults>[0]]> = [
     },
   ],
   [
+    "d1-better-auth-alchemy-ai",
+    {
+      name: "d1-better-auth-alchemy-ai",
+      database: "d1",
+      orm: "effect-sql",
+      auth: "better-auth",
+      infra: "alchemy",
+      ai: "effect-ai-byok",
+    },
+  ],
+  [
+    "pg-effect-sql-alchemy-email",
+    {
+      name: "pg-effect-sql-alchemy-email",
+      database: "postgres",
+      orm: "effect-sql",
+      auth: "none",
+      infra: "alchemy",
+      extras: ["email"],
+    },
+  ],
+  [
     "pg-drizzle-extras-alchemy",
     {
       name: "pg-drizzle-extras-alchemy",
@@ -240,6 +263,33 @@ const stacks: Array<[string, Parameters<typeof withDefaults>[0]]> = [
 describe("stacks build", () => {
   for (const [name, partial] of stacks)
     it.effect(name, () => buildStack(withDefaults(partial)), { timeout: 15 * 60 * 1000 })
+})
+
+describe("add on a real project", () => {
+  it.effect(
+    "pg-drizzle-orgs + add email + add ai/effect-ai-byok passes the full gate",
+    () =>
+      Effect.gen(function* () {
+        const dir = yield* generateStack(
+          withDefaults({
+            name: "pg-orgs-added",
+            database: "postgres",
+            orm: "drizzle",
+            auth: "better-auth-orgs",
+            infra: "none",
+          }),
+        )
+        // installs and generates the route tree itself; the result must pass without a format step
+        yield* addAddons(dir, ["email", "ai/effect-ai-byok"], {
+          overwrite: false,
+          dryRun: false,
+          install: true,
+        })
+        yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
+        rmSync(dir, { recursive: true, force: true })
+      }).pipe(Effect.provide(NodeServices.layer)),
+    { timeout: 15 * 60 * 1000 },
+  )
 })
 
 describe.skipIf(process.env.EFFORGE_E2E_BROWSER !== "1")("browser flow", () => {

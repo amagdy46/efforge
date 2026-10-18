@@ -18,6 +18,8 @@ export const generateText = createServerFn({ method: "POST" })
       Effect.gen(function* () {
         const llm = yield* Llm
         return { ok: true as const, text: yield* llm.generateText(data.prompt) }
-      }).pipe(Effect.catch((error) => Effect.succeed({ ok: false as const, message: error.message }))),
+      }).pipe(
+        Effect.catch((error) => Effect.succeed({ ok: false as const, message: error.message })),
+      ),
     ),
   )

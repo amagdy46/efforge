@@ -60,17 +60,16 @@ export const verifyPayload = async (
   const seconds = parseExpiry(expires)
   const bytes = fromHex(signature)
   if (seconds === undefined || bytes === undefined || seconds * 1000 < now) return false
-  return crypto.subtle.verify("HMAC", await importKey(secret, "verify"), bytes, message(key, expires))
+  return crypto.subtle.verify(
+    "HMAC",
+    await importKey(secret, "verify"),
+    bytes,
+    message(key, expires),
+  )
 }
 
 /** Only these types render in the browser; everything else (HTML, SVG, ...) downloads. */
-const inlineTypes = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-  "image/avif",
-])
+const inlineTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"])
 
 /**
  * Response headers for a served object. Stored content is untrusted: never sniffed, never run as

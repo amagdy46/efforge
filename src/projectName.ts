@@ -16,7 +16,7 @@ const slug = (name: string): string =>
 export const projectDirName = (name: string): string => name.split("/").pop() ?? name
 
 /**
- * Built-in post-step: names the generated project. Sets the root `package.json` and
+ * Built-in post-step: names the generated project. Sets the root `package.json` (`<name>-monorepo`, so it can never clash with a workspace package called `<name>`) and
  * `wrangler.jsonc` `name`, the Alchemy stack name and the README's first heading. Files that are absent, or lack
  * the field, are left alone; running it twice changes nothing.
  */
@@ -28,7 +28,10 @@ export const applyProjectName = (tree: Tree, name: string): Tree => {
   if (pkg !== undefined) {
     try {
       const parsed = JSON.parse(pkg) as Record<string, unknown>
-      out.set("package.json", `${JSON.stringify({ ...parsed, name: dir }, null, 2)}\n`)
+      out.set(
+        "package.json",
+        `${JSON.stringify({ ...parsed, name: `${dir}-monorepo` }, null, 2)}\n`,
+      )
     } catch {}
   }
 

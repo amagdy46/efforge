@@ -393,15 +393,15 @@ Each extra registers its layer via `addLayer`, and its binding via `addWranglerB
 
 **Blocked by:** 10, 11
 
-- [ ] Write failing tests on a generated `pg-drizzle-orgs` tree in a tmp dir:
+- [x] Write failing tests on a generated `pg-drizzle-orgs` tree in a tmp dir:
   - `add email` writes the Mailer files, and `layers.ts` contains `MailerLive`.
   - Running it twice changes nothing.
   - A user line added to `layers.ts` beforehand is kept.
   - An edited overlay target gives `OverlayConflict`, and `--overwrite` replaces it.
   - Deleting the `Layer.mergeAll` call gives `TransformAnchorMissing` with the snippet, and no files written.
   - `add database/d1` on a project with `database=postgres` fails with `IncompatibleStack` (one value per single-select slot).
-- [ ] Implement; run; expect pass
-- [ ] Commit
+- [x] Implement; run; expect pass
+- [x] Commit
 
 ### Task 13: CI matrix and release prep
 

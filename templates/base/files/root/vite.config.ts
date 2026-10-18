@@ -11,6 +11,7 @@ export default defineConfig({
       "**/.turbo/**",
       "**/.wrangler/**",
       "**/routeTree.gen.ts",
+      "**/package-lock.json",
     ],
     categories: { correctness: "error", suspicious: "error", perf: "error" },
     // an explicit list replaces oxlint's defaults, so keep oxc/typescript/unicorn
@@ -49,8 +50,11 @@ export default defineConfig({
       "**/.turbo/**",
       "**/.wrangler/**",
       "**/routeTree.gen.ts",
+      "**/package-lock.json",
+      // generated or edited by efforge transforms (JSONC with trailing commas the formatter adds)
+      "efforge.jsonc",
+      "wrangler.jsonc",
     ],
-    singleQuote: true,
     semi: false,
     printWidth: 100,
   },

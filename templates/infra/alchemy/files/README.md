@@ -4,11 +4,11 @@
 ("Infrastructure as Effects"). There is no `wrangler.jsonc`: the Worker entry is
 `apps/web/src/server.ts` and every binding is an entry of the `env` object in `alchemy.run.ts`.
 
-| Command | What it does |
-| --- | --- |
-| `pnpm dev` | `alchemy dev`: runs the Vite dev server and workerd locally with the bindings declared here, on stage `dev_$USER`. State stays in `.alchemy/`. |
-| `pnpm run deploy --stage <name>` | `alchemy deploy`: builds `apps/web` and deploys it to Cloudflare. Without `--stage` it uses `$ALCHEMY_STAGE`, then `live_$USER`. |
-| `pnpm run destroy --stage <name>` | `alchemy destroy`: removes every resource of that stage. |
+| Command                           | What it does                                                                                                                                   |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                        | `alchemy dev`: runs the Vite dev server and workerd locally with the bindings declared here, on stage `dev_$USER`. State stays in `.alchemy/`. |
+| `pnpm run deploy --stage <name>`  | `alchemy deploy`: builds `apps/web` and deploys it to Cloudflare. Without `--stage` it uses `$ALCHEMY_STAGE`, then `live_$USER`.               |
+| `pnpm run destroy --stage <name>` | `alchemy destroy`: removes every resource of that stage.                                                                                       |
 
 Use `pnpm run deploy`: plain `pnpm deploy` is pnpm's own workspace command.
 

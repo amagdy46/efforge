@@ -20,7 +20,9 @@ const invalidKey = new LlmConfigError({
 })
 
 /** Imports the AES-GCM key from `LLM_ENCRYPTION_KEY`; fails with a clear message when it is unusable. */
-export const loadEncryptionKey = (value: string | undefined): Effect.Effect<CryptoKey, LlmConfigError> =>
+export const loadEncryptionKey = (
+  value: string | undefined,
+): Effect.Effect<CryptoKey, LlmConfigError> =>
   Effect.gen(function* () {
     const text = (value ?? "").trim()
     if (!/^[A-Za-z0-9+/]+={0,2}$/.test(text)) return yield* invalidKey

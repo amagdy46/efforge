@@ -16,7 +16,8 @@ const inviteRoles = ["member", "admin"] as const
 const selectClass =
   "h-9 rounded-md border bg-transparent px-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
 
-const inviteLink = (invitationId: string) => `${window.location.origin}/accept-invite/${invitationId}`
+const inviteLink = (invitationId: string) =>
+  `${window.location.origin}/accept-invite/${invitationId}`
 
 async function copy(text: string) {
   await navigator.clipboard.writeText(text)
@@ -152,7 +153,12 @@ function Members() {
               <div className="space-y-2">
                 <Label htmlFor="invite-link">Invitation link</Label>
                 <div className="flex gap-2">
-                  <Input id="invite-link" readOnly value={link} onFocus={(e) => e.target.select()} />
+                  <Input
+                    id="invite-link"
+                    readOnly
+                    value={link}
+                    onFocus={(e) => e.target.select()}
+                  />
                   <Button variant="outline" onClick={() => copy(link)}>
                     Copy
                   </Button>
@@ -166,7 +172,8 @@ function Members() {
                   {pending.map((invitation) => (
                     <li key={invitation.id} className="flex items-center gap-2 py-2 text-sm">
                       <span className="flex-1 truncate">
-                        {invitation.email} <span className="text-muted-foreground">({invitation.role})</span>
+                        {invitation.email}{" "}
+                        <span className="text-muted-foreground">({invitation.role})</span>
                       </span>
                       <Button
                         variant="outline"

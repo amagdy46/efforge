@@ -3,8 +3,12 @@ import { createServerFn } from "@tanstack/react-start"
 import { Effect, Schema } from "effect"
 import { runtime } from "./runtime"
 
-const StartInput = Schema.Struct({ name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)) })
-const StatusInput = Schema.Struct({ id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)) })
+const StartInput = Schema.Struct({
+  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+})
+const StatusInput = Schema.Struct({
+  id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+})
 
 /** Starts the example workflow; returns its instance id. */
 export const startExampleJob = createServerFn({ method: "POST" })

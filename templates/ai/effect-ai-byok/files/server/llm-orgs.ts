@@ -1,11 +1,5 @@
 import { Auth } from "@repo/core/Auth"
-import {
-  Llm,
-  LlmError,
-  LlmNotConfigured,
-  type LlmProvider,
-  llmProviders,
-} from "@repo/core/llm"
+import { Llm, LlmError, LlmNotConfigured, type LlmProvider, llmProviders } from "@repo/core/llm"
 import { decryptSecret, encryptSecret, loadEncryptionKey } from "@repo/core/llm-crypto"
 import { LlmCredentialStore } from "@repo/core/llm-store"
 import { DatabaseLayer } from "@repo/db"
@@ -39,7 +33,9 @@ const isProvider = (value: string): value is LlmProvider =>
 export class LlmCredentials extends Context.Service<
   LlmCredentials,
   {
-    readonly summary: (orgId: string) => Effect.Effect<Option.Option<LlmCredentialSummary>, LlmError>
+    readonly summary: (
+      orgId: string,
+    ) => Effect.Effect<Option.Option<LlmCredentialSummary>, LlmError>
     readonly save: (
       orgId: string,
       input: LlmCredentialInput,
@@ -62,7 +58,9 @@ const LlmCredentialsLive = Layer.effect(
     const provider = yield* WorkerConfig.provider
     // built with the layer: a missing or malformed LLM_ENCRYPTION_KEY stops the app at startup
     const key = yield* loadEncryptionKey(
-      Option.getOrUndefined(yield* Config.option(Config.String("LLM_ENCRYPTION_KEY")).parse(provider)),
+      Option.getOrUndefined(
+        yield* Config.option(Config.String("LLM_ENCRYPTION_KEY")).parse(provider),
+      ),
     )
 
     const open = (row: { orgId: string; encryptedKey: string }) =>
@@ -85,7 +83,9 @@ const LlmCredentialsLive = Layer.effect(
         Effect.gen(function* () {
           const existing = yield* store.find(orgId)
           const keep =
-            input.apiKey === undefined && Option.isSome(existing) && existing.value.provider === input.provider
+            input.apiKey === undefined &&
+            Option.isSome(existing) &&
+            existing.value.provider === input.provider
           if (input.apiKey === undefined && input.provider !== "ollama" && !keep)
             return yield* new LlmNotConfigured({ message: "Enter an API key." })
           const encryptedKey =

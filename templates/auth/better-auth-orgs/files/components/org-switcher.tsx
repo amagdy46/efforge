@@ -35,7 +35,11 @@ export function OrgSwitcher({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="w-full justify-between" aria-label="Switch organization">
+        <Button
+          variant="outline"
+          className="w-full justify-between"
+          aria-label="Switch organization"
+        >
           <span className="truncate">{active?.name ?? "Select organization"}</span>
           <ChevronsUpDown className="size-4 opacity-50" />
         </Button>

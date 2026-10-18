@@ -41,6 +41,71 @@ export const appendListItem = (
   close: number,
   lastEnd: number | undefined,
   item: string,
+): string => breakIfTooLong(appendListItemRaw(text, open, close, lastEnd, item), open)
+
+/** The formatter's line width (generated vite.config.ts `printWidth`). */
+const PRINT_WIDTH = 100
+
+/** Splits `a, (b, c), d` at top-level commas, ignoring commas in brackets, strings and comments. */
+const splitTopLevel = (s: string): string[] => {
+  const parts: string[] = []
+  let depth = 0
+  let start = 0
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i] as string
+    if (c === '"' || c === "'" || c === "`") {
+      for (i++; i < s.length && s[i] !== c; i++) if (s[i] === "\\") i++
+    } else if (c === "/" && s[i + 1] === "*") {
+      i = s.indexOf("*/", i + 2) + 1 || s.length
+    } else if (c === "(" || c === "[" || c === "{") depth++
+    else if (c === ")" || c === "]" || c === "}") depth--
+    else if (c === "," && depth === 0) {
+      parts.push(s.slice(start, i).trim())
+      start = i + 1
+    }
+  }
+  parts.push(s.slice(start).trim())
+  return parts.filter(Boolean)
+}
+
+/**
+ * A list the formatter would break (the line is wider than the print width) is written one item
+ * per line with a trailing comma, so the result is already formatted. Lists that are already
+ * multi-line are left to appendListItemRaw.
+ */
+const breakIfTooLong = (text: string, open: number): string => {
+  const lineStart = text.lastIndexOf("\n", open) + 1
+  const lineEnd = text.indexOf("\n", open)
+  const line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd)
+  if (line.length <= PRINT_WIDTH || line.includes("//")) return text
+  const opener = text[open] as string
+  const closer = opener === "[" ? "]" : opener === "{" ? "}" : opener === "(" ? ")" : undefined
+  if (closer === undefined) return text
+  // find the matching closer on the same line
+  let depth = 0
+  let end = -1
+  for (let i = open; i < text.length && text[i] !== "\n"; i++) {
+    if (text[i] === opener) depth++
+    else if (text[i] === closer && --depth === 0) {
+      end = i
+      break
+    }
+  }
+  if (end === -1) return text
+  const indent = /^[ \t]*/.exec(line)?.[0] ?? ""
+  const items = splitTopLevel(text.slice(open + 1, end))
+  if (items.length < 1) return text
+  const eol = text.includes("\r\n") ? "\r\n" : "\n"
+  const body = items.map((it) => `${indent}  ${it},`).join(eol)
+  return `${text.slice(0, open + 1)}${eol}${body}${eol}${indent}${text.slice(end)}`
+}
+
+const appendListItemRaw = (
+  text: string,
+  open: number,
+  close: number,
+  lastEnd: number | undefined,
+  item: string,
 ): string => {
   const eol = text.includes("\r\n") ? "\r\n" : "\n"
   const inner = text.slice(open + 1, close)

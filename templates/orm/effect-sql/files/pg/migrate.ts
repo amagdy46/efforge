@@ -31,7 +31,9 @@ const migrationsDir = new URL("../migrations", import.meta.url).pathname
 const loader = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const files = (yield* fs.readDirectory(migrationsDir)).filter((f) => f.endsWith(".sql")).toSorted()
+  const files = (yield* fs.readDirectory(migrationsDir))
+    .filter((f) => f.endsWith(".sql"))
+    .toSorted()
   const entries: Record<string, Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient>> = {}
   for (const file of files) {
     const text = yield* fs.readFileString(path.join(migrationsDir, file))

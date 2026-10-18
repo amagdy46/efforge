@@ -1,7 +1,8 @@
 import { Effect } from "effect"
 import { missing, req, type Transform, withFile } from "./util.ts"
 
-const FILE = "AGENTS.md"
+export const AGENTS_FILE = "AGENTS.md"
+const FILE = AGENTS_FILE
 const END = "<!-- efforge:agents -->"
 
 /**
@@ -19,7 +20,8 @@ export const appendAgentsSection: Transform = (tree, args) =>
 
     const marker = `<!-- efforge:section:${id} -->`
     if (text.includes(marker)) return tree
-    const section = `${marker}\n${content}\n\n`
+    // the formatter wants a blank line after an HTML comment block
+    const section = `${marker}\n\n${content}\n\n`
     const at = text.lastIndexOf(END)
     return withFile(
       tree,

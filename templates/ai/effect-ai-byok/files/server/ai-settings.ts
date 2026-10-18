@@ -14,7 +14,8 @@ const currentOrganization = Effect.gen(function* () {
   const auth = yield* Auth
   const session = yield* auth.currentSession
   const orgId = session.activeOrganizationId
-  if (orgId === null) return yield* new LlmNotConfigured({ message: "Select an organization first." })
+  if (orgId === null)
+    return yield* new LlmNotConfigured({ message: "Select an organization first." })
   const betterAuth = yield* BetterAuth
   const member = yield* Effect.promise(() =>
     betterAuth.api.getActiveMember({ headers: getRequestHeaders() }),
@@ -26,7 +27,9 @@ const currentOrganization = Effect.gen(function* () {
 const manager = Effect.gen(function* () {
   const org = yield* currentOrganization
   if (!org.canManage)
-    return yield* new Forbidden({ message: "Only organization owners and admins can change AI settings." })
+    return yield* new Forbidden({
+      message: "Only organization owners and admins can change AI settings.",
+    })
   return org.orgId
 })
 
@@ -56,7 +59,9 @@ const parseBaseUrl = (provider: string, value: string | undefined) =>
       catch: () => new LlmNotConfigured({ message: "Base URL must be a valid URL." }),
     })
     if (url.protocol !== "https:" && url.protocol !== "http:")
-      return yield* new LlmNotConfigured({ message: "Base URL must start with http:// or https://." })
+      return yield* new LlmNotConfigured({
+        message: "Base URL must start with http:// or https://.",
+      })
     return url.toString()
   })
 

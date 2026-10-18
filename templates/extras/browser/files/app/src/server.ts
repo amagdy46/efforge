@@ -52,7 +52,8 @@ const run = HttpRouter.add(
   Effect.gen(function* () {
     const { url: raw } = yield* HttpServerRequest.schemaBodyJson(RunRequest)
     const checked = checkUrl(raw, ALLOW_PRIVATE_NETWORKS)
-    if (!checked.ok) return yield* HttpServerResponse.json({ error: checked.reason }, { status: 400 })
+    if (!checked.ok)
+      return yield* HttpServerResponse.json({ error: checked.reason }, { status: 400 })
     const url = checked.url.href
     const result = yield* Effect.tryPromise({
       try: () => inspect(url),

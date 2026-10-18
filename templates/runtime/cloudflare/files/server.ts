@@ -15,10 +15,7 @@ export default {
  * Tries each worker route in order; the first defined response wins. Recursive rather than a
  * loop so the awaits stay sequential: a later route must not run once an earlier one answers.
  */
-const tryRoutes = (
-  routes: ReadonlyArray<WorkerRoute>,
-  request: Request,
-): Promise<Response> => {
+const tryRoutes = (routes: ReadonlyArray<WorkerRoute>, request: Request): Promise<Response> => {
   const [head, ...tail] = routes
   if (head === undefined) return Promise.resolve(handler.fetch(request))
   return head(request).then((response) => response ?? tryRoutes(tail, request))

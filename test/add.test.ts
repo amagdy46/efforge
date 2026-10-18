@@ -236,7 +236,12 @@ it("a second add is a no-op: all skipped, no install", async () => {
   await run(addAddons(dir, ["email"], opts))
   const first = snapshot()
   const again = await run(addAddons(dir, ["email"], { overwrite: false, dryRun: false }))
-  expect(again).toEqual({ written: [], transformed: [], skipped: ["extras/email"] })
+  expect(again).toEqual({
+    written: [],
+    transformed: [],
+    skipped: ["extras/email"],
+    removed: [],
+  })
   expect(snapshot()).toEqual(first)
 })
 

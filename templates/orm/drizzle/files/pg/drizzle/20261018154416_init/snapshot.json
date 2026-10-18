@@ -2,9 +2,7 @@
   "version": "8",
   "dialect": "postgres",
   "id": "667d2c3b-3819-4efd-98e5-4035d041970c",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -65,9 +63,7 @@
       "table": "note"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "note_pkey",
       "schema": "public",

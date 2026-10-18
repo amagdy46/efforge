@@ -17,7 +17,13 @@ First release.
 
 - Generated projects with `alchemy` installed two vitest copies, so `pnpm test` failed in `@effect/vitest`. The generated `pnpm-workspace.yaml` now overrides `vite` to the catalog version.
 
+- `efforge add` for storage, realtime, email and ai (each transform declares the files it edits), `extras/browser` (new workspace package), `infra/alchemy` (removes `wrangler.jsonc`, applies scripts and wires existing add-ons' secrets).
+- Templates and transform output are already formatted, so `pnpm check` passes right after `create --no-install`; a test runs the formatter over `templates/` and generated stacks.
+
 ### Changed
+
+- The root `package.json` is named `<name>-monorepo`, so it cannot clash with a workspace package called `<name>`.
+- The formatter uses double quotes (no `singleQuote`) to match the templates.
 
 - efforge's own repo uses Vite+ (`vp lint`, `vp fmt`) instead of Biome.
 - The e2e helper runs the generated project's full gate: `typecheck`, `check`, `test`, `build`.

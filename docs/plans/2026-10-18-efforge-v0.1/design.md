@@ -178,6 +178,16 @@ Why now: Spoorline is about to start M0 (auth, workspaces, DB, infra, deploy). T
 
 - None blocking. Spoorline-specific packages (`decoders`, `capture`, `rules`, `fixtures`) stay in Spoorline and are not efforge add-ons.
 
+## As built
+
+Where v0.1 differs from the design above:
+
+- **Vite+ and Oxlint instead of Biome.** Lint and format run through Vite+ (`vp lint`, `vp fmt`, `vp check`), configured in each project's root `vite.config.ts`, with Effect diagnostics from `@effect/tsgo`. See `docs/decisions/0001-vite-plus.md`. The templates and everything transforms insert are already formatted with that config, so a project passes `pnpm check` straight after `create --no-install`; a unit test runs the formatter in check mode over `templates/` and over generated stacks.
+- **Drizzle is pinned to `1.0.0-rc.5-5935859`.** `drizzle-orm` and `drizzle-kit` use the Effect-based 1.0 drivers, and `1.0.0-rc.4` calls `Schema.TaggedErrorClass`, which Effect 4.0.5 does not export, so its drivers fail at import time. rc.5 fixes that. It is a release candidate, so it is an exact pin and `scripts/bump.ts` reports newer versions.
+- **`routeTree.gen.ts` is generated after install.** TanStack Router writes it with `tsr generate`; it is not in the templates. `create` and `add` run it after `pnpm install`, and the `postinstall`/`typecheck` scripts regenerate it.
+- **`add` is general.** Each transform declares the files it touches (`transformTargets`), overlays and transforms switched on by the new choice also apply to add-ons already in the stack (for example `infra=alchemy` wires their secrets), and `infra/alchemy` removes the generated `wrangler.jsonc`.
+- **Root package name** is `<name>-monorepo`, so it never clashes with a workspace package named `<name>`.
+
 ## Next
 
 After approval: write `plan.md` (writing-plans skill), build efforge v0.1, generate Spoorline from it, and move the existing Spoorline packages over.

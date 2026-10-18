@@ -56,6 +56,8 @@ efforge add ai/effect-ai-byok extras/storage --dry-run
 
 Ids are `email`, `extras/email` or `ai/effect-ai-byok`. `add` re-checks compatibility, merges files and edits seam files (layers, exports, bindings, workflow secrets) with idempotent AST transforms, and refuses to overwrite files you edited unless you pass `--overwrite`. Flags: `--overwrite`, `--dry-run`, `--json`, `--cwd <dir>`, `--no-install`. Removing an add-on is not supported in v0.1; single-select slots only move from `none` to a value.
 
+**AI without auth:** with `--auth=none`, the `effect-ai-byok` demo server function (`apps/web/src/server/ai.ts`) is not gated, so anyone who can reach the app can spend the configured API key. Add auth or remove the demo before deploying.
+
 ## What you get
 
 ```

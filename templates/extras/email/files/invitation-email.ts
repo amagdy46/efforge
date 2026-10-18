@@ -6,8 +6,7 @@ import { MailerLive } from "./mailer"
 // back into `runtime` (an import cycle). The Mailer needs nothing but the Worker env: own runtime.
 const mailRuntime = ManagedRuntime.make(MailerLive)
 
-const escapeHtml = (text: string) =>
-  text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
+const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 
 interface Invitation {
   readonly id: string

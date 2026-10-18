@@ -39,7 +39,12 @@ export const matches = (when: When | undefined, config: StackConfig): boolean =>
   })
 }
 
-const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`
+/** `packageManager` goes last, where the formatter (and sort-package-json) puts it. */
+const json = (value: unknown): string => {
+  const { packageManager, ...rest } = value as { packageManager?: string }
+  const ordered = packageManager === undefined ? value : { ...rest, packageManager }
+  return `${JSON.stringify(ordered, null, 2)}\n`
+}
 const sortKeys = (o: Record<string, string>): Record<string, string> =>
   Object.fromEntries(Object.entries(o).toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
 

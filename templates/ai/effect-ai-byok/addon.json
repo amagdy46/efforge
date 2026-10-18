@@ -583,11 +583,22 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "ai",
-        "content": "## AI (Effect AI, bring your own key)\n\n- Use the `Llm` service from `@repo/core` (`generateText(prompt)`); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.\n- `apps/web/src/server/ai.ts` is a demo server function (`generateText`); it is gated by `requireSession` when the project has auth. Gate any server function you add that spends model tokens the same way.\n- Never log, return or store the API key in the clear."
+        "content": "## AI (Effect AI, bring your own key)\n\n- Use the `Llm` service from `@repo/core` (`generateText(prompt)`); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.\n- `apps/web/src/server/ai.ts` is a demo server function (`generateText`); it is NOT gated because this project has no auth: anyone who can reach the app can call it and spend the configured API key. Add auth (`efforge add auth/better-auth`) or remove the demo before deploying. Gate any server function you add that spends model tokens the same way.\n- Never log, return or store the API key in the clear."
       },
       "when": {
         "auth": [
-          "none",
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "ai",
+        "content": "## AI (Effect AI, bring your own key)\n\n- Use the `Llm` service from `@repo/core` (`generateText(prompt)`); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.\n- `apps/web/src/server/ai.ts` is a demo server function (`generateText`); it is gated by `requireSession`. Gate any server function you add that spends model tokens the same way.\n- Never log, return or store the API key in the clear."
+      },
+      "when": {
+        "auth": [
           "better-auth"
         ]
       }

@@ -13,7 +13,7 @@ const tree = (): Tree =>
 it("renames the root package, wrangler config and README heading", () => {
   const out = applyProjectName(tree(), "spoorline")
   expect(JSON.parse(out.get("package.json") as string)).toEqual({
-    name: "spoorline",
+    name: "spoorline-monorepo",
     private: true,
   })
   expect(out.get("wrangler.jsonc")).toBe(
@@ -25,7 +25,7 @@ it("renames the root package, wrangler config and README heading", () => {
 
 it("uses the last segment of a scoped name", () => {
   const out = applyProjectName(tree(), "@acme/shop")
-  expect(JSON.parse(out.get("package.json") as string).name).toBe("shop")
+  expect(JSON.parse(out.get("package.json") as string).name).toBe("shop-monorepo")
 })
 
 it("skips files that are absent and is idempotent", () => {

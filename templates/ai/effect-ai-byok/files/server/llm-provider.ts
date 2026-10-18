@@ -25,7 +25,9 @@ const providerLayers: Record<LlmProvider, (settings: LlmSettings) => ProviderLay
   anthropic: ({ apiKey, model }) =>
     AnthropicLanguageModel.layer({ model }).pipe(Layer.provide(AnthropicClient.layer({ apiKey }))),
   openrouter: ({ apiKey, model }) =>
-    OpenRouterLanguageModel.layer({ model }).pipe(Layer.provide(OpenRouterClient.layer({ apiKey }))),
+    OpenRouterLanguageModel.layer({ model }).pipe(
+      Layer.provide(OpenRouterClient.layer({ apiKey })),
+    ),
   openai: ({ apiKey, model, baseUrl }) =>
     OpenAiLanguageModel.layer({ model }).pipe(
       Layer.provide(OpenAiClient.layer({ apiKey, apiUrl: baseUrl })),

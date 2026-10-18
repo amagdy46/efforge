@@ -54,7 +54,11 @@ const ipv6Groups = (host: string): ReadonlyArray<number> | undefined => {
   const rest = side(halves[1] ?? "")
   const missing = 8 - head.length - rest.length
   if (halves.length === 1 ? missing !== 0 : missing < 1) return undefined
-  const groups = [...head, ...Array.from({ length: halves.length === 2 ? missing : 0 }, () => "0"), ...rest]
+  const groups = [
+    ...head,
+    ...Array.from({ length: halves.length === 2 ? missing : 0 }, () => "0"),
+    ...rest,
+  ]
   if (!groups.every((g) => /^[0-9a-f]{1,4}$/i.test(g))) return undefined
   return groups.map((g) => Number.parseInt(g, 16))
 }
@@ -95,8 +99,12 @@ export const checkUrl = (raw: string, allowPrivate = false): UrlCheck => {
 
   // `new URL` already lowercases, and turns decimal/hex/octal IPv4 forms into dotted quads
   const host = url.hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "")
-  const blocked = { ok: false, reason: "this host is not allowed (private or local network)" } as const
-  if (host === "localhost" || blockedSuffixes.some((suffix) => host.endsWith(suffix))) return blocked
+  const blocked = {
+    ok: false,
+    reason: "this host is not allowed (private or local network)",
+  } as const
+  if (host === "localhost" || blockedSuffixes.some((suffix) => host.endsWith(suffix)))
+    return blocked
   const v4 = ipv4Octets(host)
   if (v4 !== undefined) return isPrivateIpv4(v4) ? blocked : { ok: true, url }
   if (url.hostname.startsWith("[")) {

@@ -11,15 +11,15 @@ pnpm dev        # http://localhost:3000 (or the port Vite prints)
 
 ## Scripts
 
-| Command          | What it does                      |
-| ---------------- | --------------------------------- |
-| `pnpm dev`       | Start the dev server              |
-| `pnpm build`     | Build every workspace             |
-| `pnpm typecheck` | Type-check every workspace        |
-| `pnpm check`     | Format check, lint, Effect rules  |
-| `pnpm format`    | Apply formatting (Vite+ oxfmt)    |
-| `pnpm lint`      | Lint only (oxlint)                |
-| `pnpm test`      | Run tests (`@effect/vitest`)      |
+| Command          | What it does                     |
+| ---------------- | -------------------------------- |
+| `pnpm dev`       | Start the dev server             |
+| `pnpm build`     | Build every workspace            |
+| `pnpm typecheck` | Type-check every workspace       |
+| `pnpm check`     | Format check, lint, Effect rules |
+| `pnpm format`    | Apply formatting (Vite+ oxfmt)   |
+| `pnpm lint`      | Lint only (oxlint)               |
+| `pnpm test`      | Run tests (`@effect/vitest`)     |
 
 ## Layout
 

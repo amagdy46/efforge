@@ -21,9 +21,16 @@ export class Example extends ExampleWorkflow.make(Layer.empty, {
       const greeting = yield* Workflow.step(
         "greet",
         name.trim() === ""
-          ? Effect.fail(new Workflow.WorkflowStepNonRetryableError({ cause: new InvalidName({ input: name }) }))
+          ? Effect.fail(
+              new Workflow.WorkflowStepNonRetryableError({
+                cause: new InvalidName({ input: name }),
+              }),
+            )
           : Effect.succeed(`Hello, ${name.trim()}`),
-        { retries: { limit: 3, delay: "2 seconds", backoff: "exponential" }, timeout: "30 seconds" },
+        {
+          retries: { limit: 3, delay: "2 seconds", backoff: "exponential" },
+          timeout: "30 seconds",
+        },
       )
       yield* Workflow.sleep("pause", "5 seconds")
       const message = yield* Workflow.step(

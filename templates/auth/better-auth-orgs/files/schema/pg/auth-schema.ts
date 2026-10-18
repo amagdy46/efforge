@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core"
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -11,7 +11,7 @@ export const user = pgTable("user", {
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
-});
+})
 
 export const session = pgTable(
   "session",
@@ -31,7 +31,7 @@ export const session = pgTable(
     activeOrganizationId: text("active_organization_id"),
   },
   (table) => [index("session_userId_idx").on(table.userId)],
-);
+)
 
 export const account = pgTable(
   "account",
@@ -55,7 +55,7 @@ export const account = pgTable(
       .notNull(),
   },
   (table) => [index("account_userId_idx").on(table.userId)],
-);
+)
 
 export const verification = pgTable(
   "verification",
@@ -71,7 +71,7 @@ export const verification = pgTable(
       .notNull(),
   },
   (table) => [index("verification_identifier_idx").on(table.identifier)],
-);
+)
 
 export const organization = pgTable("organization", {
   id: text("id").primaryKey(),
@@ -80,7 +80,7 @@ export const organization = pgTable("organization", {
   logo: text("logo"),
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
-});
+})
 
 export const member = pgTable(
   "member",
@@ -99,7 +99,7 @@ export const member = pgTable(
     index("member_organizationId_idx").on(table.organizationId),
     index("member_userId_idx").on(table.userId),
   ],
-);
+)
 
 export const invitation = pgTable(
   "invitation",
@@ -121,4 +121,4 @@ export const invitation = pgTable(
     index("invitation_organizationId_idx").on(table.organizationId),
     index("invitation_email_idx").on(table.email),
   ],
-);
+)

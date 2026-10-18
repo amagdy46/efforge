@@ -96,7 +96,7 @@ it("names the project: package.json, wrangler.jsonc and README heading, with con
       return yield* generate({ ...minimal, name: "spoorline" }, yield* loadAddons(templates))
     }),
   )
-  expect(JSON.parse(tree.get("package.json") as string).name).toBe("spoorline")
+  expect(JSON.parse(tree.get("package.json") as string).name).toBe("spoorline-monorepo")
   expect(tree.get("wrangler.jsonc")).toContain('"name": "spoorline"')
   expect((tree.get("README.md") as string).split("\n")[0]).toBe("# spoorline")
   const manifest = JSON.parse((tree.get("efforge.jsonc") as string).replace(/^\/\/.*\n/, ""))

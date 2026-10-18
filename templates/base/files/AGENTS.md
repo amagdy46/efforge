@@ -44,16 +44,16 @@ Rules for AI agents (and humans) working in this repo. Read this before changing
 
 ## Commands
 
-| Command          | Use                                                  |
-| ---------------- | ---------------------------------------------------- |
-| `pnpm dev`       | Dev server                                           |
-| `pnpm check`     | Format check, lint (incl. Effect diagnostics), types |
-| `pnpm format`    | Apply formatting (oxfmt via Vite+)                   |
-| `pnpm lint`      | Lint only                                            |
-| `pnpm typecheck` | Regenerate the route tree, then type-check every workspace |
+| Command                    | Use                                                               |
+| -------------------------- | ----------------------------------------------------------------- |
+| `pnpm dev`                 | Dev server                                                        |
+| `pnpm check`               | Format check, lint (incl. Effect diagnostics), types              |
+| `pnpm format`              | Apply formatting (oxfmt via Vite+)                                |
+| `pnpm lint`                | Lint only                                                         |
+| `pnpm typecheck`           | Regenerate the route tree, then type-check every workspace        |
 | `pnpm --filter web routes` | Regenerate `routeTree.gen.ts` after adding or moving a route file |
-| `pnpm test`      | Tests (`@effect/vitest`)                             |
-| `pnpm build`     | Build every workspace                                |
+| `pnpm test`                | Tests (`@effect/vitest`)                                          |
+| `pnpm build`               | Build every workspace                                             |
 
 Lint and format are configured in the root `vite.config.ts`. The Effect rules need the
 patched install that `pnpm install` performs (`prepare` script); re-run it if they go quiet.

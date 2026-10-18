@@ -43,7 +43,9 @@ function AiSettings() {
   const settings = Route.useLoaderData()
   const router = useRouter()
   const [provider, setProvider] = useState<ProviderId>(
-    settings?.provider !== null && settings?.provider !== undefined && isProviderId(settings.provider)
+    settings?.provider !== null &&
+      settings?.provider !== undefined &&
+      isProviderId(settings.provider)
       ? settings.provider
       : "anthropic",
   )
@@ -87,14 +89,23 @@ function AiSettings() {
       <CardHeader>
         <CardTitle>AI provider</CardTitle>
         <CardDescription>
-          Bring your own key. It is encrypted before it is stored and never sent back to the browser.
+          Bring your own key. It is encrypted before it is stored and never sent back to the
+          browser.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {configured ? (
           <p className="text-sm" data-testid="ai-status">
             Using {settings.provider} / {settings.model}
-            {last4 === null ? "" : <> with the key ending in <code>{last4}</code></>}.
+            {last4 === null ? (
+              ""
+            ) : (
+              <>
+                {" "}
+                with the key ending in <code>{last4}</code>
+              </>
+            )}
+            .
           </p>
         ) : (
           <p className="text-sm text-muted-foreground" data-testid="ai-status">
@@ -102,73 +113,75 @@ function AiSettings() {
           </p>
         )}
         {canManage ? (
-            <form onSubmit={save} className="space-y-4">
+          <form onSubmit={save} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="ai-provider">Provider</Label>
+              <select
+                id="ai-provider"
+                className={selectClass}
+                value={provider}
+                onChange={(event) => {
+                  if (isProviderId(event.target.value)) setProvider(event.target.value)
+                }}
+              >
+                {providers.map(({ id, label }) => (
+                  <option key={id} value={id}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ai-model">Model</Label>
+              <Input
+                id="ai-model"
+                name="model"
+                required
+                defaultValue={settings.model ?? undefined}
+                placeholder={providers.find((p) => p.id === provider)?.model}
+                key={provider}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ai-key">API key</Label>
+              <Input
+                id="ai-key"
+                name="apiKey"
+                type="password"
+                autoComplete="off"
+                placeholder={configured ? "Leave empty to keep the current key" : "sk-..."}
+              />
+            </div>
+            {needsUrl ? (
               <div className="space-y-2">
-                <Label htmlFor="ai-provider">Provider</Label>
-                <select
-                  id="ai-provider"
-                  className={selectClass}
-                  value={provider}
-                  onChange={(event) => {
-                    if (isProviderId(event.target.value)) setProvider(event.target.value)
-                  }}
-                >
-                  {providers.map(({ id, label }) => (
-                    <option key={id} value={id}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ai-model">Model</Label>
+                <Label htmlFor="ai-base-url">Base URL</Label>
                 <Input
-                  id="ai-model"
-                  name="model"
-                  required
-                  defaultValue={settings.model ?? undefined}
-                  placeholder={providers.find((p) => p.id === provider)?.model}
-                  key={provider}
+                  id="ai-base-url"
+                  name="baseUrl"
+                  type="url"
+                  defaultValue={settings.baseUrl ?? undefined}
+                  placeholder={
+                    provider === "ollama"
+                      ? "http://localhost:11434/v1"
+                      : "https://api.openai.com/v1"
+                  }
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="ai-key">API key</Label>
-                <Input
-                  id="ai-key"
-                  name="apiKey"
-                  type="password"
-                  autoComplete="off"
-                  placeholder={configured ? "Leave empty to keep the current key" : "sk-..."}
-                />
-              </div>
-              {needsUrl ? (
-                <div className="space-y-2">
-                  <Label htmlFor="ai-base-url">Base URL</Label>
-                  <Input
-                    id="ai-base-url"
-                    name="baseUrl"
-                    type="url"
-                    defaultValue={settings.baseUrl ?? undefined}
-                    placeholder={
-                      provider === "ollama" ? "http://localhost:11434/v1" : "https://api.openai.com/v1"
-                    }
-                  />
-                </div>
+            ) : null}
+            <div className="flex gap-2">
+              <Button type="submit">Save</Button>
+              {configured ? (
+                <>
+                  <Button type="button" variant="outline" onClick={test}>
+                    Test
+                  </Button>
+                  <Button type="button" variant="outline" onClick={clear}>
+                    Remove key
+                  </Button>
+                </>
               ) : null}
-              <div className="flex gap-2">
-                <Button type="submit">Save</Button>
-                {configured ? (
-                  <>
-                    <Button type="button" variant="outline" onClick={test}>
-                      Test
-                    </Button>
-                    <Button type="button" variant="outline" onClick={clear}>
-                      Remove key
-                    </Button>
-                  </>
-                ) : null}
-              </div>
-            </form>
+            </div>
+          </form>
         ) : (
           <p className="text-sm text-muted-foreground">
             Ask an owner or admin of this organization to change these settings.

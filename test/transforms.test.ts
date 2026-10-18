@@ -430,11 +430,11 @@ const section = (id: string, content: string): TransformCall => ({
 it("appendAgentsSection inserts before the footer, once per id, in order", async () => {
   const a = await once({ "AGENTS.md": AGENTS }, section("db", "## Database\nUse migrations.\n"))
   expect(a.get("AGENTS.md")).toBe(
-    "# Agents\n\nBody\n\n<!-- efforge:section:db -->\n## Database\nUse migrations.\n\n<!-- efforge:agents -->\n",
+    "# Agents\n\nBody\n\n<!-- efforge:section:db -->\n\n## Database\nUse migrations.\n\n<!-- efforge:agents -->\n",
   )
   const b = await once(Object.fromEntries(a), section("rt", "## Realtime"))
   expect(b.get("AGENTS.md")).toBe(
-    "# Agents\n\nBody\n\n<!-- efforge:section:db -->\n## Database\nUse migrations.\n\n<!-- efforge:section:rt -->\n## Realtime\n\n<!-- efforge:agents -->\n",
+    "# Agents\n\nBody\n\n<!-- efforge:section:db -->\n\n## Database\nUse migrations.\n\n<!-- efforge:section:rt -->\n\n## Realtime\n\n<!-- efforge:agents -->\n",
   )
   const c = await run(b, section("db", "## Changed"))
   expect(c).toBe(b)
@@ -442,7 +442,7 @@ it("appendAgentsSection inserts before the footer, once per id, in order", async
 
 it("appendAgentsSection appends when the footer is gone and fails without AGENTS.md", async () => {
   const t = await once({ "AGENTS.md": "# Agents\n" }, section("x", "## X"))
-  expect(t.get("AGENTS.md")).toBe("# Agents\n\n<!-- efforge:section:x -->\n## X\n")
+  expect(t.get("AGENTS.md")).toBe("# Agents\n\n<!-- efforge:section:x -->\n\n## X\n")
   const e = await fail(new Map(), section("x", "## X"))
   expect(e).toBeInstanceOf(TransformAnchorMissing)
 })

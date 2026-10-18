@@ -56,8 +56,15 @@ export const addServerFnMiddleware: Transform = (tree, args) =>
       if (!gated) inserts.push(call.getEnd())
     }
     let next = text
-    for (const at of inserts.toSorted((a, b) => b - a))
-      next = `${next.slice(0, at)}.middleware([${middleware}])${next.slice(at)}`
+    for (const at of inserts.toSorted((a, b) => b - a)) {
+      // a chain the formatter already broke one call per line gets the new call on its own line
+      const broken = /^[ \t]*\r?\n([ \t]*)\./.exec(next.slice(at))
+      const call = `.middleware([${middleware}])`
+      next =
+        broken === null
+          ? `${next.slice(0, at)}${call}${next.slice(at)}`
+          : `${next.slice(0, at)}${next.includes("\r\n") ? "\r\n" : "\n"}${broken[1]}${call}${next.slice(at)}`
+    }
     if (args.import !== undefined && args.from !== undefined)
       next = addImportText(file, next, args.import, args.from) ?? next
     return withFile(tree, file, next)
