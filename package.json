@@ -1,0 +1,14 @@
+{
+  "name": "ovriq-create-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/main.ts"
+  },
+  "dependencies": {
+    "@clack/prompts": "1.8.1",
+    "@effect/platform-node": "4.0.5",
+    "effect": "4.0.5",
+    "picocolors": "^1.1.1"
+  }
+}
