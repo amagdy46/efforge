@@ -214,3 +214,23 @@ it("`.` as a dependency dir targets the root package.json", async () => {
     effect: "catalog:",
   })
 })
+
+it("a package with a Dockerfile gets exact versions, not catalog:,", async () => {
+  const tree = await gen(pg, (a) => {
+    const base = a.get("base") as LoadedAddon
+    patch(a, "base", {
+      files: [
+        ...base.manifest.files,
+        { path: "files/web/package.json", target: "apps/img/package.json" },
+        { path: "files/src/db.ts", target: "apps/img/Dockerfile" },
+      ],
+      dependencies: { ...base.manifest.dependencies, "apps/img": ["effect"] },
+    })
+  })
+  expect(JSON.parse(tree.get("apps/img/package.json") as string).dependencies.effect).toBe(
+    versions.effect,
+  )
+  expect(JSON.parse(tree.get("apps/web/package.json") as string).dependencies.effect).toBe(
+    "catalog:",
+  )
+})

@@ -14,7 +14,21 @@ const same = (a: Entry, b: unknown): boolean => {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
-/** args: `{ key, value }` — `value` is a JSON object (or array of objects) appended to the top-level `key` array. */
+/** Value at a dotted path (`durable_objects.bindings`), or undefined; `null` when a parent is not an object. */
+const lookup = (doc: Entry, path: string[]): unknown => {
+  let cur: unknown = doc
+  for (const part of path) {
+    if (cur === undefined) return undefined
+    if (!isEntry(cur)) return null
+    cur = cur[part]
+  }
+  return cur
+}
+
+/**
+ * args: `{ key, value }` — `value` is a JSON object (or array of objects) appended to the array at
+ * `key`, a top-level key or a dotted path such as `durable_objects.bindings`. Missing parents are created.
+ */
 export const addWranglerBinding: Transform = (tree, args) =>
   Effect.gen(function* () {
     const key = req(args, "key", "addWranglerBinding")
@@ -27,8 +41,9 @@ export const addWranglerBinding: Transform = (tree, args) =>
     const doc: unknown = parse(text, errors, { allowTrailingComma: true })
     if (errors.length > 0 || !isEntry(doc))
       return yield* missing(WRANGLER_FILE, "valid JSONC object", snippet)
-    const existing = doc[key]
-    if (existing !== undefined && !Array.isArray(existing))
+    const path = key.split(".")
+    const existing = lookup(doc, path)
+    if (existing === null || (existing !== undefined && !Array.isArray(existing)))
       return yield* missing(WRANGLER_FILE, `"${key}" array`, snippet)
 
     const parsed: unknown = JSON.parse(raw)
@@ -40,8 +55,8 @@ export const addWranglerBinding: Transform = (tree, args) =>
       if (current.some((e) => isEntry(item) && same(item, e))) continue
       const edits =
         current.length === 0 && existing === undefined
-          ? modify(next, [key], [item], { formattingOptions })
-          : modify(next, [key, -1], item, { formattingOptions, isArrayInsertion: true })
+          ? modify(next, path, [item], { formattingOptions })
+          : modify(next, [...path, -1], item, { formattingOptions, isArrayInsertion: true })
       next = applyEdits(next, edits)
       current = [...current, item]
     }

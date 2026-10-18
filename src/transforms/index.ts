@@ -1,11 +1,14 @@
 import { Effect } from "effect"
 import type { Tree } from "../tree.ts"
 import { addAlchemyResource } from "./addAlchemyResource.ts"
+import { addArrayItem } from "./addArrayItem.ts"
 import { addAuthPlugin } from "./addAuthPlugin.ts"
+import { addExport } from "./addExport.ts"
 import { addImport } from "./addImport.ts"
 import { addLayer } from "./addLayer.ts"
 import { addWranglerBinding } from "./addWranglerBinding.ts"
 import { TransformAnchorMissing, UnknownTransform } from "./errors.ts"
+import { setWranglerValue } from "./setWranglerValue.ts"
 import type { Transform } from "./util.ts"
 
 export type { Transform }
@@ -18,10 +21,13 @@ export interface TransformCall {
 
 const registry: Readonly<Record<string, Transform>> = {
   addImport,
+  addArrayItem,
+  addExport,
   addLayer,
   addAuthPlugin,
   addAlchemyResource,
   addWranglerBinding,
+  setWranglerValue,
 }
 
 export const runTransform = (

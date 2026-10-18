@@ -40,6 +40,8 @@ const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
     yield* writeTree(dir, tree)
     yield* Effect.try(() => {
       sh(dir, "pnpm install --no-frozen-lockfile")
+      // what `create` runs after installing, before the project's first lint
+      spawnSync("pnpm exec biome check --write .", { cwd: dir, shell: true })
       sh(dir, "pnpm typecheck && pnpm lint && pnpm build")
     })
     rmSync(dir, { recursive: true, force: true })
@@ -65,6 +67,29 @@ const stacks: Array<[string, Parameters<typeof withDefaults>[0]]> = [
   [
     "d1-effect-sql",
     { name: "d1-effect-sql", database: "d1", orm: "effect-sql", auth: "none", infra: "none" },
+  ],
+  [
+    "extras-no-db",
+    {
+      name: "extras-no-db",
+      database: "none",
+      orm: "none",
+      auth: "none",
+      infra: "none",
+      ai: "none",
+      extras: ["storage", "workflows", "realtime", "browser"],
+    },
+  ],
+  [
+    "pg-drizzle-extras",
+    {
+      name: "pg-drizzle-extras",
+      database: "postgres",
+      orm: "drizzle",
+      auth: "none",
+      infra: "none",
+      extras: ["storage", "workflows", "realtime"],
+    },
   ],
 ]
 

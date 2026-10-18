@@ -64,6 +64,10 @@
       "target": "apps/web/src/components/theme-toggle.tsx"
     },
     {
+      "path": "files/web/src/components/widgets.tsx",
+      "target": "apps/web/src/components/widgets.tsx"
+    },
+    {
       "path": "files/web/src/components/ui/avatar.tsx",
       "target": "apps/web/src/components/ui/avatar.tsx"
     },

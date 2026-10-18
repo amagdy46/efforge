@@ -135,11 +135,15 @@ export const generate = (
               package: unpinned,
               message: `${manifest.id} uses "${unpinned}", which has no entry in versions.ts`,
             })
+          // a Docker build context can't see the root catalog, so such a package pins exact versions
+          const standalone = tree.has(`${pkgDir === "." ? "" : `${pkgDir}/`}Dockerfile`)
           yield* editPackage(pkgDir, (pkg) => {
             const deps = { ...((pkg[key] as Record<string, string> | undefined) ?? {}) }
             for (const name of names) {
               if (isWorkspace(name)) {
                 deps[name] = "workspace:*"
+              } else if (standalone) {
+                deps[name] = versions[name] as string
               } else {
                 deps[name] = "catalog:"
                 used.add(name)
