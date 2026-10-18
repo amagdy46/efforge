@@ -231,7 +231,7 @@ const describe = (
 ): string => {
   switch (e._tag) {
     case "IncompatibleStack":
-      return `--${String(e.slot)}=${String(e.value)} isn't available with the other choices. Options: ${(e.allowed as string[]).join(", ")}`
+      return `--${String(e.slot)}=${String(e.value)} isn't available with the other choices. Options: ${(e.allowed as string[]).join(", ")}${typeof e.reason === "string" ? `. ${e.reason}` : ""}`
     case "TargetNotEmpty":
       return `${String(e.dir)} already exists and is not empty. Pick another name or remove it.`
     case "CommandFailed":

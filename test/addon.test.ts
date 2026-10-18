@@ -40,6 +40,7 @@ for (const [name, dir] of [
 it("fixtures: manifests carry requires, when and transforms", async () => {
   const addons = await run(loadAddons(fixtures))
   expect([...addons.keys()].sort()).toEqual([
+    "ai/effect-ai-byok",
     "base",
     "database/d1",
     "database/postgres",

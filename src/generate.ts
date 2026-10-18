@@ -15,6 +15,7 @@ import { efforgeVersion, versions } from "./versions.ts"
 
 export class GenerateError extends Schema.TaggedError<GenerateError>()("GenerateError", {
   reason: Schema.Literals([
+    "unsafe-path",
     "unpinned",
     "missing-package-json",
     "invalid-json",
@@ -43,7 +44,7 @@ const sortKeys = (o: Record<string, string>): Record<string, string> =>
   Object.fromEntries(Object.entries(o).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
 
 const computedNames = new Set(["pnpm-workspace.yaml", ".env.example", "efforge.jsonc"])
-const isComputed = (target: string) =>
+export const isComputed = (target: string) =>
   computedNames.has(target) || target === "package.json" || target.endsWith("/package.json")
 
 /** Packages of the generated monorepo (`@repo/*`) link via `workspace:*`; they have no pinned version. */
