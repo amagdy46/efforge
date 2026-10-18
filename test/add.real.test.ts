@@ -110,3 +110,13 @@ it("add infra/alchemy refuses to delete an edited wrangler.jsonc unless --overwr
   await run(addAddons(dir, ["infra/alchemy"], { ...opts, overwrite: true }))
   expect(existsSync(wrangler)).toBe(false)
 })
+
+for (const extra of ["storage", "email"] as const)
+  it(`add auth after ${extra} keeps the .dev.vars entries ${extra} wrote`, async () => {
+    const before = withDefaults({ ...base, auth: "none", extras: [extra] })
+    await run(writeTree(dir, await generated(before)))
+    await run(addAddons(dir, ["auth/better-auth"], opts))
+    const devVars = readFileSync(join(dir, ".dev.vars"), "utf8")
+    expect(devVars).toMatch(/^BETTER_AUTH_SECRET=/m)
+    expect(devVars).toMatch(extra === "storage" ? /^STORAGE_SIGNING_SECRET=/m : /^MAIL_FROM=/m)
+  })

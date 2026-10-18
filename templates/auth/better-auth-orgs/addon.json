@@ -64,10 +64,6 @@
       "target": "apps/web/src/routes/app.tsx"
     },
     {
-      "path": "../better-auth/files/shared/dev.vars",
-      "target": ".dev.vars"
-    },
-    {
       "path": "files/routes/onboarding.tsx",
       "target": "apps/web/src/routes/onboarding.tsx"
     },
@@ -281,6 +277,20 @@
   "requires": [],
   "conflicts": [],
   "transforms": [
+    {
+      "name": "addDevVar",
+      "args": {
+        "name": "BETTER_AUTH_SECRET",
+        "value": "dev-only-secret-replace-me-with-openssl-rand-base64-32"
+      }
+    },
+    {
+      "name": "addDevVar",
+      "args": {
+        "name": "BETTER_AUTH_URL",
+        "value": "http://localhost:5173"
+      }
+    },
     {
       "name": "addExport",
       "args": {

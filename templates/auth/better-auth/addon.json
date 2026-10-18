@@ -64,10 +64,6 @@
       "target": "apps/web/src/routes/app.tsx"
     },
     {
-      "path": "files/shared/dev.vars",
-      "target": ".dev.vars"
-    },
-    {
       "path": "files/shared/server/db/pg-drizzle.ts",
       "target": "apps/web/src/server/auth-database.ts",
       "when": {
@@ -257,6 +253,20 @@
   "requires": [],
   "conflicts": [],
   "transforms": [
+    {
+      "name": "addDevVar",
+      "args": {
+        "name": "BETTER_AUTH_SECRET",
+        "value": "dev-only-secret-replace-me-with-openssl-rand-base64-32"
+      }
+    },
+    {
+      "name": "addDevVar",
+      "args": {
+        "name": "BETTER_AUTH_URL",
+        "value": "http://localhost:5173"
+      }
+    },
     {
       "name": "addExport",
       "args": {
