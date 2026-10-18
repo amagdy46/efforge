@@ -1,10 +1,198 @@
 {
   "id": "base",
   "title": "Base",
-  "description": "Monorepo skeleton shared by every stack.",
-  "files": [],
-  "dependencies": {},
-  "devDependencies": {},
+  "description": "Monorepo skeleton shared by every stack: pnpm, Turborepo, Biome, TanStack Start, Tailwind v4 and shadcn/ui.",
+  "files": [
+    {
+      "path": "files/README.md",
+      "target": "README.md"
+    },
+    {
+      "path": "files/core/package.json",
+      "target": "packages/core/package.json"
+    },
+    {
+      "path": "files/core/src/index.ts",
+      "target": "packages/core/src/index.ts"
+    },
+    {
+      "path": "files/core/test/core.test.ts",
+      "target": "packages/core/test/core.test.ts"
+    },
+    {
+      "path": "files/core/tsconfig.json",
+      "target": "packages/core/tsconfig.json"
+    },
+    {
+      "path": "files/gitignore",
+      "target": ".gitignore"
+    },
+    {
+      "path": "files/pnpm-workspace.yaml",
+      "target": "pnpm-workspace.yaml"
+    },
+    {
+      "path": "files/root/biome.json",
+      "target": "biome.json"
+    },
+    {
+      "path": "files/root/package.json",
+      "target": "package.json"
+    },
+    {
+      "path": "files/root/tsconfig.base.json",
+      "target": "tsconfig.base.json"
+    },
+    {
+      "path": "files/root/turbo.json",
+      "target": "turbo.json"
+    },
+    {
+      "path": "files/web/components.json",
+      "target": "apps/web/components.json"
+    },
+    {
+      "path": "files/web/package.json",
+      "target": "apps/web/package.json"
+    },
+    {
+      "path": "files/web/src/components/theme-provider.tsx",
+      "target": "apps/web/src/components/theme-provider.tsx"
+    },
+    {
+      "path": "files/web/src/components/theme-toggle.tsx",
+      "target": "apps/web/src/components/theme-toggle.tsx"
+    },
+    {
+      "path": "files/web/src/components/ui/avatar.tsx",
+      "target": "apps/web/src/components/ui/avatar.tsx"
+    },
+    {
+      "path": "files/web/src/components/ui/button.tsx",
+      "target": "apps/web/src/components/ui/button.tsx"
+    },
+    {
+      "path": "files/web/src/components/ui/card.tsx",
+      "target": "apps/web/src/components/ui/card.tsx"
+    },
+    {
+      "path": "files/web/src/components/ui/dialog.tsx",
+      "target": "apps/web/src/components/ui/dialog.tsx"
+    },
+    {
+      "path": "files/web/src/components/ui/dropdown-menu.tsx",
+      "target": "apps/web/src/components/ui/dropdown-menu.tsx"
+    },
+    {
+      "path": "files/web/src/components/ui/input.tsx",
+      "target": "apps/web/src/components/ui/input.tsx"
+    },
+    {
+      "path": "files/web/src/components/ui/label.tsx",
+      "target": "apps/web/src/components/ui/label.tsx"
+    },
+    {
+      "path": "files/web/src/components/ui/sonner.tsx",
+      "target": "apps/web/src/components/ui/sonner.tsx"
+    },
+    {
+      "path": "files/web/src/lib/utils.ts",
+      "target": "apps/web/src/lib/utils.ts"
+    },
+    {
+      "path": "files/web/src/routeTree.gen.ts",
+      "target": "apps/web/src/routeTree.gen.ts"
+    },
+    {
+      "path": "files/web/src/router.tsx",
+      "target": "apps/web/src/router.tsx"
+    },
+    {
+      "path": "files/web/src/routes/__root.tsx",
+      "target": "apps/web/src/routes/__root.tsx"
+    },
+    {
+      "path": "files/web/src/routes/app.tsx",
+      "target": "apps/web/src/routes/app.tsx"
+    },
+    {
+      "path": "files/web/src/routes/app/index.tsx",
+      "target": "apps/web/src/routes/app/index.tsx"
+    },
+    {
+      "path": "files/web/src/routes/app/settings.tsx",
+      "target": "apps/web/src/routes/app/settings.tsx"
+    },
+    {
+      "path": "files/web/src/routes/index.tsx",
+      "target": "apps/web/src/routes/index.tsx"
+    },
+    {
+      "path": "files/web/src/server/greeting.ts",
+      "target": "apps/web/src/server/greeting.ts"
+    },
+    {
+      "path": "files/web/src/server/layers.ts",
+      "target": "apps/web/src/server/layers.ts"
+    },
+    {
+      "path": "files/web/src/server/runtime.ts",
+      "target": "apps/web/src/server/runtime.ts"
+    },
+    {
+      "path": "files/web/src/styles.css",
+      "target": "apps/web/src/styles.css"
+    },
+    {
+      "path": "files/web/tsconfig.json",
+      "target": "apps/web/tsconfig.json"
+    },
+    {
+      "path": "files/web/vite.config.ts",
+      "target": "apps/web/vite.config.ts"
+    }
+  ],
+  "dependencies": {
+    "apps/web": [
+      "@tanstack/react-router",
+      "@tanstack/react-start",
+      "class-variance-authority",
+      "clsx",
+      "effect",
+      "lucide-react",
+      "radix-ui",
+      "react",
+      "react-dom",
+      "sonner",
+      "tailwind-merge",
+      "tw-animate-css"
+    ],
+    "packages/core": [
+      "effect"
+    ]
+  },
+  "devDependencies": {
+    ".": [
+      "@biomejs/biome",
+      "turbo",
+      "typescript"
+    ],
+    "apps/web": [
+      "@tailwindcss/vite",
+      "@types/react",
+      "@types/react-dom",
+      "@vitejs/plugin-react",
+      "tailwindcss",
+      "typescript",
+      "vite"
+    ],
+    "packages/core": [
+      "@effect/vitest",
+      "@types/node",
+      "typescript",
+      "vitest"
+    ]
+  },
   "envVars": [],
   "requires": [],
   "conflicts": [],

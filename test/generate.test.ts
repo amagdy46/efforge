@@ -168,3 +168,10 @@ it("applies all overlays before any transform, so a later overlay cannot clobber
     'import { Effect } from "effect"\nexport const db = "postgres"\n',
   )
 })
+
+it("`.` as a dependency dir targets the root package.json", async () => {
+  const tree = await gen(pg, (a) => patch(a, "base", { devDependencies: { ".": ["effect"] } }))
+  expect(JSON.parse(tree.get("package.json") as string).devDependencies).toEqual({
+    effect: "catalog:",
+  })
+})

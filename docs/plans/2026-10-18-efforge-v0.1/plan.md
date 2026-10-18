@@ -231,10 +231,10 @@ Each transform is a no-op when its edit is already present.
 **Interfaces:** produces the seam files with the anchors Task 5 expects (`AppLayer` / `Layer.mergeAll`).
 **Blocked by:** 5
 
-- [ ] Add the e2e case `minimal` (`database=none, auth=none, infra=none, ai=none, extras=[]`)
-- [ ] Run `pnpm test:e2e -t minimal`; expect fail
-- [ ] Build the templates; run; expect pass. Also run `pnpm dev` in a generated copy and check that `/` and `/app` render (screenshot or curl HTML)
-- [ ] Commit
+- [x] Add the e2e case `minimal` (`database=none, auth=none, infra=none, ai=none, extras=[]`)
+- [x] Run `pnpm test:e2e -t minimal`; expect fail
+- [x] Build the templates; run; expect pass. Also run `pnpm dev` in a generated copy and check that `/` and `/app` render (screenshot or curl HTML)
+- [x] Commit
 
 ### Task 7: Database and ORM add-ons
 

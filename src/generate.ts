@@ -100,7 +100,7 @@ export const generate = (
         ["devDependencies", manifest.devDependencies],
       ] as const) {
         for (const [pkgDir, names] of Object.entries(section)) {
-          const target = `${pkgDir}/package.json`
+          const target = pkgDir === "." ? "package.json" : `${pkgDir}/package.json`
           const text = tree.get(target)
           if (text === undefined)
             return yield* new GenerateError({
@@ -155,12 +155,11 @@ export const generate = (
     const out = new Map(tree)
 
     const workspace = out.get("pnpm-workspace.yaml")
-    const packages =
-      workspace === undefined
-        ? DEFAULT_PACKAGES
-        : ((parse(workspace) as { packages?: string[] } | null)?.packages ?? DEFAULT_PACKAGES)
+    const { packages = DEFAULT_PACKAGES, ...rest } =
+      workspace === undefined ? {} : ((parse(workspace) as { packages?: string[] } | null) ?? {})
     const catalog = Object.fromEntries([...used].sort().map((n) => [n, versions[n] as string]))
-    out.set("pnpm-workspace.yaml", stringify({ packages, catalog }))
+    // keep the template's other keys (e.g. `allowBuilds`); `catalog` is always computed
+    out.set("pnpm-workspace.yaml", stringify({ packages, ...rest, catalog }))
 
     if (env.size > 0)
       out.set(

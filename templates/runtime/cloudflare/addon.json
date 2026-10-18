@@ -1,0 +1,31 @@
+{
+  "id": "runtime/cloudflare",
+  "title": "Cloudflare Workers",
+  "description": "Runs the app on Cloudflare Workers via @cloudflare/vite-plugin.",
+  "files": [
+    {
+      "path": "files/vite.config.ts",
+      "target": "apps/web/vite.config.ts"
+    },
+    {
+      "path": "files/wrangler.jsonc",
+      "target": "wrangler.jsonc",
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    }
+  ],
+  "dependencies": {},
+  "devDependencies": {
+    "apps/web": [
+      "@cloudflare/vite-plugin",
+      "wrangler"
+    ]
+  },
+  "envVars": [],
+  "requires": [],
+  "conflicts": [],
+  "transforms": []
+}
