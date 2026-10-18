@@ -21,7 +21,7 @@ const BetterAuthLive = Layer.effect(
     return makeAuth({
       database,
       secret: Redacted.value(secret),
-      baseURL: Option.getOrUndefined(baseURL),
+      baseURL: Option.getOrUndefined(Option.filter(baseURL, (url) => url !== "")),
     })
   }),
 ).pipe(Layer.provide(AuthDatabaseLayer), Layer.provide(WorkerEnvLive))

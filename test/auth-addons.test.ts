@@ -122,3 +122,40 @@ it("pins better-auth and the pg driver in the catalog", async () => {
     "catalog:",
   )
 })
+
+it.each(auths)(
+  "%s with infra=alchemy binds its secret and URL and exposes the secret to CI",
+  async (auth) => {
+    const tree = await gen({ database: "postgres", orm: "drizzle", auth, infra: "alchemy" })
+    const run = text(tree, "infra/alchemy.run.ts")
+    expect(run).toContain('Config.Redacted("BETTER_AUTH_SECRET")')
+    expect(run).toMatch(/BETTER_AUTH_SECRET: betterAuthSecret/)
+    expect(run).toContain('Config.String("BETTER_AUTH_URL")')
+    expect(run).toMatch(/BETTER_AUTH_URL: betterAuthUrl/)
+    // the secret is read as Redacted, never a plain string
+    expect(run).not.toContain("BETTER_AUTH_SECRET: process.env")
+    const deploy = text(tree, ".github/workflows/deploy.yml")
+    expect(deploy).toContain(`BETTER_AUTH_SECRET: \${{ secrets.BETTER_AUTH_SECRET }}`)
+    expect(deploy.match(/BETTER_AUTH_SECRET:/g)).toHaveLength(1)
+  },
+)
+
+it("without alchemy, auth adds no infra file and no workflow secret", async () => {
+  const tree = await gen({
+    database: "postgres",
+    orm: "drizzle",
+    auth: "better-auth",
+    infra: "none",
+  })
+  expect(tree.has("infra/alchemy.run.ts")).toBe(false)
+  expect(tree.has(".github/workflows/deploy.yml")).toBe(false)
+})
+
+it.each(auths)("%s documents itself in AGENTS.md", async (auth) => {
+  const agents = text(await gen({ database: "postgres", orm: "drizzle", auth }), "AGENTS.md")
+  expect(agents).toContain("## Auth (Better Auth)")
+  expect(agents.includes("## Organizations")).toBe(auth === "better-auth-orgs")
+  expect(agents.indexOf("## Auth (Better Auth)")).toBeLessThan(
+    agents.indexOf("<!-- efforge:agents -->"),
+  )
+})

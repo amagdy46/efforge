@@ -144,6 +144,16 @@ const stacks: Array<[string, Parameters<typeof withDefaults>[0]]> = [
     },
   ],
   [
+    "pg-drizzle-orgs-alchemy",
+    {
+      name: "pg-drizzle-orgs-alchemy",
+      database: "postgres",
+      orm: "drizzle",
+      auth: "better-auth-orgs",
+      infra: "alchemy",
+    },
+  ],
+  [
     "pg-effect-sql-orgs",
     {
       name: "pg-effect-sql-orgs",

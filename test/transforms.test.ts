@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { parse } from "jsonc-parser"
@@ -420,4 +421,51 @@ it("appendAgentsSection appends when the footer is gone and fails without AGENTS
   expect(t.get("AGENTS.md")).toBe("# Agents\n\n<!-- efforge:section:x -->\n## X\n")
   const e = await fail(new Map(), section("x", "## X"))
   expect(e).toBeInstanceOf(TransformAnchorMissing)
+})
+
+// ---- addWorkflowSecret
+const deployYml = readFileSync(
+  new URL("../templates/infra/alchemy/files/github/deploy.yml", import.meta.url),
+  "utf8",
+)
+const secret = (name = "BETTER_AUTH_SECRET"): TransformCall => ({
+  name: "addWorkflowSecret",
+  args: { name },
+})
+
+it("addWorkflowSecret adds one env line before CI, keeps everything else, idempotently", async () => {
+  const out = await once({ ".github/workflows/deploy.yml": deployYml }, secret())
+  const yml = out.get(".github/workflows/deploy.yml") as string
+  expect(yml).toBe(
+    deployYml.replace(
+      '  CI: "true"\n',
+      `  BETTER_AUTH_SECRET: \${{ secrets.BETTER_AUTH_SECRET }}\n  CI: "true"\n`,
+    ),
+  )
+})
+
+it("addWorkflowSecret leaves a secret that is already listed alone", async () => {
+  const tree = new Map([[".github/workflows/deploy.yml", deployYml]])
+  const out = await run(tree, secret("DATABASE_URL"))
+  expect(out).toBe(tree)
+})
+
+it("addWorkflowSecret fails with a snippet when there is no workflow or no env map", async () => {
+  const noFile = await fail(new Map(), secret())
+  expect(noFile).toBeInstanceOf(TransformAnchorMissing)
+  const noEnv = await fail(new Map([[".github/workflows/deploy.yml", "name: Deploy\n"]]), secret())
+  expect(noEnv).toBeInstanceOf(TransformAnchorMissing)
+  expect(noEnv).toMatchObject({ snippet: expect.stringContaining("secrets.BETTER_AUTH_SECRET") })
+})
+
+it("addWorkflowSecret appends to an env map without CI, matching its indentation", async () => {
+  const out = await once(
+    {
+      ".github/workflows/deploy.yml": `on: push\nenv:\n    A: \${{ secrets.A }} # keep\njobs: {}\n`,
+    },
+    secret("B"),
+  )
+  expect(out.get(".github/workflows/deploy.yml")).toBe(
+    `on: push\nenv:\n    A: \${{ secrets.A }} # keep\n    B: \${{ secrets.B }}\njobs: {}\n`,
+  )
 })

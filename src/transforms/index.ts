@@ -6,6 +6,7 @@ import { addAuthPlugin } from "./addAuthPlugin.ts"
 import { addExport } from "./addExport.ts"
 import { addImport } from "./addImport.ts"
 import { addLayer } from "./addLayer.ts"
+import { addWorkflowSecret } from "./addWorkflowSecret.ts"
 import { addWranglerBinding } from "./addWranglerBinding.ts"
 import { appendAgentsSection } from "./appendAgentsSection.ts"
 import { TransformAnchorMissing, UnknownTransform } from "./errors.ts"
@@ -28,6 +29,7 @@ const registry: Readonly<Record<string, Transform>> = {
   addAuthPlugin,
   appendAgentsSection,
   addAlchemyResource,
+  addWorkflowSecret,
   addWranglerBinding,
   setWranglerValue,
 }

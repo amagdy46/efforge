@@ -20,7 +20,7 @@ Copy `.env.example` to `.env` for local values. Deploying needs `CLOUDFLARE_API_
 `.github/workflows/deploy.yml` deploys stage `prod` on every push to `main`, a stage `pr-<number>`
 for each pull request, and destroys the PR stage when the PR closes. Add these repository secrets:
 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `ALCHEMY_PASSWORD`, `DATABASE_URL` (and
-`STORAGE_SIGNING_SECRET` with the storage extra). CI keeps Alchemy state in a Cloudflare-hosted
+`STORAGE_SIGNING_SECRET` with the storage extra, `BETTER_AUTH_SECRET` with auth; the auth add-on adds that one to the workflow itself). CI keeps Alchemy state in a Cloudflare-hosted
 store that the first deploy creates.
 
 Previews share one Postgres database (`DATABASE_URL`); run `pnpm db:migrate` against it before the

@@ -300,6 +300,63 @@
           "drizzle"
         ]
       }
+    },
+    {
+      "name": "addImport",
+      "args": {
+        "file": "infra/alchemy.run.ts",
+        "import": "* as Config",
+        "from": "effect/Config"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "betterAuthSecret",
+        "code": "const betterAuthSecret = yield* Config.Redacted(\"BETTER_AUTH_SECRET\")",
+        "binding": "BETTER_AUTH_SECRET"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "betterAuthUrl",
+        "code": "// the public origin; empty lets Better Auth infer it from each request (right for PR previews)\nconst betterAuthUrl = yield* Config.String(\"BETTER_AUTH_URL\").pipe(Config.withDefault(\"\"))",
+        "binding": "BETTER_AUTH_URL"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addWorkflowSecret",
+      "args": {
+        "name": "BETTER_AUTH_SECRET"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "auth",
+        "content": "## Auth (Better Auth)\n\n- Server: `apps/web/src/server/auth.ts` builds the Better Auth instance (`makeAuth`); `auth-live.ts` provides it and the `Auth` service from `@repo/core`. Read the session in Effect code through `Auth.currentSession`, never from cookies directly.\n- `/api/auth/*` is served by `auth-route.ts` (a `workerRoutes` entry). Client: `authClient` in `apps/web/src/lib/auth-client.ts`.\n- Route guard: `routes/app.tsx` redirects signed-out visitors to `/sign-in?redirect=...`; build redirects with `safeRedirect`, never from raw input.\n- Auth tables are in `packages/db` (`auth-schema.ts` or `migrations/0002_auth.sql`); after changing Better Auth plugins regenerate the schema and add a migration, never edit applied ones.\n- `BETTER_AUTH_SECRET` signs sessions: set it as a Worker secret (`.dev.vars` locally, `.env` / the deploy workflow secret with infra=alchemy). Never log or return it. `BETTER_AUTH_URL` is the public origin; when unset Better Auth infers it from the request."
+      }
     }
   ]
 }
