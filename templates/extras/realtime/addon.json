@@ -102,6 +102,13 @@
           "none"
         ]
       }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "realtime",
+        "content": "## Realtime\n\n- Rooms are a Durable Object (`Room`, exported from `apps/web/src/server.ts`); WebSocket upgrades are handled by a Worker route in `server/routes.ts`.\n- Use the `Realtime` service from `@repo/core` on the server and the `useRoom` hook in `apps/web/src/lib/use-room.ts` in the UI.\n- Keep message payloads small and validate incoming messages with `Schema` before using them."
+      }
     }
   ]
 }

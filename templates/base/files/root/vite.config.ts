@@ -32,6 +32,11 @@ export default defineConfig({
     },
     overrides: [
       {
+        // entry points are where layers get provided: the server runtime and one-off scripts
+        files: ["apps/web/src/server/runtime.ts", "packages/*/scripts/**"],
+        rules: { "effecttsgo/strict-effect-provide": "off" },
+      },
+      {
         // seam file: add-ons re-export their services from here, so minimal stacks leave it empty
         files: ["packages/core/src/index.ts"],
         rules: { "unicorn/no-empty-file": "off" },

@@ -67,3 +67,14 @@ task's decision rule we keep Turborepo and revisit only if it hurts.
   but Effect rules go quiet — `scripts/bump.ts` must check the table.
 - Add-ons extend lint via `lint.overrides` entries and AGENTS.md via the
   `appendAgentsSection` transform (see task report).
+
+## Implementation notes (added on completion)
+
+- `tsconfig.base.json` sets `diagnosticSeverity.unstableApiUsage: "off"`: stock
+  `tsc` exits 1 on that warning (e.g. `@effect/vitest`), unlike plain suggestions.
+- The root `vite.config.ts` turns `effecttsgo/strict-effect-provide` off only for
+  entry points (`server/runtime.ts`, `packages/*/scripts/**`).
+- `AGENTS.md` carries an `<!-- efforge:agents -->` footer; add-ons insert sections
+  above it with `appendAgentsSection { id, content }` (idempotent per id).
+- Sandbox note: `/tmp` here is quota-limited and a parent `.gitignore` of `*` makes
+  oxfmt see no files, so verify in a dir outside `$HOME` and `/tmp` (e.g. `/var/tmp`).

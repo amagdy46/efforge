@@ -3,7 +3,7 @@ import { DurableObject, DurableObjectState, DurableObjectWebSocket, Worker } fro
 
 export class RoomNamespace extends DurableObject.Tag<RoomNamespace>()("Room", {
   broadcast: DurableObject.method({ args: [Schema.String], success: Schema.Void }),
-  connections: DurableObject.method({ success: Schema.Number }),
+  connections: DurableObject.method({ success: Schema.Finite }),
 }) {}
 
 const sockets = Effect.flatMap(DurableObjectState.DurableObjectState, (state) =>

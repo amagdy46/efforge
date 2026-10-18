@@ -4,6 +4,14 @@
   "description": "Monorepo skeleton shared by every stack: pnpm, Turborepo, Vite+ (oxlint/oxfmt), TanStack Start, Tailwind v4 and shadcn/ui.",
   "files": [
     {
+      "path": "files/AGENTS.md",
+      "target": "AGENTS.md"
+    },
+    {
+      "path": "files/CLAUDE.md",
+      "target": "CLAUDE.md"
+    },
+    {
       "path": "files/README.md",
       "target": "README.md"
     },
@@ -36,16 +44,16 @@
       "target": "package.json"
     },
     {
-      "path": "files/root/vite.config.ts",
-      "target": "vite.config.ts"
-    },
-    {
       "path": "files/root/tsconfig.base.json",
       "target": "tsconfig.base.json"
     },
     {
       "path": "files/root/turbo.json",
       "target": "turbo.json"
+    },
+    {
+      "path": "files/root/vite.config.ts",
+      "target": "vite.config.ts"
     },
     {
       "path": "files/web/components.json",
@@ -62,10 +70,6 @@
     {
       "path": "files/web/src/components/theme-toggle.tsx",
       "target": "apps/web/src/components/theme-toggle.tsx"
-    },
-    {
-      "path": "files/web/src/components/widgets.tsx",
-      "target": "apps/web/src/components/widgets.tsx"
     },
     {
       "path": "files/web/src/components/ui/avatar.tsx",
@@ -98,6 +102,10 @@
     {
       "path": "files/web/src/components/ui/sonner.tsx",
       "target": "apps/web/src/components/ui/sonner.tsx"
+    },
+    {
+      "path": "files/web/src/components/widgets.tsx",
+      "target": "apps/web/src/components/widgets.tsx"
     },
     {
       "path": "files/web/src/lib/utils.ts",

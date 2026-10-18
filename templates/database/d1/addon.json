@@ -52,6 +52,30 @@
           "none"
         ]
       }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "database",
+        "content": "## Database (D1, Drizzle)\n\n- Tables live in `packages/db/src/schema.ts`; queries go through the `Database` service from `@repo/core`.\n- Change the schema, then run `pnpm --filter @repo/db db:generate` to write a migration to `packages/db/drizzle/`, then `pnpm db:migrate` (flattens them into `packages/db/migrations/` and applies them locally).\n- Never edit files under `packages/db/drizzle/` or `packages/db/migrations/` by hand; they are generated."
+      },
+      "when": {
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "database",
+        "content": "## Database (D1, effect-sql)\n\n- Migrations are plain SQL files in `packages/db/migrations/`, named `NNNN_name.sql` and applied in order by `pnpm db:migrate` (wrangler, local D1).\n- Add a new file for every schema change; never edit one that has already been applied.\n- Queries go through the `Database` service from `@repo/core`."
+      },
+      "when": {
+        "orm": [
+          "effect-sql"
+        ]
+      }
     }
   ],
   "scripts": {

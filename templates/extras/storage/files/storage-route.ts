@@ -27,6 +27,6 @@ export const storageRoute: WorkerRoute = async (request) => {
           "cache-control": "private, max-age=0",
         },
       })
-    }).pipe(Effect.catch(() => Effect.succeed(new Response("Storage error", { status: 502 })))),
+    }).pipe(Effect.orElseSucceed(() => new Response("Storage error", { status: 502 }))),
   )
 }

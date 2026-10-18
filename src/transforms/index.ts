@@ -7,6 +7,7 @@ import { addExport } from "./addExport.ts"
 import { addImport } from "./addImport.ts"
 import { addLayer } from "./addLayer.ts"
 import { addWranglerBinding } from "./addWranglerBinding.ts"
+import { appendAgentsSection } from "./appendAgentsSection.ts"
 import { TransformAnchorMissing, UnknownTransform } from "./errors.ts"
 import { setWranglerValue } from "./setWranglerValue.ts"
 import type { Transform } from "./util.ts"
@@ -25,6 +26,7 @@ const registry: Readonly<Record<string, Transform>> = {
   addExport,
   addLayer,
   addAuthPlugin,
+  appendAgentsSection,
   addAlchemyResource,
   addWranglerBinding,
   setWranglerValue,

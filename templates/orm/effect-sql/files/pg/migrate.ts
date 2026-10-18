@@ -53,7 +53,7 @@ const loader = Effect.gen(function* () {
 
 const program = Effect.gen(function* () {
   const applied = yield* PgMigrator.run({ loader, table: "effect_sql_migrations" })
-  console.log(
+  yield* Effect.log(
     applied.length === 0 ? "already up to date" : `applied ${applied.length} migration(s)`,
   )
 }).pipe(Effect.provide(PgClient.layerConfig({ url })), Effect.provide(NodeServices.layer))

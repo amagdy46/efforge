@@ -10,8 +10,12 @@ const url = Config.Redacted("DATABASE_URL").pipe(
 
 const program = Effect.gen(function* () {
   const db = yield* PgDrizzle.makeWithDefaults()
-  yield* migrate(db, { migrationsFolder: new URL("../drizzle", import.meta.url).pathname })
-  console.log("migrations applied")
+  // drizzle types the migrator's error as `unknown`; any failure here should abort the script
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context
+  yield* migrate(db, { migrationsFolder: new URL("../drizzle", import.meta.url).pathname }).pipe(
+    Effect.orDie,
+  )
+  yield* Effect.log("migrations applied")
 }).pipe(Effect.provide(PgClient.layerConfig({ url })))
 
 Effect.runPromise(program).catch((error) => {

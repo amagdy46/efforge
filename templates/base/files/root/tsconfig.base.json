@@ -12,6 +12,8 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "plugins": [{ "name": "@effect/language-service" }]
+    "plugins": [
+      { "name": "@effect/language-service", "diagnosticSeverity": { "unstableApiUsage": "off" } }
+    ]
   }
 }

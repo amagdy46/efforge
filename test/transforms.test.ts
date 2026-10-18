@@ -53,7 +53,7 @@ const addLayer = (layer = "DbLive"): TransformCall => ({
 })
 const LF = "apps/web/src/server/layers.ts"
 
-it("addImport keeps Biome's import order: packages, then relative paths", async () => {
+it("addImport keeps a deterministic import order: packages, then relative paths", async () => {
   const src = 'import { a } from "effect"\nimport { b } from "./b"\n'
   const t = await once(
     { "a.ts": src },
@@ -376,4 +376,31 @@ it("setWranglerValue sets a dotted path when absent, keeps comments, and never o
 
 it("setWranglerValue reports a missing file", async () => {
   expect(((await fail(new Map(), setDev)) as TransformAnchorMissing).anchor).toBe("file")
+})
+
+// ---- appendAgentsSection
+const AGENTS = "# Agents\n\nBody\n\n<!-- efforge:agents -->\n"
+const section = (id: string, content: string): TransformCall => ({
+  name: "appendAgentsSection",
+  args: { id, content },
+})
+
+it("appendAgentsSection inserts before the footer, once per id, in order", async () => {
+  const a = await once({ "AGENTS.md": AGENTS }, section("db", "## Database\nUse migrations.\n"))
+  expect(a.get("AGENTS.md")).toBe(
+    "# Agents\n\nBody\n\n<!-- efforge:section:db -->\n## Database\nUse migrations.\n\n<!-- efforge:agents -->\n",
+  )
+  const b = await once(Object.fromEntries(a), section("rt", "## Realtime"))
+  expect(b.get("AGENTS.md")).toBe(
+    "# Agents\n\nBody\n\n<!-- efforge:section:db -->\n## Database\nUse migrations.\n\n<!-- efforge:section:rt -->\n## Realtime\n\n<!-- efforge:agents -->\n",
+  )
+  const c = await run(b, section("db", "## Changed"))
+  expect(c).toBe(b)
+})
+
+it("appendAgentsSection appends when the footer is gone and fails without AGENTS.md", async () => {
+  const t = await once({ "AGENTS.md": "# Agents\n" }, section("x", "## X"))
+  expect(t.get("AGENTS.md")).toBe("# Agents\n\n<!-- efforge:section:x -->\n## X\n")
+  const e = await fail(new Map(), section("x", "## X"))
+  expect(e).toBeInstanceOf(TransformAnchorMissing)
 })

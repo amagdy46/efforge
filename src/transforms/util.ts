@@ -132,7 +132,7 @@ export const addImportText = (
     : insertImport(sf, text, `import { ${fresh.join(", ")} } from "${from}"`)
 }
 
-/** Biome's import groups: `node:` builtins, packages, aliases (`@/`, `#`, `~`), then relative paths. */
+/** Import groups: `node:` builtins, packages, aliases (`@/`, `#`, `~`), then relative paths. */
 const importRank = (from: string): number => {
   if (/^(node|bun):/.test(from)) return 0
   if (from.startsWith(".")) return from.startsWith("./") ? 5 : 4
@@ -152,7 +152,7 @@ const importOrder = (a: string, b: string): number => {
   return as.length - bs.length
 }
 
-/** Inserts before the first import that sorts after `from` (the way Biome orders them), else after the last. */
+/** Inserts before the first import that sorts after `from` (grouped by importRank), else after the last. */
 const insertImport = (sf: SourceFile, text: string, stmt: string): string => {
   const decls = sf.getImportDeclarations()
   const from = /from\s+"([^"]+)"/.exec(stmt)?.[1] ?? ""
