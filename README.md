@@ -85,6 +85,10 @@ v0.1 is unreleased.
 - All versions are exact pins in `src/versions.ts`; `node scripts/bump.ts` compares them with npm.
 - Templates are verified by generating real projects and running their full gate (`pnpm test:e2e`).
 
+### Troubleshooting
+
+- **`pnpm check` says "Expected at least one target file".** The formatter reads `.gitignore` files in parent directories, even outside a git repository. If a parent directory (for example, a dotfiles `~/.gitignore` containing `*`) ignores everything, a project created with `--no-git` sees no files. Run `git init` in the project; the default `create` flow already does this.
+
 ## Developing efforge
 
 ```sh
