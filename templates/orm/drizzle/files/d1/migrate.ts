@@ -11,7 +11,7 @@ const target = `${root}migrations`
 mkdirSync(target, { recursive: true })
 readdirSync(source)
   .filter((dir) => existsSync(`${source}/${dir}/migration.sql`))
-  .sort()
+  .toSorted()
   .forEach((dir, index) => {
     const name = dir.replace(/^\d+_/, "")
     copyFileSync(

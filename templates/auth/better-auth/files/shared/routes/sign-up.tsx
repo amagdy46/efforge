@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { authClient } from "@/lib/auth-client"
+import { formField } from "@/lib/form"
 import { redirectSearch, safeRedirect } from "@/lib/redirect"
 import { getSession } from "@/server/session"
 
@@ -26,13 +27,13 @@ function SignUp() {
     const form = new FormData(event.currentTarget)
     setPending(true)
     setError(null)
-    const { error } = await authClient.signUp.email({
-      name: String(form.get("name")),
-      email: String(form.get("email")),
-      password: String(form.get("password")),
+    const { error: failure } = await authClient.signUp.email({
+      name: formField(form, "name"),
+      email: formField(form, "email"),
+      password: formField(form, "password"),
     })
-    if (error) {
-      setError(error.message ?? "Could not create the account")
+    if (failure) {
+      setError(failure.message ?? "Could not create the account")
       setPending(false)
       return
     }

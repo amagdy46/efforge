@@ -1,6 +1,6 @@
 import { Auth, Unauthorized } from "@repo/core/Auth"
 import { getRequestHeaders } from "@tanstack/react-start/server"
-import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect"
+import { Config, Context, Effect, Layer, Option, Redacted } from "effect"
 import { WorkerConfig } from "effect-cf"
 import { type AuthInstance, makeAuth } from "./auth"
 import { AuthDatabase, AuthDatabaseLayer } from "./auth-database"
@@ -15,9 +15,9 @@ const BetterAuthLive = Layer.effect(
     const { database } = yield* AuthDatabase
     const provider = yield* WorkerConfig.provider
     const { secret, baseURL } = yield* Effect.all({
-      secret: Config.Redacted("BETTER_AUTH_SECRET"),
-      baseURL: Config.option(Config.String("BETTER_AUTH_URL")),
-    }).pipe(Effect.provide(ConfigProvider.layer(provider)))
+      secret: Config.Redacted("BETTER_AUTH_SECRET").parse(provider),
+      baseURL: Config.option(Config.String("BETTER_AUTH_URL")).parse(provider),
+    })
     return makeAuth({
       database,
       secret: Redacted.value(secret),

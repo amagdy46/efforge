@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { authClient } from "@/lib/auth-client"
+import { formField } from "@/lib/form"
 import { redirectSearch, safeRedirect } from "@/lib/redirect"
 import { getSession } from "@/server/session"
 
@@ -26,12 +27,12 @@ function SignIn() {
     const form = new FormData(event.currentTarget)
     setPending(true)
     setError(null)
-    const { error } = await authClient.signIn.email({
-      email: String(form.get("email")),
-      password: String(form.get("password")),
+    const { error: failure } = await authClient.signIn.email({
+      email: formField(form, "email"),
+      password: formField(form, "password"),
     })
-    if (error) {
-      setError(error.message ?? "Could not sign in")
+    if (failure) {
+      setError(failure.message ?? "Could not sign in")
       setPending(false)
       return
     }

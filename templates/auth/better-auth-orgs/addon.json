@@ -32,6 +32,10 @@
       "target": "apps/web/src/lib/redirect.ts"
     },
     {
+      "path": "../better-auth/files/shared/lib/form.ts",
+      "target": "apps/web/src/lib/form.ts"
+    },
+    {
       "path": "../better-auth/files/shared/components/auth-card.tsx",
       "target": "apps/web/src/components/auth-card.tsx"
     },
@@ -54,10 +58,6 @@
     {
       "path": "files/routes/app.tsx",
       "target": "apps/web/src/routes/app.tsx"
-    },
-    {
-      "path": "files/routeTree.gen.ts",
-      "target": "apps/web/src/routeTree.gen.ts"
     },
     {
       "path": "../better-auth/files/shared/dev.vars",

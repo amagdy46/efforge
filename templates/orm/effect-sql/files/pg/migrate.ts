@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node"
 import { PgClient, PgMigrator } from "@effect/sql-pg"
-import { Config, Effect, FileSystem, Path, Redacted } from "effect"
-import { Migrator, SqlClient } from "effect/sql"
+import { Config, Effect, FileSystem, Layer, Path, Redacted } from "effect"
+import { Migrator, type SqlError, SqlClient } from "effect/sql"
 
 // `pnpm db:migrate`: runs packages/db/migrations/NNNN_name.sql in order against DATABASE_URL
 // (default: the docker-compose database). Applied migrations are recorded in `effect_sql_migrations`.
@@ -31,8 +31,8 @@ const migrationsDir = new URL("../migrations", import.meta.url).pathname
 const loader = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const files = (yield* fs.readDirectory(migrationsDir)).filter((f) => f.endsWith(".sql")).sort()
-  const entries: Record<string, Effect.Effect<void, unknown, SqlClient.SqlClient>> = {}
+  const files = (yield* fs.readDirectory(migrationsDir)).filter((f) => f.endsWith(".sql")).toSorted()
+  const entries: Record<string, Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient>> = {}
   for (const file of files) {
     const text = yield* fs.readFileString(path.join(migrationsDir, file))
     entries[file.replace(/\.sql$/, "")] = Effect.flatMap(SqlClient.SqlClient, (sql) =>
@@ -56,7 +56,7 @@ const program = Effect.gen(function* () {
   yield* Effect.log(
     applied.length === 0 ? "already up to date" : `applied ${applied.length} migration(s)`,
   )
-}).pipe(Effect.provide(PgClient.layerConfig({ url })), Effect.provide(NodeServices.layer))
+}).pipe(Effect.provide(Layer.mergeAll(PgClient.layerConfig({ url }), NodeServices.layer)))
 
 Effect.runPromise(program).catch((error) => {
   console.error(error)

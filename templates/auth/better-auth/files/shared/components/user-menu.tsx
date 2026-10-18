@@ -17,13 +17,13 @@ const initials = (name: string) =>
     .map((part) => part.charAt(0).toUpperCase())
     .join("") || "?"
 
+async function signOut() {
+  await authClient.signOut()
+  window.location.assign("/sign-in")
+}
+
 /** The avatar in the app header; opens a menu with the account and a sign-out action. */
 export function UserMenu({ name, email }: { name: string; email: string }) {
-  async function signOut() {
-    await authClient.signOut()
-    window.location.assign("/sign-in")
-  }
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger aria-label="Account menu" className="rounded-full">

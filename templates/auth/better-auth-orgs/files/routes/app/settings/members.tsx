@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { authClient } from "@/lib/auth-client"
+import { formField } from "@/lib/form"
 
 export const Route = createFileRoute("/app/settings/members")({ component: Members })
 
@@ -21,6 +22,14 @@ async function copy(text: string) {
   await navigator.clipboard.writeText(text)
   toast.success("Link copied")
 }
+
+async function cancel(invitationId: string) {
+  const { error } = await authClient.organization.cancelInvitation({ invitationId })
+  if (error) toast.error(error.message ?? "Could not cancel the invitation")
+}
+
+const isRole = (value: string): value is (typeof roles)[number] =>
+  roles.some((role) => role === value)
 
 function Members() {
   const { session } = Route.useRouteContext()
@@ -39,7 +48,7 @@ function Members() {
     const data = new FormData(form)
     const role = data.get("role") === "admin" ? "admin" : "member"
     const { data: created, error } = await authClient.organization.inviteMember({
-      email: String(data.get("email")),
+      email: formField(data, "email"),
       role,
       organizationId: org?.id,
     })
@@ -68,11 +77,6 @@ function Members() {
     if (error) toast.error(error.message ?? "Could not remove the member")
   }
 
-  async function cancel(invitationId: string) {
-    const { error } = await authClient.organization.cancelInvitation({ invitationId })
-    if (error) toast.error(error.message ?? "Could not cancel the invitation")
-  }
-
   return (
     <div className="max-w-2xl space-y-6">
       <Card>
@@ -94,9 +98,10 @@ function Members() {
                       aria-label={`Role of ${member.user.email}`}
                       className={selectClass}
                       value={member.role}
-                      onChange={(event) =>
-                        changeRole(member.id, event.target.value as (typeof roles)[number])
-                      }
+                      onChange={(event) => {
+                        const role = event.target.value
+                        if (isRole(role)) void changeRole(member.id, role)
+                      }}
                     >
                       {roles.map((role) => (
                         <option key={role} value={role}>

@@ -20,9 +20,9 @@ function AcceptInvite() {
   async function accept() {
     setPending(true)
     setError(null)
-    const { error } = await authClient.organization.acceptInvitation({ invitationId: id })
-    if (error) {
-      setError(error.message ?? "Could not accept the invitation")
+    const { error: failure } = await authClient.organization.acceptInvitation({ invitationId: id })
+    if (failure) {
+      setError(failure.message ?? "Could not accept the invitation")
       setPending(false)
       return
     }

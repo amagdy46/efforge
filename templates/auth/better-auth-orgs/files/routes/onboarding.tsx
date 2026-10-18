@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { authClient } from "@/lib/auth-client"
+import { formField } from "@/lib/form"
 import { getSession } from "@/server/session"
 
 export const Route = createFileRoute("/onboarding")({
@@ -29,12 +30,12 @@ function Onboarding() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const name = String(new FormData(event.currentTarget).get("name")).trim()
+    const name = formField(new FormData(event.currentTarget), "name").trim()
     setPending(true)
     setError(null)
-    const { error } = await authClient.organization.create({ name, slug: slugify(name) })
-    if (error) {
-      setError(error.message ?? "Could not create the organization")
+    const { error: failure } = await authClient.organization.create({ name, slug: slugify(name) })
+    if (failure) {
+      setError(failure.message ?? "Could not create the organization")
       setPending(false)
       return
     }
