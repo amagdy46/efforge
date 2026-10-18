@@ -88,3 +88,9 @@ it("no extras: nothing extra is generated", async () => {
   expect(tree.get("apps/web/src/server.ts")).not.toContain("export {")
   expect(parse(tree.get("wrangler.jsonc") as string).durable_objects).toBeUndefined()
 })
+
+it("storage ships a local signing secret long enough for StorageLive to start", async () => {
+  const devVars = (await gen(["storage"])).get(".dev.vars") ?? ""
+  const secret = /^STORAGE_SIGNING_SECRET=(.*)$/m.exec(devVars)?.[1] ?? ""
+  expect(secret.length).toBeGreaterThanOrEqual(32)
+})

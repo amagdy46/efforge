@@ -115,6 +115,13 @@
       }
     },
     {
+      "name": "addDevVar",
+      "args": {
+        "name": "STORAGE_SIGNING_SECRET",
+        "value": "dev-only-storage-signing-secret-replace-me"
+      }
+    },
+    {
       "name": "appendAgentsSection",
       "args": {
         "id": "storage",
