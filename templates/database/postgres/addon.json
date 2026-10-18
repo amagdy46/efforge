@@ -104,6 +104,30 @@
           "alchemy"
         ]
       }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "database",
+        "content": "## Database (Postgres, Drizzle)\n\n- Tables live in `packages/db/src/schema.ts`; queries go through the `Database` service from `@repo/core`.\n- Change the schema, then run `pnpm --filter @repo/db db:generate` to write a migration to `packages/db/drizzle/`, then `pnpm db:migrate`.\n- Never edit files under `packages/db/drizzle/` by hand; they are generated.\n- Start the local database with `docker compose up -d`."
+      },
+      "when": {
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "database",
+        "content": "## Database (Postgres, effect-sql)\n\n- Migrations are plain SQL files in `packages/db/migrations/`, named `NNNN_name.sql` and applied in order by `pnpm db:migrate`.\n- Add a new file for every schema change; never edit one that has already been applied.\n- Put one statement per `;` and keep string literals free of `;` (the runner splits on it).\n- Queries go through the `Database` service from `@repo/core`. Start the local database with `docker compose up -d`."
+      },
+      "when": {
+        "orm": [
+          "effect-sql"
+        ]
+      }
     }
   ],
   "scripts": {

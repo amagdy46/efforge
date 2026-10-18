@@ -11,6 +11,9 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "plugins": [
+      { "name": "@effect/language-service", "diagnosticSeverity": { "unstableApiUsage": "off" } }
+    ]
   }
 }

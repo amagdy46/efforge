@@ -26,7 +26,7 @@ const sign = (provider: ConfigProvider.ConfigProvider, key: string, expires: str
       crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(`${key}\n${expires}`)),
     )
     return hex(mac)
-  }).pipe(Effect.provide(ConfigProvider.layer(provider)))
+  }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, provider))
 
 const fail = (operation: string) => (cause: unknown) => new StorageError({ operation, cause })
 

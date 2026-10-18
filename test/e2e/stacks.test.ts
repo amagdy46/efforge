@@ -40,9 +40,9 @@ const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
     yield* writeTree(dir, tree)
     yield* Effect.try(() => {
       sh(dir, "pnpm install --no-frozen-lockfile")
-      // what `create` runs after installing, before the project's first lint
-      spawnSync("pnpm exec biome check --write .", { cwd: dir, shell: true })
-      sh(dir, "pnpm typecheck && pnpm lint && pnpm build")
+      // what `create` runs after installing, before the project's first check
+      sh(dir, "pnpm format")
+      sh(dir, "pnpm typecheck && pnpm check && pnpm build")
     })
     rmSync(dir, { recursive: true, force: true })
   }).pipe(Effect.provide(NodeFileSystem.layer), Effect.provide(Path.layer))

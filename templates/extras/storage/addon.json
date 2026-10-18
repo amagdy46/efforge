@@ -105,6 +105,13 @@
           "alchemy"
         ]
       }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "storage",
+        "content": "## Storage\n\n- Use the `Storage` service from `@repo/core` (put, get, delete, signedUrl, verify); do not touch the R2 binding directly.\n- The implementation is `apps/web/src/server/storage.ts` on the `STORAGE` R2 binding; downloads are served by the Worker route in `storage-route.ts`.\n- Signed URLs are HMAC-signed with the `STORAGE_SIGNING_SECRET` secret. Never log or return it."
+      }
     }
   ]
 }

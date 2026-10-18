@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
+export interface RoomMessage {
+  readonly id: number
+  readonly text: string
+}
+
 export type RoomStatus = "connecting" | "open" | "closed"
 
 // answered by Cloudflare without waking the room (see `installKeepalive` in realtime/Room.ts)
@@ -8,8 +13,9 @@ const PONG = "effect-cf:pong"
 
 /** Connects to a room and returns its messages. Reconnects after a drop. */
 export function useRoom(roomId: string) {
-  const [messages, setMessages] = useState<ReadonlyArray<string>>([])
+  const [messages, setMessages] = useState<ReadonlyArray<RoomMessage>>([])
   const [status, setStatus] = useState<RoomStatus>("connecting")
+  const nextId = useRef(0)
   const socket = useRef<WebSocket | null>(null)
 
   useEffect(() => {
@@ -24,19 +30,21 @@ export function useRoom(roomId: string) {
         `${scheme}://${location.host}/ws/rooms/${encodeURIComponent(roomId)}`,
       )
       socket.current = ws
-      ws.onopen = () => {
+      ws.addEventListener("open", () => {
         setStatus("open")
         ping = setInterval(() => ws.send(PING), 30_000)
-      }
-      ws.onmessage = (event: MessageEvent) => {
-        if (typeof event.data === "string" && event.data !== PONG)
-          setMessages((all) => [...all, event.data as string])
-      }
-      ws.onclose = () => {
+      })
+      ws.addEventListener("message", ({ data }: MessageEvent) => {
+        if (typeof data === "string" && data !== PONG) {
+          const id = nextId.current++
+          setMessages((all) => [...all, { id, text: data }])
+        }
+      })
+      ws.addEventListener("close", () => {
         clearInterval(ping)
         setStatus("closed")
         if (!closed) retry = setTimeout(connect, 1000)
-      }
+      })
     }
     connect()
 

@@ -14,6 +14,6 @@ export const realtimeRoute: WorkerRoute = async (request) => {
     Effect.gen(function* () {
       const realtime = yield* Realtime
       return yield* realtime.connect(roomId, request)
-    }).pipe(Effect.catch(() => Effect.succeed(new Response("Realtime error", { status: 502 })))),
+    }).pipe(Effect.orElseSucceed(() => new Response("Realtime error", { status: 502 }))),
   )
 }

@@ -24,8 +24,8 @@ export function RealtimeDemo() {
       </CardHeader>
       <CardContent className="space-y-4">
         <ul className="max-h-40 space-y-1 overflow-y-auto text-sm">
-          {messages.map((message, index) => (
-            <li key={index}>{message}</li>
+          {messages.map((message) => (
+            <li key={message.id}>{message.text}</li>
           ))}
         </ul>
         <form onSubmit={submit} className="flex gap-2">

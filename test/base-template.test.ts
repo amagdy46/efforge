@@ -99,3 +99,40 @@ it("names the project: package.json, wrangler.jsonc and README heading, with con
   expect(manifest.files["README.md"]).toBe(hash(tree.get("README.md") as string))
   expect(manifest.files["wrangler.jsonc"]).toBe(hash(tree.get("wrangler.jsonc") as string))
 })
+
+it("the minimal stack lints with Vite+, not Biome, and ships agent instructions", async () => {
+  const tree = await gen()
+  expect(tree.has("biome.json")).toBe(false)
+  expect(tree.has("vite.config.ts")).toBe(true)
+  const root = JSON.parse(tree.get("package.json") as string)
+  expect(root.scripts).toMatchObject({ lint: "vp lint", format: "vp fmt", check: "vp check" })
+  expect(root.devDependencies["vite-plus"]).toBe("catalog:")
+  expect(root.devDependencies["@biomejs/biome"]).toBeUndefined()
+  const agents = tree.get("AGENTS.md") as string
+  expect(agents.split("\n").length).toBeLessThan(120)
+  expect(agents.trimEnd().endsWith("<!-- efforge:agents -->")).toBe(true)
+  expect(agents).toContain("pnpm check && pnpm typecheck && pnpm test && pnpm build")
+  expect(tree.get("CLAUDE.md")).toBe("@AGENTS.md\n")
+})
+
+it("no template mentions Biome, and add-on sections reach AGENTS.md exactly once", async () => {
+  const stack = withDefaults({
+    name: "app",
+    database: "postgres",
+    orm: "drizzle",
+    auth: "none",
+    infra: "none",
+    ai: "none",
+    extras: ["storage", "realtime"],
+  })
+  const tree = await run(
+    Effect.gen(function* () {
+      return yield* generate(stack, yield* loadAddons(templates))
+    }),
+  )
+  for (const [file, text] of tree) expect(text, file).not.toMatch(/biome/i)
+  const agents = tree.get("AGENTS.md") as string
+  for (const id of ["database", "storage", "realtime"])
+    expect(agents.split(`<!-- efforge:section:${id} -->`).length - 1, id).toBe(1)
+  expect(agents.trimEnd().endsWith("<!-- efforge:agents -->")).toBe(true)
+})

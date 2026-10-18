@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useContext, useEffect, useState } from "react"
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react"
 
 export type Theme = "light" | "dark" | "system"
 
@@ -18,29 +18,32 @@ const apply = (theme: Theme) => {
   document.documentElement.classList.toggle("dark", dark)
 }
 
+const readStored = (): Theme => {
+  if (typeof localStorage === "undefined") return "system"
+  const stored = localStorage.getItem(STORAGE_KEY)
+  return stored === "light" || stored === "dark" || stored === "system" ? stored : "system"
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("system")
+  const [theme, setThemeState] = useState<Theme>(readStored)
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === "light" || stored === "dark" || stored === "system") setThemeState(stored)
-  }, [])
-
-  useEffect(() => {
-    if (theme !== "system") return
+    if (theme !== "system") return undefined
     const query = matchMedia("(prefers-color-scheme: dark)")
     const onChange = () => apply("system")
     query.addEventListener("change", onChange)
     return () => query.removeEventListener("change", onChange)
   }, [theme])
 
-  const setTheme = (next: Theme) => {
+  const setTheme = useCallback((next: Theme) => {
     localStorage.setItem(STORAGE_KEY, next)
     setThemeState(next)
     apply(next)
-  }
+  }, [])
 
-  return <ThemeContext value={{ theme, setTheme }}>{children}</ThemeContext>
+  const value = useMemo(() => ({ theme, setTheme }), [theme, setTheme])
+
+  return <ThemeContext value={value}>{children}</ThemeContext>
 }
 
 export const useTheme = () => useContext(ThemeContext)
