@@ -102,6 +102,19 @@
           "none"
         ]
       }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "room",
+        "code": "const room = Cloudflare.DurableObject(\"Room\")",
+        "binding": "ROOM"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
     }
   ]
 }

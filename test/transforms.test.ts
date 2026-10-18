@@ -196,6 +196,23 @@ it("addAlchemyResource inserts code before the marker and binds it, idempotently
   expect(two.get(AL)).toContain("bindings: { bucket, db }")
 })
 
+it("addAlchemyResource binds under an explicit key into Alchemy's `env`, idempotently", async () => {
+  const web = alchemy("{}").replace("bindings:", "env:")
+  const hd: TransformCall = {
+    name: "addAlchemyResource",
+    args: { name: "hyperdrive", binding: "HYPERDRIVE", code: "const hyperdrive = 1" },
+  }
+  const tree = await once({ [AL]: web }, hd)
+  expect(tree.get(AL)).toContain("env: { HYPERDRIVE: hyperdrive }")
+  const two = await run(tree, hd)
+  expect(two.get(AL)).toBe(tree.get(AL))
+  const three = await run(tree, {
+    name: "addAlchemyResource",
+    args: { name: "bucket", binding: "STORAGE", code: "const bucket = 2" },
+  })
+  expect(three.get(AL)).toContain("env: { HYPERDRIVE: hyperdrive, STORAGE: bucket }")
+})
+
 it("addAlchemyResource respects existing declarations and multi-line bindings", async () => {
   const tree = await once({ [AL]: alchemy("{\n      a,\n    }") }, res)
   expect(tree.get(AL)).toContain("      a,\n      bucket,\n    }")
@@ -210,7 +227,7 @@ it("addAlchemyResource reports missing marker and bindings", async () => {
     new Map([[AL, alchemy().replace(/bindings:[^\n]*\n/, "")]]),
     res,
   )) as TransformAnchorMissing
-  expect(e2.anchor).toContain("bindings")
+  expect(e2.anchor).toContain("env")
   expect(((await fail(new Map(), res)) as TransformAnchorMissing).anchor).toBe("file")
 })
 

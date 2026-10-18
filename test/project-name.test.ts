@@ -34,3 +34,12 @@ it("skips files that are absent and is idempotent", () => {
   expect([...once.keys()]).toEqual(["package.json"])
   expect(applyProjectName(once, "x")).toEqual(once)
 })
+
+it("names the Alchemy stack after the project, as a lowercase slug", () => {
+  const t: Tree = new Map([
+    ["infra/alchemy.run.ts", 'export default Alchemy.Stack(\n  "app",\n  {},\n  gen,\n)\n'],
+  ])
+  const out = applyProjectName(t, "@acme/My_Shop.v2")
+  expect(out.get("infra/alchemy.run.ts")).toContain('Alchemy.Stack(\n  "my-shop-v2",')
+  expect(applyProjectName(out, "@acme/My_Shop.v2")).toEqual(out)
+})

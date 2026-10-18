@@ -66,6 +66,45 @@
           "none"
         ]
       }
+    },
+    {
+      "name": "addImport",
+      "args": {
+        "file": "infra/alchemy.run.ts",
+        "import": "* as Config",
+        "from": "effect/Config"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "storage",
+        "code": "const storage = yield* Cloudflare.R2.Bucket(\"Storage\", {\n  // preview stages are destroyed with their PR, even when files were uploaded\n  forceDestroy: (yield* Alchemy.Stack).stage !== \"prod\",\n})",
+        "binding": "STORAGE"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "storageSigningSecret",
+        "code": "const storageSigningSecret = yield* Config.Redacted(\"STORAGE_SIGNING_SECRET\")",
+        "binding": "STORAGE_SIGNING_SECRET"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
     }
   ]
 }

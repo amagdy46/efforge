@@ -65,6 +65,45 @@
           "none"
         ]
       }
+    },
+    {
+      "name": "addImport",
+      "args": {
+        "file": "infra/alchemy.run.ts",
+        "import": "* as Config",
+        "from": "effect/Config"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addImport",
+      "args": {
+        "file": "infra/alchemy.run.ts",
+        "import": "* as Redacted",
+        "from": "effect/Redacted"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "hyperdrive",
+        "code": "const databaseUrl = new URL(Redacted.value(yield* Config.Redacted(\"DATABASE_URL\")))\nconst hyperdrive = yield* Cloudflare.Hyperdrive.Connection(\"Hyperdrive\", {\n  origin: {\n    scheme: \"postgres\",\n    host: databaseUrl.hostname,\n    port: Number(databaseUrl.port || 5432),\n    database: databaseUrl.pathname.slice(1),\n    user: decodeURIComponent(databaseUrl.username),\n    password: Redacted.make(decodeURIComponent(databaseUrl.password)),\n  },\n  // writes must be visible to the next read, so only pool connections, don't cache queries\n  caching: { disabled: true },\n})",
+        "binding": "HYPERDRIVE"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
     }
   ],
   "scripts": {

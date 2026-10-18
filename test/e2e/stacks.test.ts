@@ -91,6 +91,27 @@ const stacks: Array<[string, Parameters<typeof withDefaults>[0]]> = [
       extras: ["storage", "workflows", "realtime"],
     },
   ],
+  [
+    "pg-drizzle-alchemy",
+    {
+      name: "pg-drizzle-alchemy",
+      database: "postgres",
+      orm: "drizzle",
+      auth: "none",
+      infra: "alchemy",
+    },
+  ],
+  [
+    "pg-drizzle-extras-alchemy",
+    {
+      name: "pg-drizzle-extras-alchemy",
+      database: "postgres",
+      orm: "drizzle",
+      auth: "none",
+      infra: "alchemy",
+      extras: ["storage", "workflows", "realtime", "browser"],
+    },
+  ],
 ]
 
 describe("stacks build", () => {

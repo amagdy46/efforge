@@ -52,6 +52,38 @@
           "none"
         ]
       }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "database",
+        "code": "const database = yield* Cloudflare.D1.Database(\"Database\", {\n  migrations: \"packages/db/drizzle\",\n})",
+        "binding": "DB"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "database",
+        "code": "const database = yield* Cloudflare.D1.Database(\"Database\", {\n  migrations: \"packages/db/migrations\",\n})",
+        "binding": "DB"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "orm": [
+          "effect-sql"
+        ]
+      }
     }
   ],
   "scripts": {

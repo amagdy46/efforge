@@ -93,5 +93,5 @@ it("addAlchemyResource: missing marker / bindings include code", async () => {
     args,
   })
   expect(e2.snippet).toContain("const db = await D1()")
-  expect(e2.anchor).toContain("bindings")
+  expect(e2.anchor).toContain("env")
 })

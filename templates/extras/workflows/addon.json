@@ -62,6 +62,19 @@
           "none"
         ]
       }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "exampleWorkflow",
+        "code": "const exampleWorkflow = Cloudflare.Workflow(\"Example\", { className: \"Example\" })",
+        "binding": "EXAMPLE_WORKFLOW"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
     }
   ]
 }

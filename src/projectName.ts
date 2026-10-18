@@ -3,12 +3,21 @@ import type { Tree } from "./tree.ts"
 
 const formattingOptions = { insertSpaces: true, tabSize: 2 }
 
+const ALCHEMY_RUN = "infra/alchemy.run.ts"
+
+/** Stack names end up in Cloudflare resource names: lowercase letters, digits and dashes. */
+const slug = (name: string): string =>
+  name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "app"
+
 /** The directory name a project is created in: the last segment of a scoped name. */
 export const projectDirName = (name: string): string => name.split("/").pop() ?? name
 
 /**
  * Built-in post-step: names the generated project. Sets the root `package.json` and
- * `wrangler.jsonc` `name` and the README's first heading. Files that are absent, or lack
+ * `wrangler.jsonc` `name`, the Alchemy stack name and the README's first heading. Files that are absent, or lack
  * the field, are left alone; running it twice changes nothing.
  */
 export const applyProjectName = (tree: Tree, name: string): Tree => {
@@ -36,6 +45,10 @@ export const applyProjectName = (tree: Tree, name: string): Tree => {
 
   const readme = out.get("README.md")
   if (readme !== undefined) out.set("README.md", readme.replace(/^# .*$/m, `# ${dir}`))
+
+  const alchemy = out.get(ALCHEMY_RUN)
+  if (alchemy !== undefined)
+    out.set(ALCHEMY_RUN, alchemy.replace(/(Alchemy\.Stack\(\s*)"[^"]*"/, `$1"${slug(dir)}"`))
 
   return out
 }

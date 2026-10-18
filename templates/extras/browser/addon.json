@@ -132,6 +132,19 @@
           "none"
         ]
       }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "browser",
+        "code": "const browser = Cloudflare.Container(\"Browser\", {\n  className: \"BrowserContainer\",\n  context: \"apps/browser\",\n  maxInstances: 2,\n})",
+        "binding": "BROWSER"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
     }
   ]
 }
