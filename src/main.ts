@@ -1,6 +1,6 @@
 // Throwaway spike: how does an Effect CLI + clack "create" flow feel?
 // Every stack part is a slot with replaceable options; nothing is generated
-// except an ovriq.json manifest and a preview of the files an add-on would write.
+// except an efforge.json manifest and a preview of the files an add-on would write.
 import * as p from "@clack/prompts"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Effect, Option } from "effect"
@@ -97,7 +97,7 @@ const flags = Object.fromEntries(
 ) as Record<SlotId, Flag.Flag<Option.Option<string>>>
 
 const create = Command.make(
-  "create-ovriq",
+  "create-efforge",
   {
     name: Argument.String("name").pipe(Argument.withDescription("Project directory"), Argument.optional),
     yes: Flag.Boolean("yes").pipe(Flag.withAlias("y"), Flag.withDescription("Accept defaults for anything not set by a flag"), Flag.withDefault(false)),
@@ -105,7 +105,7 @@ const create = Command.make(
   },
   Effect.fn(function* (input) {
     console.clear()
-    p.intro(pc.bgCyan(pc.black(" create-ovriq ")) + pc.dim("  opinionated, every part replaceable"))
+    p.intro(pc.bgCyan(pc.black(" create-efforge ")) + pc.dim("  opinionated, every part replaceable"))
 
     const name = Option.isSome(input.name)
       ? input.name.value
@@ -144,7 +144,7 @@ const create = Command.make(
     p.note(
       slots.map((s) => `${pc.dim(s.id.padEnd(9))} ${[c[s.id]!].flat().join(", ") || "none"}`).join("\n") +
         "\n\n" + pc.dim("re-run non-interactively:\n") +
-        `npm create ovriq ${name} ${slots.map((s) => `--${s.id}=${[c[s.id]!].flat().join(",") || "none"}`).filter((f) => !f.endsWith("=none") && !f.endsWith("=")).join(" ")}`,
+        `npm create efforge ${name} ${slots.map((s) => `--${s.id}=${[c[s.id]!].flat().join(",") || "none"}`).filter((f) => !f.endsWith("=none") && !f.endsWith("=")).join(" ")}`,
       "Your stack",
     )
 
@@ -164,10 +164,10 @@ const create = Command.make(
     const dir = `out/${name}`
     yield* Effect.promise(async () => {
       await mkdir(dir, { recursive: true })
-      await writeFile(`${dir}/ovriq.json`, JSON.stringify({ name, stack: c, files }, null, 2) + "\n")
+      await writeFile(`${dir}/efforge.json`, JSON.stringify({ name, stack: c, files }, null, 2) + "\n")
     })
 
-    p.outro(`${pc.green("Done.")} ${pc.dim(`(spike: only ${dir}/ovriq.json was written)`)}\n\n  cd ${name}\n  pnpm dev`)
+    p.outro(`${pc.green("Done.")} ${pc.dim(`(spike: only ${dir}/efforge.json was written)`)}\n\n  cd ${name}\n  pnpm dev`)
   }),
 ).pipe(Command.withDescription("Create a new app on the Ovriq stack"))
 
