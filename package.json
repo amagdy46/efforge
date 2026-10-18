@@ -3,12 +3,33 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --experimental-strip-types src/main.ts"
+    "start": "node spike/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "vitest run -c vitest.e2e.config.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "biome check ."
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",
     "@effect/platform-node": "4.0.5",
     "effect": "4.0.5",
-    "picocolors": "^1.1.1"
-  }
+    "picocolors": "1.1.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@effect/vitest": "4.0.5",
+    "@types/node": "26.6.5",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  },
+  "license": "MIT",
+  "bin": {
+    "efforge": "dist/bin.js",
+    "create-efforge": "dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "templates"
+  ]
 }

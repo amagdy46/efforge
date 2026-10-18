@@ -76,9 +76,9 @@ design: ./design.md
 **Interfaces:** produces the scripts above.
 **Blocked by:** none
 
-- [ ] Write the test `test/smoke.test.ts`: `it.effect("runs", () => Effect.succeed(1).pipe(Effect.map(n => expect(n).toBe(1))))` using `@effect/vitest`
-- [ ] Run `pnpm test`; expect pass. Run `pnpm typecheck` and `pnpm lint`; expect both clean
-- [ ] Commit
+- [x] Write the test `test/smoke.test.ts`: `it.effect("runs", () => Effect.succeed(1).pipe(Effect.map(n => expect(n).toBe(1))))` using `@effect/vitest`
+- [x] Run `pnpm test`; expect pass. Run `pnpm typecheck` and `pnpm lint`; expect both clean
+- [x] Commit
 
 ### Task 2: Stack config, slot registry, compatibility rules
 
