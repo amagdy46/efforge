@@ -1,7 +1,7 @@
 import { Browser, BrowserError } from "@repo/core"
 import { Effect, Layer, Schema } from "effect"
 import { ContainerNamespace } from "effect-cf"
-import { CloudflareEnv } from "./cloudflare"
+import { WorkerEnvLive } from "./cloudflare"
 
 class BrowserNamespace extends ContainerNamespace.Tag<BrowserNamespace>()("BrowserNamespace") {}
 
@@ -30,5 +30,5 @@ const make = Effect.gen(function* () {
 /** `Browser` on the BROWSER container binding. */
 export const BrowserLive = Layer.effect(Browser, make).pipe(
   Layer.provide(BrowserNamespace.layer({ binding: "BROWSER" })),
-  Layer.provide(CloudflareEnv),
+  Layer.provide(WorkerEnvLive),
 )

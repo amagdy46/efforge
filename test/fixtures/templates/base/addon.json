@@ -3,10 +3,26 @@
   "title": "Base",
   "description": "Fixture base.",
   "files": [
-    { "path": "files/root/package.json", "target": "package.json" },
-    { "path": "files/pnpm-workspace.yaml", "target": "pnpm-workspace.yaml" },
-    { "path": "files/web/package.json", "target": "apps/web/package.json" },
-    { "path": "files/src/db.ts", "target": "apps/web/src/db.ts" }
+    {
+      "path": "files/root/package.json",
+      "target": "package.json"
+    },
+    {
+      "path": "files/pnpm-workspace.yaml",
+      "target": "pnpm-workspace.yaml"
+    },
+    {
+      "path": "files/web/package.json",
+      "target": "apps/web/package.json"
+    },
+    {
+      "path": "files/src/db.ts",
+      "target": "apps/web/src/db.ts"
+    },
+    {
+      "path": "files/src/layers.ts",
+      "target": "apps/web/src/layers.ts"
+    }
   ],
   "dependencies": {},
   "devDependencies": {},

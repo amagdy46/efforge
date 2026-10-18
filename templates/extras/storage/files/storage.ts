@@ -1,7 +1,7 @@
 import { Storage, StorageError } from "@repo/core"
 import { Config, ConfigProvider, Effect, Layer, Option, Redacted } from "effect"
 import { R2, WorkerConfig } from "effect-cf"
-import { CloudflareEnv } from "./cloudflare"
+import { WorkerEnvLive } from "./cloudflare"
 
 class StorageBucket extends R2.Tag<StorageBucket>()("StorageBucket") {}
 
@@ -83,5 +83,5 @@ const make = Effect.gen(function* () {
 /** `Storage` on the `STORAGE` R2 bucket binding. */
 export const StorageLive = Layer.effect(Storage, make).pipe(
   Layer.provide(StorageBucket.layer({ binding: "STORAGE" })),
-  Layer.provide(CloudflareEnv),
+  Layer.provide(WorkerEnvLive),
 )

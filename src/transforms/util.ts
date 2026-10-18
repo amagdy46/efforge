@@ -132,10 +132,38 @@ export const addImportText = (
     : insertImport(sf, text, `import { ${fresh.join(", ")} } from "${from}"`)
 }
 
+/** Biome's import groups: `node:` builtins, packages, aliases (`@/`, `#`, `~`), then relative paths. */
+const importRank = (from: string): number => {
+  if (/^(node|bun):/.test(from)) return 0
+  if (from.startsWith(".")) return from.startsWith("./") ? 5 : 4
+  if (/^(@\/|#|~)/.test(from)) return 3
+  return 1
+}
+
+/** Compares path segment by segment, so `effect/sql` sorts before `effect-cf`. */
+const importOrder = (a: string, b: string): number => {
+  const byRank = importRank(a) - importRank(b)
+  if (byRank !== 0) return byRank
+  const [as, bs] = [a.split("/"), b.split("/")]
+  for (let i = 0; i < Math.min(as.length, bs.length); i++) {
+    const [x, y] = [as[i] as string, bs[i] as string]
+    if (x !== y) return x < y ? -1 : 1
+  }
+  return as.length - bs.length
+}
+
+/** Inserts before the first import that sorts after `from` (the way Biome orders them), else after the last. */
 const insertImport = (sf: SourceFile, text: string, stmt: string): string => {
-  const last = sf.getImportDeclarations().at(-1)
-  if (last === undefined) return `${stmt}${text.includes("\r\n") ? "\r\n" : "\n"}${text}`
-  const end = last.getEnd()
+  const decls = sf.getImportDeclarations()
+  const from = /from\s+"([^"]+)"/.exec(stmt)?.[1] ?? ""
   const eol = text.includes("\r\n") ? "\r\n" : "\n"
+  const next = decls.find((d) => importOrder(d.getModuleSpecifierValue(), from) > 0)
+  if (next !== undefined) {
+    const start = next.getStart()
+    return `${text.slice(0, start)}${stmt}${eol}${text.slice(start)}`
+  }
+  const last = decls.at(-1)
+  if (last === undefined) return `${stmt}${eol}${text}`
+  const end = last.getEnd()
   return `${text.slice(0, end)}${eol}${stmt}${text.slice(end)}`
 }

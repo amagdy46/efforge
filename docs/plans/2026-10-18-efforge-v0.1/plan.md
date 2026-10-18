@@ -262,6 +262,12 @@ Each transform is a no-op when its edit is already present.
 
 **Blocked by:** 6
 
+**As built (differs from the text above):**
+- `drizzle-orm`/`drizzle-kit` are pinned to `1.0.0-rc.5-5935859`: `1.0.0-rc.4` calls `Schema.TaggedErrorClass`, which Effect 4.0.5 does not export, so its Effect drivers fail at import time.
+- Postgres overlays `apps/web/src/server/runtime.ts` to build `AppLayer` per call: Workers reject a Postgres socket reused across requests (the second request hangs).
+- Bindings are read through effect-cf (`HyperdrivePg.layer`, `D1.sqlLayer`) on top of `WorkerEnvLive` (`apps/web/src/server/cloudflare.ts`, the only place that reads `env`).
+- Manifest `scripts` field and `@repo/*` => `workspace:*` dependencies; services are imported as `@repo/core/Database` (core exports `./*`).
+
 - [x] Add e2e cases `pg-drizzle` and `d1-effect-sql` (`auth=none`); run; expect fail
 - [x] Implement; run; expect pass. For `pg-drizzle`, also run `docker compose up -d`, `pnpm db:migrate` and `pnpm dev`, and check `/app` lists notes
 - [x] Commit

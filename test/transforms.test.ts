@@ -27,7 +27,7 @@ const imp = (file = "a.ts"): TransformCall => ({
 
 it("addImport adds a new import, merges into an existing one, and is idempotent", async () => {
   const t1 = await once({ "a.ts": 'import { x } from "y"\nconst a = 1\n' }, imp())
-  expect(t1.get("a.ts")).toBe('import { x } from "y"\nimport { Foo } from "foo"\nconst a = 1\n')
+  expect(t1.get("a.ts")).toBe('import { Foo } from "foo"\nimport { x } from "y"\nconst a = 1\n')
   const t2 = await once({ "a.ts": 'import { Bar } from "foo"\n' }, imp())
   expect(t2.get("a.ts")).toBe('import { Bar, Foo } from "foo"\n')
   const t3 = await once(
@@ -53,10 +53,28 @@ const addLayer = (layer = "DbLive"): TransformCall => ({
 })
 const LF = "apps/web/src/server/layers.ts"
 
+it("addImport keeps Biome's import order: packages, then relative paths", async () => {
+  const src = 'import { a } from "effect"\nimport { b } from "./b"\n'
+  const t = await once(
+    { "a.ts": src },
+    { name: "addImport", args: { file: "a.ts", import: "C", from: "@scope/c" } },
+  )
+  expect(t.get("a.ts")).toBe(
+    'import { C } from "@scope/c"\nimport { a } from "effect"\nimport { b } from "./b"\n',
+  )
+  const u = await once(
+    { "a.ts": src },
+    { name: "addImport", args: { file: "a.ts", import: "D", from: "./cloudflare" } },
+  )
+  expect(u.get("a.ts")).toBe(
+    'import { a } from "effect"\nimport { b } from "./b"\nimport { D } from "./cloudflare"\n',
+  )
+})
+
 it("addLayer fills the empty mergeAll and is idempotent", async () => {
   const tree = await once({ [LF]: layers() }, addLayer())
   expect(tree.get(LF)).toBe(
-    `import { Layer } from "effect"\nimport { DbLive } from "@app/db"\n\nexport const AppLayer = Layer.mergeAll(/* efforge:layers */ DbLive)\n`,
+    `import { DbLive } from "@app/db"\nimport { Layer } from "effect"\n\nexport const AppLayer = Layer.mergeAll(/* efforge:layers */ DbLive)\n`,
   )
   const two = await run(tree, addLayer("AuthLive"))
   expect(two.get(LF)).toContain("Layer.mergeAll(/* efforge:layers */ DbLive, AuthLive)")

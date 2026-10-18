@@ -1,7 +1,7 @@
 import { Realtime, RealtimeError } from "@repo/core"
 import { Effect, Layer } from "effect"
 import { RoomNamespace } from "../realtime/Room"
-import { CloudflareEnv } from "./cloudflare"
+import { WorkerEnvLive } from "./cloudflare"
 
 const fail = (operation: string) => (cause: unknown) => new RealtimeError({ operation, cause })
 
@@ -29,5 +29,5 @@ const make = Effect.gen(function* () {
 /** `Realtime` on the ROOM Durable Object namespace. */
 export const RealtimeLive = Layer.effect(Realtime, make).pipe(
   Layer.provide(RoomNamespace.layer({ binding: "ROOM" })),
-  Layer.provide(CloudflareEnv),
+  Layer.provide(WorkerEnvLive),
 )

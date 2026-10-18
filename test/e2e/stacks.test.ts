@@ -61,6 +61,14 @@ const stacks: Array<[string, Parameters<typeof withDefaults>[0]]> = [
     },
   ],
   [
+    "pg-drizzle",
+    { name: "pg-drizzle", database: "postgres", orm: "drizzle", auth: "none", infra: "none" },
+  ],
+  [
+    "d1-effect-sql",
+    { name: "d1-effect-sql", database: "d1", orm: "effect-sql", auth: "none", infra: "none" },
+  ],
+  [
     "extras-no-db",
     {
       name: "extras-no-db",
@@ -70,6 +78,17 @@ const stacks: Array<[string, Parameters<typeof withDefaults>[0]]> = [
       infra: "none",
       ai: "none",
       extras: ["storage", "workflows", "realtime", "browser"],
+    },
+  ],
+  [
+    "pg-drizzle-extras",
+    {
+      name: "pg-drizzle-extras",
+      database: "postgres",
+      orm: "drizzle",
+      auth: "none",
+      infra: "none",
+      extras: ["storage", "workflows", "realtime"],
     },
   ],
 ]

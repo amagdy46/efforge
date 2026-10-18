@@ -75,6 +75,45 @@ it("catalog lists only used packages at pinned versions", async () => {
   })
 })
 
+it("links @repo/* dependencies as workspace:* and keeps them out of the catalog", async () => {
+  const tree = await run(
+    Effect.gen(function* () {
+      const addons = new Map(yield* loadAddons(fixtures))
+      patch(addons, "database/postgres", { dependencies: { "apps/web": ["@repo/db", "effect"] } })
+      return yield* generate(pg, addons)
+    }),
+  )
+  const pkg = JSON.parse(tree.get("apps/web/package.json") as string)
+  expect(pkg.dependencies["@repo/db"]).toBe("workspace:*")
+  expect(pkg.dependencies.effect).toBe("catalog:")
+  expect(parse(tree.get("pnpm-workspace.yaml") as string).catalog["@repo/db"]).toBeUndefined()
+})
+
+it("merges add-on scripts into the target package.json, creating the scripts object", async () => {
+  const tree = await run(
+    Effect.gen(function* () {
+      const addons = new Map(yield* loadAddons(fixtures))
+      patch(addons, "database/postgres", { scripts: { "apps/web": { "db:migrate": "run-it" } } })
+      patch(addons, "orm/drizzle", { scripts: { "apps/web": { "db:generate": "gen-it" } } })
+      return yield* generate(pg, addons)
+    }),
+  )
+  const pkg = JSON.parse(tree.get("apps/web/package.json") as string)
+  expect(pkg.scripts).toMatchObject({ "db:migrate": "run-it", "db:generate": "gen-it" })
+  expect(pkg.name).toBe("web")
+})
+
+it("fails with missing-package-json when scripts target an absent package", async () => {
+  const r = await run(
+    Effect.gen(function* () {
+      const addons = new Map(yield* loadAddons(fixtures))
+      patch(addons, "database/postgres", { scripts: { "apps/nope": { x: "y" } } })
+      return yield* Effect.flip(generate(pg, addons))
+    }),
+  )
+  expect(r).toMatchObject({ reason: "missing-package-json", path: "apps/nope/package.json" })
+})
+
 it(".env.example is deduplicated and grouped by add-on title", async () => {
   const env = (await gen(pg)).get(".env.example")
   expect(env).toBe(

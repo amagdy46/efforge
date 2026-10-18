@@ -15,6 +15,7 @@ import { efforgeVersion, versions } from "./versions.ts"
 
 export class GenerateError extends Schema.TaggedError<GenerateError>()("GenerateError", {
   reason: Schema.Literals([
+    "unsafe-path",
     "unpinned",
     "missing-package-json",
     "invalid-json",
@@ -43,8 +44,11 @@ const sortKeys = (o: Record<string, string>): Record<string, string> =>
   Object.fromEntries(Object.entries(o).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
 
 const computedNames = new Set(["pnpm-workspace.yaml", ".env.example", "efforge.jsonc"])
-const isComputed = (target: string) =>
+export const isComputed = (target: string) =>
   computedNames.has(target) || target === "package.json" || target.endsWith("/package.json")
+
+/** Packages of the generated monorepo (`@repo/*`) link via `workspace:*`; they have no pinned version. */
+const isWorkspace = (name: string) => name.startsWith("@repo/")
 
 const DEFAULT_PACKAGES = ["apps/*", "packages/*"]
 
@@ -96,18 +100,15 @@ export const generate = (
 
     // 2. dependencies and env vars
     for (const { manifest } of loaded) {
-      for (const [key, section] of [
-        ["dependencies", manifest.dependencies],
-        ["devDependencies", manifest.devDependencies],
-      ] as const) {
-        for (const [pkgDir, names] of Object.entries(section)) {
+      const editPackage = (pkgDir: string, edit: (pkg: Record<string, unknown>) => void) =>
+        Effect.gen(function* () {
           const target = pkgDir === "." ? "package.json" : `${pkgDir}/package.json`
           const text = tree.get(target)
           if (text === undefined)
             return yield* new GenerateError({
               reason: "missing-package-json",
               path: target,
-              message: `${manifest.id} adds dependencies to ${target}, which does not exist`,
+              message: `${manifest.id} adds dependencies or scripts to ${target}, which does not exist`,
             })
           const pkg = yield* Effect.try({
             try: () => JSON.parse(text) as Record<string, unknown>,
@@ -118,25 +119,48 @@ export const generate = (
                 message: `${target} is not valid JSON: ${String(e)}`,
               }),
           })
-          const deps = { ...((pkg[key] as Record<string, string> | undefined) ?? {}) }
+          edit(pkg)
+          tree = new Map(tree).set(target, json(pkg))
+        })
+
+      for (const [key, section] of [
+        ["dependencies", manifest.dependencies],
+        ["devDependencies", manifest.devDependencies],
+      ] as const) {
+        for (const [pkgDir, names] of Object.entries(section)) {
+          const unpinned = names.find((name) => !isWorkspace(name) && versions[name] === undefined)
+          if (unpinned !== undefined)
+            return yield* new GenerateError({
+              reason: "unpinned",
+              package: unpinned,
+              message: `${manifest.id} uses "${unpinned}", which has no entry in versions.ts`,
+            })
           // a Docker build context can't see the root catalog, so such a package pins exact versions
           const standalone = tree.has(`${pkgDir === "." ? "" : `${pkgDir}/`}Dockerfile`)
-          for (const name of names) {
-            if (versions[name] === undefined)
-              return yield* new GenerateError({
-                reason: "unpinned",
-                package: name,
-                message: `${manifest.id} uses "${name}", which has no entry in versions.ts`,
-              })
-            if (standalone) deps[name] = versions[name]
-            else {
-              deps[name] = "catalog:"
-              used.add(name)
+          yield* editPackage(pkgDir, (pkg) => {
+            const deps = { ...((pkg[key] as Record<string, string> | undefined) ?? {}) }
+            for (const name of names) {
+              if (isWorkspace(name)) {
+                deps[name] = "workspace:*"
+              } else if (standalone) {
+                deps[name] = versions[name] as string
+              } else {
+                deps[name] = "catalog:"
+                used.add(name)
+              }
             }
-          }
-          tree = new Map(tree).set(target, json({ ...pkg, [key]: sortKeys(deps) }))
+            pkg[key] = sortKeys(deps)
+          })
         }
       }
+
+      for (const [pkgDir, scripts] of Object.entries(manifest.scripts ?? {}))
+        yield* editPackage(pkgDir, (pkg) => {
+          pkg.scripts = {
+            ...((pkg.scripts as Record<string, string> | undefined) ?? {}),
+            ...scripts,
+          }
+        })
 
       for (const v of manifest.envVars) {
         if (seenEnv.has(v.name)) continue

@@ -8,6 +8,8 @@ export class IncompatibleStack extends Schema.TaggedError<IncompatibleStack>()(
     slot: SlotId,
     value: Schema.String,
     allowed: Schema.Array(Schema.String),
+    /** extra explanation (e.g. why `add` can't change a slot) */
+    reason: Schema.optionalKey(Schema.String),
   },
 ) {}
 

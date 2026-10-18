@@ -1,0 +1,124 @@
+{
+  "id": "orm/effect-sql",
+  "title": "Effect SQL",
+  "description": "Plain Effect SQL (tagged-template queries) behind the Database service; migrations are SQL files.",
+  "files": [
+    {
+      "path": "files/shared/index.ts",
+      "target": "packages/db/src/index.ts"
+    },
+    {
+      "path": "files/shared/notes.ts",
+      "target": "apps/web/src/server/notes.ts"
+    },
+    {
+      "path": "files/shared/page.tsx",
+      "target": "apps/web/src/routes/app/index.tsx"
+    },
+    {
+      "path": "files/pg/layer.ts",
+      "target": "packages/db/src/layer.ts",
+      "when": {
+        "database": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "path": "files/pg/schema.ts",
+      "target": "packages/db/src/schema.ts",
+      "when": {
+        "database": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "path": "files/pg/migrate.ts",
+      "target": "packages/db/scripts/migrate.ts",
+      "when": {
+        "database": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "path": "files/d1/layer.ts",
+      "target": "packages/db/src/layer.ts",
+      "when": {
+        "database": [
+          "d1"
+        ]
+      }
+    },
+    {
+      "path": "files/d1/schema.ts",
+      "target": "packages/db/src/schema.ts",
+      "when": {
+        "database": [
+          "d1"
+        ]
+      }
+    },
+    {
+      "path": "files/d1/migrate.ts",
+      "target": "packages/db/scripts/migrate.ts",
+      "when": {
+        "database": [
+          "d1"
+        ]
+      }
+    },
+    {
+      "path": "files/shared/Database.ts",
+      "target": "packages/core/src/Database.ts"
+    },
+    {
+      "path": "files/pg-sql/0001_init.sql",
+      "target": "packages/db/migrations/0001_init.sql",
+      "when": {
+        "database": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "path": "files/d1-sql/0001_init.sql",
+      "target": "packages/db/migrations/0001_init.sql",
+      "when": {
+        "database": [
+          "d1"
+        ]
+      }
+    }
+  ],
+  "dependencies": {},
+  "devDependencies": {
+    "packages/db": [
+      "@effect/platform-node"
+    ]
+  },
+  "scripts": {},
+  "envVars": [],
+  "requires": [],
+  "conflicts": [],
+  "transforms": [
+    {
+      "name": "addImport",
+      "args": {
+        "file": "apps/web/src/server/layers.ts",
+        "import": "WorkerEnvLive",
+        "from": "./cloudflare"
+      }
+    },
+    {
+      "name": "addLayer",
+      "args": {
+        "file": "apps/web/src/server/layers.ts",
+        "import": "DatabaseLayer",
+        "from": "@repo/db",
+        "layer": "DatabaseLayer.pipe(Layer.provide(WorkerEnvLive))"
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import { JobError, Jobs } from "@repo/core"
 import { Effect, Layer, Option } from "effect"
 import { ExampleWorkflow } from "../workflows/Example"
-import { CloudflareEnv } from "./cloudflare"
+import { WorkerEnvLive } from "./cloudflare"
 
 const fail = (operation: string) => (cause: unknown) => new JobError({ operation, cause })
 
@@ -30,5 +30,5 @@ const make = Effect.gen(function* () {
 /** `Jobs` on Cloudflare Workflows, through the EXAMPLE_WORKFLOW binding. */
 export const JobsLive = Layer.effect(Jobs, make).pipe(
   Layer.provide(ExampleWorkflow.layer({ binding: "EXAMPLE_WORKFLOW" })),
-  Layer.provide(CloudflareEnv),
+  Layer.provide(WorkerEnvLive),
 )

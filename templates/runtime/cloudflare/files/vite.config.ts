@@ -7,7 +7,12 @@ import { defineConfig } from "vite"
 export default defineConfig({
   resolve: { tsconfigPaths: true },
   plugins: [
-    cloudflare({ configPath: "../../wrangler.jsonc", viteEnvironment: { name: "ssr" } }),
+    cloudflare({
+      configPath: "../../wrangler.jsonc",
+      viteEnvironment: { name: "ssr" },
+      // the repo-root default of `wrangler d1 ... --local`, so migrations and dev share one state
+      persistState: { path: "../../.wrangler/state" },
+    }),
     tanstackStart(),
     tailwindcss(),
     viteReact(),
