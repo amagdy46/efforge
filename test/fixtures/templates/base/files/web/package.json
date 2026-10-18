@@ -1,0 +1,7 @@
+{
+  "name": "web",
+  "private": true,
+  "dependencies": {
+    "zod-existing": "1.0.0"
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "id": "database/postgres",
+  "title": "Postgres",
+  "description": "Postgres reached through a Hyperdrive binding on Workers, with a local docker-compose database and the `@repo/db` package.",
+  "files": [
+    {
+      "path": "files/docker-compose.yml",
+      "target": "docker-compose.yml"
+    },
+    {
+      "path": "files/package.json",
+      "target": "packages/db/package.json"
+    },
+    {
+      "path": "files/tsconfig.json",
+      "target": "packages/db/tsconfig.json"
+    },
+    {
+      "path": "files/runtime.ts",
+      "target": "apps/web/src/server/runtime.ts"
+    }
+  ],
+  "dependencies": {
+    "apps/web": [
+      "@repo/db",
+      "pg"
+    ],
+    "packages/db": [
+      "@repo/core",
+      "@effect/sql-pg",
+      "effect",
+      "effect-cf"
+    ],
+    "packages/core": [
+      "@effect/sql-pg"
+    ]
+  },
+  "devDependencies": {
+    "packages/db": [
+      "@cloudflare/workers-types",
+      "@types/node",
+      "typescript"
+    ],
+    "packages/core": [
+      "@cloudflare/workers-types"
+    ],
+    "apps/web": [
+      "@types/pg"
+    ]
+  },
+  "envVars": [
+    {
+      "name": "DATABASE_URL",
+      "example": "postgres://postgres:postgres@localhost:5432/app",
+      "description": "Used by `pnpm db:migrate` and drizzle-kit; the running app connects through the HYPERDRIVE binding."
+    }
+  ],
+  "requires": [],
+  "conflicts": [],
+  "transforms": [
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "hyperdrive",
+        "value": "{\"binding\": \"HYPERDRIVE\", \"id\": \"00000000000000000000000000000000\", \"localConnectionString\": \"postgres://postgres:postgres@localhost:5432/app\"}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "addImport",
+      "args": {
+        "file": "infra/alchemy.run.ts",
+        "import": "* as Config",
+        "from": "effect/Config"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addImport",
+      "args": {
+        "file": "infra/alchemy.run.ts",
+        "import": "* as Redacted",
+        "from": "effect/Redacted"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "hyperdrive",
+        "code": "const databaseUrl = new URL(Redacted.value(yield* Config.Redacted(\"DATABASE_URL\")))\nconst hyperdrive = yield* Cloudflare.Hyperdrive.Connection(\"Hyperdrive\", {\n  origin: {\n    scheme: \"postgres\",\n    host: databaseUrl.hostname,\n    port: Number(databaseUrl.port || 5432),\n    database: databaseUrl.pathname.slice(1),\n    user: decodeURIComponent(databaseUrl.username),\n    password: Redacted.make(decodeURIComponent(databaseUrl.password)),\n  },\n  // writes must be visible to the next read, so only pool connections, don't cache queries\n  caching: { disabled: true },\n})",
+        "binding": "HYPERDRIVE"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "database",
+        "content": "## Database (Postgres, Drizzle)\n\n- Tables live in `packages/db/src/schema.ts`; queries go through the `Database` service from `@repo/core`.\n- Change the schema, then run `pnpm --filter @repo/db db:generate` to write a migration to `packages/db/drizzle/`, then `pnpm db:migrate`.\n- Never edit files under `packages/db/drizzle/` by hand; they are generated.\n- Start the local database with `docker compose up -d`."
+      },
+      "when": {
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "database",
+        "content": "## Database (Postgres, effect-sql)\n\n- Migrations are plain SQL files in `packages/db/migrations/`, named `NNNN_name.sql` and applied in order by `pnpm db:migrate`.\n- Add a new file for every schema change; never edit one that has already been applied.\n- Put one statement per `;` and keep string literals free of `;` (the runner splits on it).\n- Queries go through the `Database` service from `@repo/core`. Start the local database with `docker compose up -d`."
+      },
+      "when": {
+        "orm": [
+          "effect-sql"
+        ]
+      }
+    }
+  ],
+  "scripts": {
+    ".": {
+      "db:migrate": "pnpm --filter @repo/db db:migrate"
+    }
+  }
+}

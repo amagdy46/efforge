@@ -1,0 +1,118 @@
+{
+  "id": "database/d1",
+  "title": "Cloudflare D1",
+  "description": "A D1 binding (SQLite on Cloudflare) and the `@repo/db` package.",
+  "files": [
+    {
+      "path": "files/package.json",
+      "target": "packages/db/package.json"
+    },
+    {
+      "path": "files/tsconfig.json",
+      "target": "packages/db/tsconfig.json"
+    }
+  ],
+  "dependencies": {
+    "apps/web": [
+      "@repo/db"
+    ],
+    "packages/db": [
+      "@repo/core",
+      "@effect/sql-d1",
+      "effect",
+      "effect-cf"
+    ],
+    "packages/core": [
+      "@effect/sql-d1"
+    ]
+  },
+  "devDependencies": {
+    "packages/db": [
+      "@cloudflare/workers-types",
+      "@types/node",
+      "typescript",
+      "wrangler"
+    ],
+    "packages/core": [
+      "@cloudflare/workers-types"
+    ]
+  },
+  "envVars": [],
+  "requires": [],
+  "conflicts": [],
+  "transforms": [
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "d1_databases",
+        "value": "{\"binding\": \"DB\", \"database_name\": \"app\", \"database_id\": \"00000000-0000-0000-0000-000000000000\", \"migrations_dir\": \"packages/db/migrations\"}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "database",
+        "code": "const database = yield* Cloudflare.D1.Database(\"Database\", {\n  migrations: \"packages/db/drizzle\",\n})",
+        "binding": "DB"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "database",
+        "code": "const database = yield* Cloudflare.D1.Database(\"Database\", {\n  migrations: \"packages/db/migrations\",\n})",
+        "binding": "DB"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "orm": [
+          "effect-sql"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "database",
+        "content": "## Database (D1, Drizzle)\n\n- Tables live in `packages/db/src/schema.ts`; queries go through the `Database` service from `@repo/core`.\n- Change the schema, then run `pnpm --filter @repo/db db:generate` to write a migration to `packages/db/drizzle/`, then `pnpm db:migrate` (flattens them into `packages/db/migrations/` and applies them locally).\n- Never edit files under `packages/db/drizzle/` or `packages/db/migrations/` by hand; they are generated."
+      },
+      "when": {
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "database",
+        "content": "## Database (D1, effect-sql)\n\n- Migrations are plain SQL files in `packages/db/migrations/`, named `NNNN_name.sql` and applied in order by `pnpm db:migrate` (wrangler, local D1).\n- Add a new file for every schema change; never edit one that has already been applied.\n- Queries go through the `Database` service from `@repo/core`."
+      },
+      "when": {
+        "orm": [
+          "effect-sql"
+        ]
+      }
+    }
+  ],
+  "scripts": {
+    ".": {
+      "db:migrate": "pnpm --filter @repo/db db:migrate"
+    }
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "id": "extras/storage",
+  "title": "Storage",
+  "description": "Object storage: a Storage service on R2 with Worker-served signed download URLs.",
+  "files": [
+    {
+      "path": "files/storage-security.ts",
+      "target": "packages/core/src/storage-security.ts"
+    },
+    {
+      "path": "files/storage-security.test.ts",
+      "target": "packages/core/test/storage-security.test.ts"
+    },
+    {
+      "path": "files/core-storage.ts",
+      "target": "packages/core/src/storage.ts"
+    },
+    {
+      "path": "files/storage.ts",
+      "target": "apps/web/src/server/storage.ts"
+    },
+    {
+      "path": "files/storage-route.ts",
+      "target": "apps/web/src/server/storage-route.ts"
+    }
+  ],
+  "dependencies": {},
+  "devDependencies": {},
+  "envVars": [
+    {
+      "name": "STORAGE_SIGNING_SECRET",
+      "example": "change-me-to-a-long-random-string",
+      "description": "HMAC secret for signed download URLs (wrangler secret put STORAGE_SIGNING_SECRET)"
+    }
+  ],
+  "requires": [],
+  "conflicts": [],
+  "transforms": [
+    {
+      "name": "addExport",
+      "args": {
+        "file": "packages/core/src/index.ts",
+        "export": "*",
+        "from": "./storage"
+      }
+    },
+    {
+      "name": "addLayer",
+      "args": {
+        "file": "apps/web/src/server/layers.ts",
+        "import": "StorageLive",
+        "from": "./storage",
+        "layer": "StorageLive"
+      }
+    },
+    {
+      "name": "addArrayItem",
+      "args": {
+        "file": "apps/web/src/server/routes.ts",
+        "name": "workerRoutes",
+        "item": "storageRoute",
+        "import": "storageRoute",
+        "from": "./storage-route"
+      }
+    },
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "r2_buckets",
+        "value": "{\"binding\":\"STORAGE\"}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "addImport",
+      "args": {
+        "file": "infra/alchemy.run.ts",
+        "import": "* as Config",
+        "from": "effect/Config"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "storage",
+        "code": "const storage = yield* Cloudflare.R2.Bucket(\"Storage\", {\n  // preview stages are destroyed with their PR, even when files were uploaded\n  forceDestroy: (yield* Alchemy.Stack).stage !== \"prod\",\n})",
+        "binding": "STORAGE"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "storageSigningSecret",
+        "code": "const storageSigningSecret = yield* Config.Redacted(\"STORAGE_SIGNING_SECRET\")",
+        "binding": "STORAGE_SIGNING_SECRET"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "storage",
+        "content": "## Storage\n\n- Use the `Storage` service from `@repo/core` (put, get, delete, signedUrl, verify); do not touch the R2 binding directly.\n- The implementation is `apps/web/src/server/storage.ts` on the `STORAGE` R2 binding; downloads are served by the Worker route in `storage-route.ts`.\n- Signed URLs are HMAC-signed with the `STORAGE_SIGNING_SECRET` secret (at least 32 characters; the app fails to start without it). Never log or return it.\n- Storage keys are opaque: generate them on the server, never from raw user input. Files are served as attachments with `nosniff`, inline only for raster images."
+      }
+    }
+  ]
+}

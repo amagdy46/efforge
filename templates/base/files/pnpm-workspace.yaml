@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+allowBuilds:
+  esbuild: true
+  workerd: true
+# alchemy's runtime depends on `vite` aliased to @voidzero-dev/vite-plus-core while apps/web uses real
+# vite. vitest peers on vite, so that mix installs two vitest copies and @effect/vitest fails with
+# "vitest is imported directly without running vitest". Pin every `vite` to the catalog one.
+overrides:
+  vite: "catalog:"

@@ -1,0 +1,95 @@
+{
+  "id": "extras/workflows",
+  "title": "Workflows",
+  "description": "Durable background jobs: a Jobs service on Cloudflare Workflows, with an example workflow and server functions.",
+  "files": [
+    {
+      "path": "files/core-jobs.ts",
+      "target": "packages/core/src/jobs.ts"
+    },
+    {
+      "path": "files/Example.ts",
+      "target": "apps/web/src/workflows/Example.ts"
+    },
+    {
+      "path": "files/jobs.ts",
+      "target": "apps/web/src/server/jobs.ts"
+    },
+    {
+      "path": "files/example-job.ts",
+      "target": "apps/web/src/server/example-job.ts"
+    }
+  ],
+  "dependencies": {},
+  "devDependencies": {},
+  "envVars": [],
+  "requires": [],
+  "conflicts": [],
+  "transforms": [
+    {
+      "name": "addExport",
+      "args": {
+        "file": "packages/core/src/index.ts",
+        "export": "*",
+        "from": "./jobs"
+      }
+    },
+    {
+      "name": "addExport",
+      "args": {
+        "file": "apps/web/src/server.ts",
+        "export": "Example",
+        "from": "./workflows/Example"
+      }
+    },
+    {
+      "name": "addLayer",
+      "args": {
+        "file": "apps/web/src/server/layers.ts",
+        "import": "JobsLive",
+        "from": "./jobs",
+        "layer": "JobsLive"
+      }
+    },
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "workflows",
+        "value": "{\"name\":\"example\",\"binding\":\"EXAMPLE_WORKFLOW\",\"class_name\":\"Example\"}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "exampleWorkflow",
+        "code": "const exampleWorkflow = Cloudflare.Workflow(\"Example\", { className: \"Example\" })",
+        "binding": "EXAMPLE_WORKFLOW"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addServerFnMiddleware",
+      "args": {
+        "file": "apps/web/src/server/example-job.ts",
+        "middleware": "requireSession",
+        "import": "requireSession",
+        "from": "./require-session"
+      },
+      "when": {
+        "auth": [
+          "better-auth",
+          "better-auth-orgs"
+        ]
+      }
+    }
+  ]
+}

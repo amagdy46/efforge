@@ -1,0 +1,37 @@
+{
+  "id": "infra/alchemy",
+  "title": "Alchemy",
+  "description": "Infrastructure as Effects (Alchemy v2): infra/alchemy.run.ts declares the Worker and its bindings instead of wrangler.jsonc, with PR preview stages deployed from GitHub Actions.",
+  "files": [
+    { "path": "files/alchemy.run.ts", "target": "infra/alchemy.run.ts" },
+    { "path": "files/tsconfig.json", "target": "infra/tsconfig.json" },
+    { "path": "files/README.md", "target": "infra/README.md" },
+    { "path": "files/github/deploy.yml", "target": ".github/workflows/deploy.yml" },
+    { "path": "files/vite.config.ts", "target": "apps/web/vite.config.ts" }
+  ],
+  "dependencies": {},
+  "devDependencies": {
+    ".": ["alchemy", "effect", "@effect/platform-node", "@types/node", "typescript"]
+  },
+  "envVars": [
+    {
+      "name": "CLOUDFLARE_ACCOUNT_ID",
+      "example": "your-account-id",
+      "description": "Needed by `pnpm run deploy` (with CLOUDFLARE_API_TOKEN, or a login from `pnpm exec alchemy login`)."
+    }
+  ],
+  "requires": [],
+  "conflicts": [],
+  "transforms": [],
+  "scripts": {
+    ".": {
+      "dev": "alchemy dev infra/alchemy.run.ts",
+      "typecheck": "turbo run typecheck && tsc -p infra",
+      "deploy": "alchemy deploy infra/alchemy.run.ts",
+      "destroy": "alchemy destroy infra/alchemy.run.ts"
+    },
+    "apps/web": {
+      "deploy": "pnpm --workspace-root run deploy"
+    }
+  }
+}

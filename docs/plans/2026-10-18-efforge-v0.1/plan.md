@@ -1,6 +1,6 @@
 ---
 type: plan
-status: draft
+status: done
 design: ./design.md
 ---
 
@@ -76,9 +76,9 @@ design: ./design.md
 **Interfaces:** produces the scripts above.
 **Blocked by:** none
 
-- [ ] Write the test `test/smoke.test.ts`: `it.effect("runs", () => Effect.succeed(1).pipe(Effect.map(n => expect(n).toBe(1))))` using `@effect/vitest`
-- [ ] Run `pnpm test`; expect pass. Run `pnpm typecheck` and `pnpm lint`; expect both clean
-- [ ] Commit
+- [x] Write the test `test/smoke.test.ts`: `it.effect("runs", () => Effect.succeed(1).pipe(Effect.map(n => expect(n).toBe(1))))` using `@effect/vitest`
+- [x] Run `pnpm test`; expect pass. Run `pnpm typecheck` and `pnpm lint`; expect both clean
+- [x] Commit
 
 ### Task 2: Stack config, slot registry, compatibility rules
 
@@ -101,7 +101,7 @@ design: ./design.md
 
 **Blocked by:** 1
 
-- [ ] Write failing tests:
+- [x] Write failing tests:
   - `available("orm", {database:"none"})` returns only `none`.
   - `available("auth", {database:"none"})` returns only `none`.
   - `withDefaults({name:"a"})` equals the default row of the slot table.
@@ -109,9 +109,9 @@ design: ./design.md
   - `validate` with `auth:"better-auth", database:"none"` fails with `IncompatibleStack{slot:"auth"}`.
   - `Schema.decodeUnknownEither(ProjectName)("My App")` is a Left, and so is `"../x"`.
   - `toCommand(withDefaults({name:"a"}))` equals `"npm create efforge a"`.
-- [ ] Run `pnpm test rules`; expect failures
-- [ ] Implement; run; expect pass
-- [ ] Commit
+- [x] Run `pnpm test rules`; expect failures
+- [x] Implement; run; expect pass
+- [x] Commit
 
 ### Task 3: Add-on manifest and loader
 
@@ -136,14 +136,14 @@ design: ./design.md
 Templates live in `templates/<slot>/<option>/`, plus `templates/base/`.
 **Blocked by:** 2
 
-- [ ] Write failing tests:
+- [x] Write failing tests:
   - Loading `templates/` decodes every `addon.json`.
   - Every `requires`/`conflicts` id exists in the map.
   - Every `files[].path` exists on disk.
   - Every non-`none` option in `slots` has a folder. Mark this one `it.todo` until Task 10, and turn it on there.
   - `addonIdsFor(withDefaults({name:"a"}))` equals the expected array.
-- [ ] Implement; run `pnpm test addon`; expect pass
-- [ ] Commit
+- [x] Implement; run `pnpm test addon`; expect pass
+- [x] Commit
 
 ### Task 4: Virtual tree and generator core
 
@@ -166,7 +166,7 @@ Templates live in `templates/<slot>/<option>/`, plus `templates/base/`.
 
 **Blocked by:** 3
 
-- [ ] Write failing tests against the fixtures:
+- [x] Write failing tests against the fixtures:
   - Overlay order: a later add-on's file replaces the earlier one.
   - A `when` mismatch skips the file.
   - Deps from two add-ons merge into `apps/web/package.json` as `catalog:`.
@@ -174,8 +174,8 @@ Templates live in `templates/<slot>/<option>/`, plus `templates/base/`.
   - `.env.example` is deduplicated.
   - `efforge.jsonc` round-trips through `EfforgeManifest`, and `files` hashes match.
   - A missing `versions` entry fails with `GenerateError{reason:"unpinned", package}`.
-- [ ] Implement; run `pnpm test generate`; expect pass
-- [ ] Commit
+- [x] Implement; run `pnpm test generate`; expect pass
+- [x] Commit
 
 ### Task 5: Transforms
 
@@ -201,13 +201,13 @@ Anchors:
 Each transform is a no-op when its edit is already present.
 **Blocked by:** 4
 
-- [ ] Write failing tests for each transform:
+- [x] Write failing tests for each transform:
   - Applied once, it produces the expected output.
   - Applied twice, the result is identical to applying it once.
   - With the anchor missing, it fails with `TransformAnchorMissing` containing the snippet.
   - `addLayer` on a file where the user has added their own layer and reformatted the code still appends correctly.
-- [ ] Implement; wire it into `generate`; run `pnpm test`; expect pass
-- [ ] Commit
+- [x] Implement; wire it into `generate`; run `pnpm test`; expect pass
+- [x] Commit
 
 ### Task 6: Base template, the "minimal" stack builds
 
@@ -231,10 +231,10 @@ Each transform is a no-op when its edit is already present.
 **Interfaces:** produces the seam files with the anchors Task 5 expects (`AppLayer` / `Layer.mergeAll`).
 **Blocked by:** 5
 
-- [ ] Add the e2e case `minimal` (`database=none, auth=none, infra=none, ai=none, extras=[]`)
-- [ ] Run `pnpm test:e2e -t minimal`; expect fail
-- [ ] Build the templates; run; expect pass. Also run `pnpm dev` in a generated copy and check that `/` and `/app` render (screenshot or curl HTML)
-- [ ] Commit
+- [x] Add the e2e case `minimal` (`database=none, auth=none, infra=none, ai=none, extras=[]`)
+- [x] Run `pnpm test:e2e -t minimal`; expect fail
+- [x] Build the templates; run; expect pass. Also run `pnpm dev` in a generated copy and check that `/` and `/app` render (screenshot or curl HTML)
+- [x] Commit
 
 ### Task 7: Database and ORM add-ons
 
@@ -262,9 +262,15 @@ Each transform is a no-op when its edit is already present.
 
 **Blocked by:** 6
 
-- [ ] Add e2e cases `pg-drizzle` and `d1-effect-sql` (`auth=none`); run; expect fail
-- [ ] Implement; run; expect pass. For `pg-drizzle`, also run `docker compose up -d`, `pnpm db:migrate` and `pnpm dev`, and check `/app` lists notes
-- [ ] Commit
+**As built (differs from the text above):**
+- `drizzle-orm`/`drizzle-kit` are pinned to `1.0.0-rc.5-5935859`: `1.0.0-rc.4` calls `Schema.TaggedErrorClass`, which Effect 4.0.5 does not export, so its Effect drivers fail at import time.
+- Postgres overlays `apps/web/src/server/runtime.ts` to build `AppLayer` per call: Workers reject a Postgres socket reused across requests (the second request hangs).
+- Bindings are read through effect-cf (`HyperdrivePg.layer`, `D1.sqlLayer`) on top of `WorkerEnvLive` (`apps/web/src/server/cloudflare.ts`, the only place that reads `env`).
+- Manifest `scripts` field and `@repo/*` => `workspace:*` dependencies; services are imported as `@repo/core/Database` (core exports `./*`).
+
+- [x] Add e2e cases `pg-drizzle` and `d1-effect-sql` (`auth=none`); run; expect fail
+- [x] Implement; run; expect pass. For `pg-drizzle`, also run `docker compose up -d`, `pnpm db:migrate` and `pnpm dev`, and check `/app` lists notes
+- [x] Commit
 
 ### Task 8: Auth add-ons with organizations UI
 
@@ -282,10 +288,10 @@ Each transform is a no-op when its edit is already present.
 
 **Blocked by:** 7
 
-- [ ] Add e2e cases `pg-drizzle-orgs`, `pg-effect-sql-orgs` and `d1-drizzle-auth`; run; expect fail
-- [ ] Implement; run; expect pass
-- [ ] Add a Playwright check inside the e2e helper, gated by the env `EFFORGE_E2E_BROWSER=1`, against `pg-drizzle-orgs` running on `pnpm dev`. It must: sign up, create an org, invite (link shown), sign up a second user via the link, and see both members
-- [ ] Commit
+- [x] Add e2e cases `pg-drizzle-orgs`, `pg-effect-sql-orgs` and `d1-drizzle-auth`; run; expect fail
+- [x] Implement; run; expect pass
+- [x] Add a Playwright check inside the e2e helper, gated by the env `EFFORGE_E2E_BROWSER=1`, against `pg-drizzle-orgs` running on `pnpm dev`. It must: sign up, create an org, invite (link shown), sign up a second user via the link, and see both members
+- [x] Commit
 
 ### Task 9: Infra (alchemy vs wrangler)
 
@@ -300,11 +306,11 @@ Each transform is a no-op when its edit is already present.
 Database add-ons also declare `when: {infra:["alchemy"]}` transforms (`addAlchemyResource`) for Hyperdrive and D1.
 **Blocked by:** 8
 
-- [ ] Write a failing unit test in `test/generate.test.ts`:
+- [x] Write a failing unit test in `test/generate.test.ts`:
   - With `infra=alchemy`, there is no `wrangler.jsonc`, `alchemy.run.ts` contains a `Hyperdrive` resource, and `deploy.yml` exists.
   - With `infra=none`, `wrangler.jsonc` has a `hyperdrive` binding.
-- [ ] Add e2e case `pg-drizzle-orgs-alchemy`; implement; run both; expect pass (typecheck and build only, no deploy)
-- [ ] Commit
+- [x] Add e2e case `pg-drizzle-orgs-alchemy`; implement; run both; expect pass (typecheck and build only, no deploy)
+- [x] Commit
 
 ### Task 10: AI and extras add-ons
 
@@ -332,10 +338,10 @@ Database add-ons also declare `when: {infra:["alchemy"]}` transforms (`addAlchem
 Each extra registers its layer via `addLayer`, and its binding via `addWranglerBinding` or `addAlchemyResource` with `when`.
 **Blocked by:** 9
 
-- [ ] Turn on the Task 3 "every option has a folder" test; expect fail
-- [ ] Add the e2e case `house`: `postgres, drizzle, better-auth-orgs, alchemy, effect-ai-byok`, with every extra. This is the Spoorline stack. Expect fail
-- [ ] Implement each add-on; run unit tests and `pnpm test:e2e -t house`; expect pass. In CI, also check `docker build apps/browser`
-- [ ] Commit (one commit per add-on is fine)
+- [x] Turn on the Task 3 "every option has a folder" test; expect fail
+- [x] Add the e2e case `house`: `postgres, drizzle, better-auth-orgs, alchemy, effect-ai-byok`, with every extra. This is the Spoorline stack. Expect fail
+- [x] Implement each add-on; run unit tests and `pnpm test:e2e -t house`; expect pass. In CI, also check `docker build apps/browser`
+- [x] Commit (one commit per add-on is fine)
 
 ### Task 11: Interactive prompts and `create` command
 
@@ -361,14 +367,14 @@ Each extra registers its layer via `addLayer`, and its binding via `addWranglerB
 
 **Blocked by:** 4 (it can run in parallel with Tasks 6–10)
 
-- [ ] Write failing tests with a scripted `PromptIO` test layer:
+- [x] Write failing tests with a scripted `PromptIO` test layer:
   - The answer sequence with a back step yields the expected config.
   - `--database=none` means the orm and auth prompts are never shown.
   - `--auth=better-auth --database=none` fails with `IncompatibleStack`.
   - `-y` asks nothing.
   - `create --dry-run --json` prints valid JSON and writes nothing.
-- [ ] Implement; run `pnpm test`; expect pass. Run `node src/bin.ts` interactively once and record a short asciinema or a screenshot in the PR
-- [ ] Commit
+- [x] Implement; run `pnpm test`; expect pass. Run `node src/bin.ts` interactively once and record a short asciinema or a screenshot in the PR
+- [x] Commit
 
 ### Task 12: `add` command
 
@@ -387,15 +393,15 @@ Each extra registers its layer via `addLayer`, and its binding via `addWranglerB
 
 **Blocked by:** 10, 11
 
-- [ ] Write failing tests on a generated `pg-drizzle-orgs` tree in a tmp dir:
+- [x] Write failing tests on a generated `pg-drizzle-orgs` tree in a tmp dir:
   - `add email` writes the Mailer files, and `layers.ts` contains `MailerLive`.
   - Running it twice changes nothing.
   - A user line added to `layers.ts` beforehand is kept.
   - An edited overlay target gives `OverlayConflict`, and `--overwrite` replaces it.
   - Deleting the `Layer.mergeAll` call gives `TransformAnchorMissing` with the snippet, and no files written.
   - `add database/d1` on a project with `database=postgres` fails with `IncompatibleStack` (one value per single-select slot).
-- [ ] Implement; run; expect pass
-- [ ] Commit
+- [x] Implement; run; expect pass
+- [x] Commit
 
 ### Task 13: CI matrix and release prep
 
@@ -416,8 +422,8 @@ Each extra registers its layer via `addLayer`, and its binding via `addWranglerB
 
 **Blocked by:** 13
 
-- [ ] Run `node ~/projects/efforge/src/bin.ts spoorline-gen -y --database=postgres --orm=drizzle --auth=better-auth-orgs --infra=alchemy --ai=effect-ai-byok --extras=workflows,realtime,browser,storage,email --no-git` into a tmp dir
-- [ ] Copy the generated tree over the worktree. Keep:
+- [x] Run `node ~/projects/efforge/src/bin.ts spoorline-gen -y --database=postgres --orm=drizzle --auth=better-auth-orgs --infra=alchemy --ai=effect-ai-byok --extras=workflows,realtime,browser,storage,email --no-git` into a tmp dir
+- [x] Copy the generated tree over the worktree. Keep:
   - `packages/decoders`
   - `apps/cli`
   - `docs/`
@@ -426,6 +432,6 @@ Each extra registers its layer via `addLayer`, and its binding via `addWranglerB
   - Spoorline's `README.md` sections, merged with the generated README
 
   Set the root package name to `spoorline-monorepo` and `license` to `AGPL-3.0-only`.
-- [ ] Run `pnpm install && pnpm typecheck && pnpm test && pnpm build`; expect pass, with the 7 existing decoder tests passing
-- [ ] Update `docs/architecture.md` to say the stack is generated by efforge (`efforge.jsonc` lists it)
-- [ ] Commit on the branch. Merging and pushing to `ovriq/spoorline` wait for the user
+- [x] Run `pnpm install && pnpm typecheck && pnpm test && pnpm build`; expect pass, with the 7 existing decoder tests passing
+- [x] Update `docs/architecture.md` to say the stack is generated by efforge (`efforge.jsonc` lists it)
+- [x] Commit on the branch. Merging and pushing to `ovriq/spoorline` wait for the user

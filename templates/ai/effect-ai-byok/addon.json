@@ -1,0 +1,619 @@
+{
+  "id": "ai/effect-ai-byok",
+  "title": "Effect AI (bring your own key)",
+  "description": "An Llm service on Effect AI with Anthropic, OpenAI, OpenRouter and Ollama providers; keys come from the environment, or are saved encrypted per organization when auth has organizations.",
+  "files": [
+    {
+      "path": "files/core/llm.ts",
+      "target": "packages/core/src/llm.ts"
+    },
+    {
+      "path": "files/server/llm-provider.ts",
+      "target": "apps/web/src/server/llm-provider.ts"
+    },
+    {
+      "path": "files/server/ai.ts",
+      "target": "apps/web/src/server/ai.ts"
+    },
+    {
+      "path": "files/server/llm-env.ts",
+      "target": "apps/web/src/server/llm.ts",
+      "when": {
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "path": "files/server/llm-orgs.ts",
+      "target": "apps/web/src/server/llm.ts",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ]
+      }
+    },
+    {
+      "path": "files/core/llm-crypto.ts",
+      "target": "packages/core/src/llm-crypto.ts",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ]
+      }
+    },
+    {
+      "path": "files/core/llm-crypto.test.ts",
+      "target": "packages/core/test/llm-crypto.test.ts",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ]
+      }
+    },
+    {
+      "path": "files/core/llm-store.ts",
+      "target": "packages/core/src/llm-store.ts",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ]
+      }
+    },
+    {
+      "path": "files/server/ai-settings.ts",
+      "target": "apps/web/src/server/ai-settings.ts",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ]
+      }
+    },
+    {
+      "path": "files/routes/ai.tsx",
+      "target": "apps/web/src/routes/app/settings/ai.tsx",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ]
+      }
+    },
+    {
+      "path": "files/server/llm-store-drizzle.ts",
+      "target": "apps/web/src/server/llm-store.ts",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ],
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "path": "files/server/llm-store-sql-pg.ts",
+      "target": "apps/web/src/server/llm-store.ts",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ],
+        "orm": [
+          "effect-sql"
+        ],
+        "database": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "path": "files/server/llm-store-sql-d1.ts",
+      "target": "apps/web/src/server/llm-store.ts",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ],
+        "orm": [
+          "effect-sql"
+        ],
+        "database": [
+          "d1"
+        ]
+      }
+    },
+    {
+      "path": "files/schema/pg.ts",
+      "target": "packages/db/src/ai-schema.ts",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ],
+        "orm": [
+          "drizzle"
+        ],
+        "database": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "path": "files/schema/d1.ts",
+      "target": "packages/db/src/ai-schema.ts",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ],
+        "orm": [
+          "drizzle"
+        ],
+        "database": [
+          "d1"
+        ]
+      }
+    },
+    {
+      "path": "files/sql/pg.sql",
+      "target": "packages/db/migrations/0003_llm_credential.sql",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ],
+        "orm": [
+          "effect-sql"
+        ],
+        "database": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "path": "files/sql/d1.sql",
+      "target": "packages/db/migrations/0003_llm_credential.sql",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ],
+        "orm": [
+          "effect-sql"
+        ],
+        "database": [
+          "d1"
+        ]
+      }
+    },
+    {
+      "path": "files/drizzle/pg/20261018161056_llm_credential/migration.sql",
+      "target": "packages/db/drizzle/20261018161056_llm_credential/migration.sql",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ],
+        "orm": [
+          "drizzle"
+        ],
+        "database": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "path": "files/drizzle/pg/20261018161056_llm_credential/snapshot.json",
+      "target": "packages/db/drizzle/20261018161056_llm_credential/snapshot.json",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ],
+        "orm": [
+          "drizzle"
+        ],
+        "database": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "path": "files/drizzle/d1/20261018161056_llm_credential/migration.sql",
+      "target": "packages/db/drizzle/20261018161056_llm_credential/migration.sql",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ],
+        "orm": [
+          "drizzle"
+        ],
+        "database": [
+          "d1"
+        ]
+      }
+    },
+    {
+      "path": "files/drizzle/d1/20261018161056_llm_credential/snapshot.json",
+      "target": "packages/db/drizzle/20261018161056_llm_credential/snapshot.json",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ],
+        "orm": [
+          "drizzle"
+        ],
+        "database": [
+          "d1"
+        ]
+      }
+    }
+  ],
+  "dependencies": {
+    "apps/web": [
+      "@effect/ai-anthropic",
+      "@effect/ai-openai",
+      "@effect/ai-openrouter"
+    ]
+  },
+  "devDependencies": {},
+  "envVars": [
+    {
+      "name": "LLM_ENCRYPTION_KEY",
+      "example": "openssl rand -base64 32",
+      "description": "AES-GCM key (32 random bytes, base64) that encrypts each organization's saved API key; the app refuses to start without a valid one",
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ]
+      }
+    },
+    {
+      "name": "LLM_PROVIDER",
+      "example": "anthropic",
+      "description": "anthropic | openai | openrouter | ollama",
+      "when": {
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "name": "LLM_MODEL",
+      "example": "claude-sonnet-5-5",
+      "description": "Model id for the provider",
+      "when": {
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "name": "LLM_API_KEY",
+      "example": "sk-...",
+      "description": "Provider API key (not needed for a local Ollama); a Worker secret in production",
+      "when": {
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "name": "LLM_BASE_URL",
+      "example": "",
+      "description": "Optional OpenAI-compatible endpoint (openai, ollama)",
+      "when": {
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    }
+  ],
+  "requires": [],
+  "conflicts": [],
+  "transforms": [
+    {
+      "name": "addExport",
+      "args": {
+        "file": "packages/core/src/index.ts",
+        "export": "*",
+        "from": "./llm"
+      }
+    },
+    {
+      "name": "addLayer",
+      "args": {
+        "file": "apps/web/src/server/layers.ts",
+        "import": "LlmLive",
+        "from": "./llm",
+        "layer": "LlmLive"
+      }
+    },
+    {
+      "name": "addServerFnMiddleware",
+      "args": {
+        "file": "apps/web/src/server/ai.ts",
+        "middleware": "requireSession",
+        "import": "requireSession",
+        "from": "./require-session"
+      },
+      "when": {
+        "auth": [
+          "better-auth",
+          "better-auth-orgs"
+        ]
+      }
+    },
+    {
+      "name": "addExport",
+      "args": {
+        "file": "packages/db/src/index.ts",
+        "export": "*",
+        "from": "./ai-schema.ts"
+      },
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ],
+        "orm": [
+          "drizzle"
+        ]
+      }
+    },
+    {
+      "name": "addArrayItem",
+      "args": {
+        "file": "apps/web/src/routes/app/settings.tsx",
+        "name": "tabs",
+        "item": "{ to: \"/app/settings/ai\", label: \"AI\" }"
+      },
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ]
+      }
+    },
+    {
+      "name": "addDevVar",
+      "args": {
+        "name": "LLM_ENCRYPTION_KEY",
+        "value": "ZGV2LW9ubHktbGxtLWtleS1yZXBsYWNlLW1lLTMyISE="
+      },
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ]
+      }
+    },
+    {
+      "name": "addDevVar",
+      "args": {
+        "name": "LLM_PROVIDER",
+        "value": "anthropic"
+      },
+      "when": {
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "name": "addDevVar",
+      "args": {
+        "name": "LLM_MODEL",
+        "value": "claude-sonnet-5-5"
+      },
+      "when": {
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "name": "addImport",
+      "args": {
+        "file": "infra/alchemy.run.ts",
+        "import": "* as Config",
+        "from": "effect/Config"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "llmEncryptionKey",
+        "code": "const llmEncryptionKey = yield* Config.Redacted(\"LLM_ENCRYPTION_KEY\")",
+        "binding": "LLM_ENCRYPTION_KEY"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "auth": [
+          "better-auth-orgs"
+        ]
+      }
+    },
+    {
+      "name": "addWorkflowSecret",
+      "args": {
+        "name": "LLM_ENCRYPTION_KEY"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "auth": [
+          "better-auth-orgs"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "llmProvider",
+        "code": "const llmProvider = yield* Config.String(\"LLM_PROVIDER\")",
+        "binding": "LLM_PROVIDER"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "llmModel",
+        "code": "const llmModel = yield* Config.String(\"LLM_MODEL\")",
+        "binding": "LLM_MODEL"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "llmApiKey",
+        "code": "const llmApiKey = yield* Config.Redacted(\"LLM_API_KEY\")",
+        "binding": "LLM_API_KEY"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "llmBaseUrl",
+        "code": "// empty uses the provider's default endpoint\nconst llmBaseUrl = yield* Config.String(\"LLM_BASE_URL\").pipe(Config.withDefault(\"\"))",
+        "binding": "LLM_BASE_URL"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "name": "addWorkflowSecret",
+      "args": {
+        "name": "LLM_PROVIDER"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "name": "addWorkflowSecret",
+      "args": {
+        "name": "LLM_MODEL"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "name": "addWorkflowSecret",
+      "args": {
+        "name": "LLM_API_KEY"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "name": "addWorkflowSecret",
+      "args": {
+        "name": "LLM_BASE_URL"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "ai",
+        "content": "## AI (Effect AI, bring your own key)\n\n- Use the `Llm` service from `@repo/core` (`generateText(prompt)`); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.\n- `apps/web/src/server/ai.ts` is a demo server function (`generateText`); it is NOT gated because this project has no auth: anyone who can reach the app can call it and spend the configured API key. Add auth (`efforge add auth/better-auth`) or remove the demo before deploying. Gate any server function you add that spends model tokens the same way.\n- Never log, return or store the API key in the clear."
+      },
+      "when": {
+        "auth": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "ai",
+        "content": "## AI (Effect AI, bring your own key)\n\n- Use the `Llm` service from `@repo/core` (`generateText(prompt)`); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.\n- `apps/web/src/server/ai.ts` is a demo server function (`generateText`); it is gated by `requireSession`. Gate any server function you add that spends model tokens the same way.\n- Never log, return or store the API key in the clear."
+      },
+      "when": {
+        "auth": [
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "ai",
+        "content": "## AI (Effect AI, bring your own key)\n\n- Use the `Llm` service from `@repo/core` (`generateText(prompt)`); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.\n- Each organization saves its own key at `/app/settings/ai`, stored in the `llm_credential` table (`packages/db`), encrypted with AES-GCM (WebCrypto) using `LLM_ENCRYPTION_KEY` (32 random bytes, base64: `openssl rand -base64 32`; the app refuses to start without a valid one). Rotating that key makes saved keys unreadable, so organizations must enter theirs again.\n- The key never goes back to the browser (only its last four characters, to owners and admins). Only owners and admins can set, clear or test it; keep that check on the server.\n- `apps/web/src/server/ai.ts` is a demo server function (`generateText`) behind `requireSession`. Gate any server function you add that spends model tokens the same way.\n- Never log, return or store the API key in the clear."
+      },
+      "when": {
+        "auth": [
+          "better-auth-orgs"
+        ]
+      }
+    }
+  ]
+}

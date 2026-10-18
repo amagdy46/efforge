@@ -1,0 +1,12 @@
+{
+  "id": "runtime/cloudflare",
+  "title": "Cloudflare",
+  "description": "Fixture runtime.",
+  "files": [],
+  "dependencies": {},
+  "devDependencies": {},
+  "envVars": [],
+  "requires": [],
+  "conflicts": [],
+  "transforms": []
+}

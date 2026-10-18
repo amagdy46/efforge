@@ -1,0 +1,16 @@
+{
+  "name": "app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "vp lint",
+    "format": "vp fmt",
+    "check": "vp check",
+    "prepare": "effect-tsgo patch --typescript --oxlint"
+  },
+  "packageManager": "pnpm@12.4.2"
+}

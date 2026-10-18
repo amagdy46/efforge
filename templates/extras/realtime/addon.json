@@ -1,0 +1,135 @@
+{
+  "id": "extras/realtime",
+  "title": "Realtime",
+  "description": "WebSockets: a Realtime service, a hibernating Room Durable Object, a useRoom hook and a demo on /app.",
+  "files": [
+    {
+      "path": "files/core-realtime.ts",
+      "target": "packages/core/src/realtime.ts"
+    },
+    {
+      "path": "files/Room.ts",
+      "target": "apps/web/src/realtime/Room.ts"
+    },
+    {
+      "path": "files/realtime.ts",
+      "target": "apps/web/src/server/realtime.ts"
+    },
+    {
+      "path": "files/realtime-route.ts",
+      "target": "apps/web/src/server/realtime-route.ts"
+    },
+    {
+      "path": "files/use-room.ts",
+      "target": "apps/web/src/lib/use-room.ts"
+    },
+    {
+      "path": "files/realtime-demo.tsx",
+      "target": "apps/web/src/components/realtime-demo.tsx"
+    },
+    {
+      "path": "files/realtime-limits.ts",
+      "target": "packages/core/src/realtime-limits.ts"
+    },
+    {
+      "path": "files/realtime-limits.test.ts",
+      "target": "packages/core/test/realtime-limits.test.ts"
+    }
+  ],
+  "dependencies": {},
+  "devDependencies": {},
+  "envVars": [],
+  "requires": [],
+  "conflicts": [],
+  "transforms": [
+    {
+      "name": "addExport",
+      "args": {
+        "file": "packages/core/src/index.ts",
+        "export": "*",
+        "from": "./realtime"
+      }
+    },
+    {
+      "name": "addExport",
+      "args": {
+        "file": "apps/web/src/server.ts",
+        "export": "Room",
+        "from": "./realtime/Room"
+      }
+    },
+    {
+      "name": "addLayer",
+      "args": {
+        "file": "apps/web/src/server/layers.ts",
+        "import": "RealtimeLive",
+        "from": "./realtime",
+        "layer": "RealtimeLive"
+      }
+    },
+    {
+      "name": "addArrayItem",
+      "args": {
+        "file": "apps/web/src/server/routes.ts",
+        "name": "workerRoutes",
+        "item": "realtimeRoute",
+        "import": "realtimeRoute",
+        "from": "./realtime-route"
+      }
+    },
+    {
+      "name": "addArrayItem",
+      "args": {
+        "file": "apps/web/src/components/widgets.tsx",
+        "name": "widgets",
+        "item": "<RealtimeDemo key=\"realtime\" />",
+        "import": "RealtimeDemo",
+        "from": "./realtime-demo"
+      }
+    },
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "durable_objects.bindings",
+        "value": "{\"name\":\"ROOM\",\"class_name\":\"Room\"}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "migrations",
+        "value": "{\"tag\":\"realtime-v1\",\"new_sqlite_classes\":[\"Room\"]}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "room",
+        "code": "const room = Cloudflare.DurableObject(\"Room\")",
+        "binding": "ROOM"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "realtime",
+        "content": "## Realtime\n\n- Rooms are a Durable Object (`Room`, exported from `apps/web/src/server.ts`); WebSocket upgrades are handled by a Worker route in `server/routes.ts`.\n- Use the `Realtime` service from `@repo/core` on the server and the `useRoom` hook in `apps/web/src/lib/use-room.ts` in the UI.\n- Keep message payloads small and validate incoming messages with `Schema` before using them."
+      }
+    }
+  ]
+}
