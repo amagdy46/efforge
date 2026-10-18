@@ -66,7 +66,7 @@ const readVersion = (): string => {
         name?: string
         version?: string
       }
-      if (pkg.name === "efforge" && pkg.version !== undefined) return pkg.version
+      if (pkg.name === "create-efforge" && pkg.version !== undefined) return pkg.version
     } catch {}
     const parent = dirname(dir)
     if (parent === dir) return "0.0.0"
