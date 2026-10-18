@@ -54,11 +54,11 @@ npm create efforge my-app        # asks for each choice
 cd my-app
 ```
 
-Then, depending on the database you picked:
+Then, with the default `infra=none`, set up the database you picked:
 
 ```sh
 # Postgres (the default): start the bundled database, then migrate
-docker compose up -d
+docker compose up -d --wait
 pnpm db:migrate
 
 # D1: apply migrations to the local D1 database
@@ -67,7 +67,7 @@ pnpm db:migrate
 pnpm dev                         # http://localhost:5173
 ```
 
-`.dev.vars` is generated with development-only secrets. Replace them, and set them as Worker secrets, before deploying.
+`.dev.vars` is generated with development-only secrets. Replace them, and set them as Worker secrets, before deploying. With `infra=alchemy`, follow the generated `infra/README.md` instead.
 
 ## Common commands
 
@@ -122,6 +122,7 @@ v0.1 is the first release, and the CLI's options may still change.
 - Cloudflare is the only runtime.
 - You can add add-ons but not remove them, and a single-choice slot only moves from `none` to a value. To switch from Postgres to D1, create a new project.
 - `infra=alchemy` uses Alchemy 2.0 beta (`2.0.0-beta.83`). Drizzle is pinned to `1.0.0-rc.5-5935859` ([why](https://github.com/amagdy46/efforge/blob/main/docs/decisions/0002-drizzle-rc-pin.md)).
+- With `infra=alchemy`, local secrets are read from `.env`, not `.dev.vars`, and `pnpm db:migrate` on D1 still expects a `wrangler.jsonc`. Both are known v0.1 gaps.
 - CI generates, installs and runs the full gate (typecheck, check, test, build) for a matrix of 15 stacks, not every combination.
 - With `--auth=none`, the `effect-ai-byok` demo server function is not gated, so anyone who can reach the app can spend the configured API key. Add auth or remove the demo before deploying.
 

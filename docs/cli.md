@@ -35,7 +35,7 @@ npx create-efforge add ai/effect-ai-byok extras/storage --dry-run
 
 Ids are `email`, `extras/email` or `ai/effect-ai-byok`. Flags: `--overwrite`, `--dry-run`, `--json`, `--cwd <dir>`, `--no-install`.
 
-`add` re-checks compatibility, writes the add-on's files, and edits the files that compose the app (layers, exports, bindings, workflow secrets) with idempotent AST transforms. It tracks a hash of every generated file in `efforge.jsonc` and refuses to overwrite one you have edited unless you pass `--overwrite`. Package scripts are different: an add-on's scripts replace scripts with the same name in your `package.json` either way, so review the diff.
+`add` re-checks compatibility, writes the add-on's files, and edits the files that compose the app (layers, exports, bindings, workflow secrets) with idempotent AST transforms. It records hashes of the template files it writes in `efforge.jsonc` and refuses to replace one you have edited unless you pass `--overwrite`; shared files such as `layers.ts` and `.dev.vars` are edited in place instead. Package scripts are different: an add-on's scripts replace scripts with the same name in your `package.json` either way, so review the diff.
 
 Removing an add-on is not supported in v0.1, and a single-choice slot only moves from `none` to a value.
 
