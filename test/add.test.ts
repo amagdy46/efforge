@@ -97,7 +97,7 @@ it("add email writes the overlays, edits the seam, merges deps, env and manifest
   expect(file(".env.example").match(/DATABASE_URL/g)).toHaveLength(1)
   const m = manifestOf()
   expect(m.stack.extras).toEqual(["email"])
-  expect(m.command).toBe("npm create efforge app -- --auth=none --extras=email")
+  expect(m.command).toBe("npm create efforge app -- --yes --auth=none --extras=email")
   expect(m.files["apps/web/src/mailer.ts"]).toBe(hash(file("apps/web/src/mailer.ts")))
   expect(m.files["apps/web/src/layers.ts"]).toBeUndefined()
   expect(result.transformed).toEqual(["apps/web/src/layers.ts"])

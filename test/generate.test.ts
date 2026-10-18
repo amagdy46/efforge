@@ -127,7 +127,7 @@ it("efforge.jsonc round-trips through EfforgeManifest and hashes match overlay t
   expect(text.startsWith(manifestHeader)).toBe(true)
   const m = Schema.decodeUnknownSync(EfforgeManifest)(JSON.parse(text.slice(manifestHeader.length)))
   expect(m.stack).toEqual(pg)
-  expect(m.command).toBe("npm create efforge app -- --auth=none --extras=email")
+  expect(m.command).toBe("npm create efforge app -- --yes --auth=none --extras=email")
   expect(Object.keys(m.files)).toEqual([
     "apps/web/src/db.ts",
     "apps/web/src/mailer.ts",

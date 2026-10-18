@@ -60,7 +60,7 @@ export const withDefaults = (partial: Partial<StackConfig> & { name: string }): 
   return out as StackConfig
 }
 
-/** `npm create efforge <name> -- --slot=value ...`, omitting values that equal what defaults would pick. */
+/** `npm create efforge <name> -- --yes --slot=value ...`, omitting values that equal what defaults would pick; `--yes` keeps the omitted slots from prompting. */
 export const toCommand = (config: StackConfig): string => {
   const flags: string[] = []
   const so_far: Draft = { name: config.name }
@@ -73,7 +73,5 @@ export const toCommand = (config: StackConfig): string => {
       ;(so_far as Record<string, unknown>)[slot.id] = value
     }
   }
-  return ["npm create efforge", config.name, ...(flags.length > 0 ? ["--", ...flags] : [])].join(
-    " ",
-  )
+  return ["npm create efforge", config.name, "--", "--yes", ...flags].join(" ")
 }

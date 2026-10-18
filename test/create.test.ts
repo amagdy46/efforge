@@ -63,9 +63,24 @@ it("dry-run --json prints valid JSON {stack, command, files} and writes nothing"
     orm: "drizzle",
     extras: ["email"],
   })
-  expect(out.command).toBe("npm create efforge app -- --auth=none --extras=email")
+  expect(out.command).toBe("npm create efforge app -- --yes --auth=none --extras=email")
   expect(out.files).toContain("efforge.jsonc")
   expect(readdirSync(tmp)).toEqual([])
+})
+
+it("the printed command replays the stack without prompting", async () => {
+  await cli(["app", "--dry-run", "--json", ...stackFlags, "--extras=email"]).p
+  const { command, stack } = JSON.parse(logs.join("\n"))
+  logs = []
+  const args = command
+    .replace(/^npm create efforge /, "")
+    .replace(" -- ", " ")
+    .split(" ")
+  // no --json here: it implies --yes and would hide a missing one
+  const { s, p } = cli([...args, "--dry-run"])
+  await p
+  expect(s.shown).toEqual([])
+  expect(stack.extras).toEqual(["email"])
 })
 
 it("dry-run without json lists the paths and writes nothing", async () => {

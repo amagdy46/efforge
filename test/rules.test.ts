@@ -86,13 +86,13 @@ it("ProjectName rejects bad names", () => {
 })
 
 it("toCommand omits defaults", () => {
-  expect(toCommand(withDefaults({ name: "a" }))).toBe("npm create efforge a")
+  expect(toCommand(withDefaults({ name: "a" }))).toBe("npm create efforge a -- --yes")
 })
 
 it("toCommand includes non-defaults", () => {
   expect(
     toCommand(withDefaults({ name: "a", database: "none", extras: ["storage", "email"] })),
-  ).toBe("npm create efforge a -- --database=none --extras=storage,email")
+  ).toBe("npm create efforge a -- --yes --database=none --extras=storage,email")
 })
 
 it("ProjectName rejects unscoped slash and empty, accepts scoped", () => {
@@ -146,7 +146,7 @@ it("toCommand output round-trips through withDefaults", () => {
     const flags = Object.fromEntries(
       (toCommand(c).split(" -- ")[1] ?? "")
         .split(" ")
-        .filter(Boolean)
+        .filter((f) => f.includes("="))
         .map((f) => f.slice(2).split("=") as [string, string]),
     )
     const { extras, ...rest } = flags
