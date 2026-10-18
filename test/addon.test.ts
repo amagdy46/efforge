@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process"
+import { join, relative } from "node:path"
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect, it } from "@effect/vitest"
 import { Effect, FileSystem, Path } from "effect"
@@ -159,4 +161,20 @@ it("addonIdsFor is independent of the order extras were given", () => {
   const a = addonIdsFor(withDefaults({ name: "a", extras: ["email", "workflows", "storage"] }))
   const b = addonIdsFor(withDefaults({ name: "a", extras: ["storage", "email", "workflows"] }))
   expect(a).toEqual(b)
+})
+
+it("every template file survives npm pack", async () => {
+  // pnpm pack silently drops some names (package-lock.json at any depth, .npmrc, ...); the
+  // published CLI then fails to load its templates, so check the real file list.
+  const root = new URL("..", import.meta.url).pathname
+  const packed = JSON.parse(
+    execFileSync("pnpm", ["pack", "--dry-run", "--json"], { cwd: root, encoding: "utf8" }),
+  ) as { files: { path: string }[] }
+  const shipped = new Set(packed.files.map((f) => f.path))
+  const addons = await run(loadAddons(real))
+  for (const addon of addons.values())
+    for (const f of addon.manifest.files) {
+      const file = relative(root, join(addon.dir, f.path))
+      expect(shipped.has(file), file).toBe(true)
+    }
 })

@@ -36,7 +36,7 @@
       "target": "apps/browser/tsconfig.json"
     },
     {
-      "path": "files/app/package-lock.json",
+      "path": "files/app/package-lock",
       "target": "apps/browser/package-lock.json"
     },
     {

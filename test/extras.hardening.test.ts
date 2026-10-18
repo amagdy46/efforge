@@ -55,7 +55,8 @@ it("apps/browser lockfile matches the exact pins and the Dockerfile uses it as p
   const pkg = JSON.parse(t.get("apps/browser/package.json") as string)
   const lock = JSON.parse(t.get("apps/browser/package-lock.json") as string)
   // `npm ci` fails if these differ: regenerate with `npm install --package-lock-only` in a dir
-  // holding the generated package.json, then copy package-lock.json into the template.
+  // holding the generated package.json, then copy package-lock.json into the template as
+  // files/app/package-lock (npm pack always drops files named package-lock.json).
   expect(lock.packages[""].dependencies).toEqual(pkg.dependencies)
   expect(lock.packages[""].devDependencies).toEqual(pkg.devDependencies)
   for (const [name, version] of Object.entries(pkg.dependencies as Record<string, string>))
@@ -69,7 +70,7 @@ it("apps/browser lockfile matches the exact pins and the Dockerfile uses it as p
 
 it("the template lockfile is plain JSON from the public registry", () => {
   const raw = readFileSync(
-    new URL("../templates/extras/browser/files/app/package-lock.json", import.meta.url),
+    new URL("../templates/extras/browser/files/app/package-lock", import.meta.url),
     "utf8",
   )
   expect(raw).not.toMatch(/"resolved": "(?!https:\/\/registry\.npmjs\.org\/)/)
