@@ -45,6 +45,7 @@ it("fixtures: manifests carry requires, when and transforms", async () => {
     "database/postgres",
     "extras/email",
     "orm/drizzle",
+    "runtime/cloudflare",
   ])
   expect(addons.get("orm/drizzle")?.manifest.requires).toEqual(["database/postgres"])
   expect(addons.get("extras/email")?.manifest.files[1]?.when).toEqual({ database: ["postgres"] })

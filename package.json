@@ -14,7 +14,8 @@
     "@clack/prompts": "1.8.1",
     "@effect/platform-node": "4.0.5",
     "effect": "4.0.5",
-    "picocolors": "1.1.1"
+    "picocolors": "1.1.1",
+    "yaml": "2.9.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
@@ -31,5 +32,6 @@
   "files": [
     "dist",
     "templates"
-  ]
+  ],
+  "version": "0.0.0"
 }

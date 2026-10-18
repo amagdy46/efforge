@@ -166,7 +166,7 @@ Templates live in `templates/<slot>/<option>/`, plus `templates/base/`.
 
 **Blocked by:** 3
 
-- [ ] Write failing tests against the fixtures:
+- [x] Write failing tests against the fixtures:
   - Overlay order: a later add-on's file replaces the earlier one.
   - A `when` mismatch skips the file.
   - Deps from two add-ons merge into `apps/web/package.json` as `catalog:`.
@@ -174,8 +174,8 @@ Templates live in `templates/<slot>/<option>/`, plus `templates/base/`.
   - `.env.example` is deduplicated.
   - `efforge.jsonc` round-trips through `EfforgeManifest`, and `files` hashes match.
   - A missing `versions` entry fails with `GenerateError{reason:"unpinned", package}`.
-- [ ] Implement; run `pnpm test generate`; expect pass
-- [ ] Commit
+- [x] Implement; run `pnpm test generate`; expect pass
+- [x] Commit
 
 ### Task 5: Transforms
 
