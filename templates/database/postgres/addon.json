@@ -1,0 +1,75 @@
+{
+  "id": "database/postgres",
+  "title": "Postgres",
+  "description": "Postgres reached through a Hyperdrive binding on Workers, with a local docker-compose database and the `@repo/db` package.",
+  "files": [
+    {
+      "path": "files/docker-compose.yml",
+      "target": "docker-compose.yml"
+    },
+    {
+      "path": "files/package.json",
+      "target": "packages/db/package.json"
+    },
+    {
+      "path": "files/tsconfig.json",
+      "target": "packages/db/tsconfig.json"
+    },
+    {
+      "path": "files/runtime.ts",
+      "target": "apps/web/src/server/runtime.ts"
+    }
+  ],
+  "dependencies": {
+    "apps/web": [
+      "@repo/db"
+    ],
+    "packages/db": [
+      "@repo/core",
+      "@effect/sql-pg",
+      "effect",
+      "effect-cf"
+    ],
+    "packages/core": [
+      "@effect/sql-pg"
+    ]
+  },
+  "devDependencies": {
+    "packages/db": [
+      "@cloudflare/workers-types",
+      "@types/node",
+      "typescript"
+    ],
+    "packages/core": [
+      "@cloudflare/workers-types"
+    ]
+  },
+  "envVars": [
+    {
+      "name": "DATABASE_URL",
+      "example": "postgres://postgres:postgres@localhost:5432/app",
+      "description": "Used by `pnpm db:migrate` and drizzle-kit; the running app connects through the HYPERDRIVE binding."
+    }
+  ],
+  "requires": [],
+  "conflicts": [],
+  "transforms": [
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "hyperdrive",
+        "value": "{\"binding\": \"HYPERDRIVE\", \"id\": \"00000000000000000000000000000000\", \"localConnectionString\": \"postgres://postgres:postgres@localhost:5432/app\"}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    }
+  ],
+  "scripts": {
+    ".": {
+      "db:migrate": "pnpm --filter @repo/db db:migrate"
+    }
+  }
+}

@@ -15,12 +15,25 @@
           "none"
         ]
       }
+    },
+    {
+      "path": "files/cloudflare.ts",
+      "target": "apps/web/src/server/cloudflare.ts"
+    },
+    {
+      "path": "files/tsconfig.json",
+      "target": "apps/web/tsconfig.json"
     }
   ],
-  "dependencies": {},
+  "dependencies": {
+    "apps/web": [
+      "effect-cf"
+    ]
+  },
   "devDependencies": {
     "apps/web": [
       "@cloudflare/vite-plugin",
+      "@cloudflare/workers-types",
       "wrangler"
     ]
   },

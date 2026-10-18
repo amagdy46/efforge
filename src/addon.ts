@@ -34,6 +34,10 @@ export const AddonManifest = Schema.Struct({
   files: Schema.Array(AddonFile),
   dependencies: PackagesByDir,
   devDependencies: PackagesByDir,
+  /** workspace package dir (`.` for the root) -> script name -> command; an add-on's script replaces one of the same name */
+  scripts: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.String)),
+  ),
   envVars: Schema.Array(
     Schema.Struct({
       name: Schema.String,

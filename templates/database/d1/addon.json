@@ -1,0 +1,62 @@
+{
+  "id": "database/d1",
+  "title": "Cloudflare D1",
+  "description": "A D1 binding (SQLite on Cloudflare) and the `@repo/db` package.",
+  "files": [
+    {
+      "path": "files/package.json",
+      "target": "packages/db/package.json"
+    },
+    {
+      "path": "files/tsconfig.json",
+      "target": "packages/db/tsconfig.json"
+    }
+  ],
+  "dependencies": {
+    "apps/web": [
+      "@repo/db"
+    ],
+    "packages/db": [
+      "@repo/core",
+      "@effect/sql-d1",
+      "effect",
+      "effect-cf"
+    ],
+    "packages/core": [
+      "@effect/sql-d1"
+    ]
+  },
+  "devDependencies": {
+    "packages/db": [
+      "@cloudflare/workers-types",
+      "@types/node",
+      "typescript",
+      "wrangler"
+    ],
+    "packages/core": [
+      "@cloudflare/workers-types"
+    ]
+  },
+  "envVars": [],
+  "requires": [],
+  "conflicts": [],
+  "transforms": [
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "d1_databases",
+        "value": "{\"binding\": \"DB\", \"database_name\": \"app\", \"database_id\": \"00000000-0000-0000-0000-000000000000\", \"migrations_dir\": \"packages/db/migrations\"}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    }
+  ],
+  "scripts": {
+    ".": {
+      "db:migrate": "pnpm --filter @repo/db db:migrate"
+    }
+  }
+}

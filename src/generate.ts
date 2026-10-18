@@ -46,6 +46,9 @@ const computedNames = new Set(["pnpm-workspace.yaml", ".env.example", "efforge.j
 const isComputed = (target: string) =>
   computedNames.has(target) || target === "package.json" || target.endsWith("/package.json")
 
+/** Packages of the generated monorepo (`@repo/*`) link via `workspace:*`; they have no pinned version. */
+const isWorkspace = (name: string) => name.startsWith("@repo/")
+
 const DEFAULT_PACKAGES = ["apps/*", "packages/*"]
 
 /** Builds the project tree for `config` from the loaded add-ons. Pure apart from reading add-on files. */
@@ -96,18 +99,15 @@ export const generate = (
 
     // 2. dependencies and env vars
     for (const { manifest } of loaded) {
-      for (const [key, section] of [
-        ["dependencies", manifest.dependencies],
-        ["devDependencies", manifest.devDependencies],
-      ] as const) {
-        for (const [pkgDir, names] of Object.entries(section)) {
+      const editPackage = (pkgDir: string, edit: (pkg: Record<string, unknown>) => void) =>
+        Effect.gen(function* () {
           const target = pkgDir === "." ? "package.json" : `${pkgDir}/package.json`
           const text = tree.get(target)
           if (text === undefined)
             return yield* new GenerateError({
               reason: "missing-package-json",
               path: target,
-              message: `${manifest.id} adds dependencies to ${target}, which does not exist`,
+              message: `${manifest.id} adds dependencies or scripts to ${target}, which does not exist`,
             })
           const pkg = yield* Effect.try({
             try: () => JSON.parse(text) as Record<string, unknown>,
@@ -118,20 +118,44 @@ export const generate = (
                 message: `${target} is not valid JSON: ${String(e)}`,
               }),
           })
-          const deps = { ...((pkg[key] as Record<string, string> | undefined) ?? {}) }
-          for (const name of names) {
-            if (versions[name] === undefined)
-              return yield* new GenerateError({
-                reason: "unpinned",
-                package: name,
-                message: `${manifest.id} uses "${name}", which has no entry in versions.ts`,
-              })
-            deps[name] = "catalog:"
-            used.add(name)
-          }
-          tree = new Map(tree).set(target, json({ ...pkg, [key]: sortKeys(deps) }))
+          edit(pkg)
+          tree = new Map(tree).set(target, json(pkg))
+        })
+
+      for (const [key, section] of [
+        ["dependencies", manifest.dependencies],
+        ["devDependencies", manifest.devDependencies],
+      ] as const) {
+        for (const [pkgDir, names] of Object.entries(section)) {
+          const unpinned = names.find((name) => !isWorkspace(name) && versions[name] === undefined)
+          if (unpinned !== undefined)
+            return yield* new GenerateError({
+              reason: "unpinned",
+              package: unpinned,
+              message: `${manifest.id} uses "${unpinned}", which has no entry in versions.ts`,
+            })
+          yield* editPackage(pkgDir, (pkg) => {
+            const deps = { ...((pkg[key] as Record<string, string> | undefined) ?? {}) }
+            for (const name of names) {
+              if (isWorkspace(name)) {
+                deps[name] = "workspace:*"
+              } else {
+                deps[name] = "catalog:"
+                used.add(name)
+              }
+            }
+            pkg[key] = sortKeys(deps)
+          })
         }
       }
+
+      for (const [pkgDir, scripts] of Object.entries(manifest.scripts ?? {}))
+        yield* editPackage(pkgDir, (pkg) => {
+          pkg.scripts = {
+            ...((pkg.scripts as Record<string, string> | undefined) ?? {}),
+            ...scripts,
+          }
+        })
 
       for (const v of manifest.envVars) {
         if (seenEnv.has(v.name)) continue
