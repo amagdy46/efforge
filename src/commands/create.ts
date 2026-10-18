@@ -1,16 +1,16 @@
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { Console, Context, Effect, Option, Path } from "effect"
+import { Console, Context, Effect, FileSystem, Option, Path } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import pc from "picocolors"
 import { loadAddons } from "../addon.ts"
 import { exec } from "../exec.ts"
 import { generate } from "../generate.ts"
 import { askStack, DEFAULT_NAME, type StackFlags } from "../prompts/flow.ts"
-import { PromptIO } from "../prompts/navigable.ts"
+import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
 import { slots } from "../slots.ts"
 import { type StackConfig, toCommand } from "../stack.ts"
-import { writeTree } from "../write.ts"
+import { TargetNotEmpty, writeTree } from "../write.ts"
 
 /** The package's `templates/` dir, resolved relative to this module (same depth in `src/` and `dist/`). */
 export const defaultTemplatesDir: string = join(
@@ -43,15 +43,27 @@ const summary = (stack: StackConfig): string =>
     }),
   ].join("\n")
 
+const silentIO = (io: PromptIOShape): PromptIOShape => ({
+  ...io,
+  intro: () => Effect.void,
+  section: () => Effect.void,
+  info: () => Effect.void,
+  note: () => Effect.void,
+  outro: () => Effect.void,
+  step: (_label, eff) => eff,
+})
+
 /** validate -> generate -> (dry-run | write -> pnpm install -> git init + commit). */
 export const create = (opts: CreateOptions) =>
   Effect.gen(function* () {
-    const io = yield* PromptIO
+    const live = yield* PromptIO
     const path = yield* Path.Path
+    const fs = yield* FileSystem.FileSystem
     const templatesDir = yield* TemplatesDir
-    // --json must keep stdout machine-readable, so it never prompts.
+    // --json must keep stdout machine-readable: it never prompts and prints no chrome.
     const quiet = opts.json
     const yes = opts.yes || opts.json
+    const io: PromptIOShape = quiet ? silentIO(live) : live
 
     if (!quiet)
       yield* io.intro(
@@ -60,6 +72,12 @@ export const create = (opts: CreateOptions) =>
 
     const stack = yield* askStack(opts.flags, io, { yes })
     const command = toCommand(stack)
+    const dirName = stack.name.split("/").pop() ?? stack.name
+    const dir = path.resolve(dirName)
+    // Fail before generating (and before the confirm prompt) rather than after the user answered everything.
+    if (!opts.dryRun && (yield* fs.exists(dir)) && (yield* fs.readDirectory(dir)).length > 0) {
+      return yield* new TargetNotEmpty({ dir })
+    }
     const addons = yield* loadAddons(templatesDir)
     const tree = yield* generate(stack, addons)
     const files = [...tree.keys()].sort()
@@ -87,8 +105,6 @@ export const create = (opts: CreateOptions) =>
       }
     }
 
-    const dirName = stack.name.split("/").pop() ?? stack.name
-    const dir = path.resolve(dirName)
     yield* io.step("Writing files", writeTree(dir, tree))
     if (opts.install) {
       yield* io.step("Installing dependencies (pnpm install)", exec("pnpm", ["install"], dir))
@@ -111,6 +127,10 @@ export const create = (opts: CreateOptions) =>
             ),
           ),
         )
+    }
+    if (opts.json) {
+      yield* Console.log(JSON.stringify({ stack, command, files }, null, 2))
+      return
     }
     yield* io.outro(
       `${pc.green("Done.")}\n\n  cd ${dirName}\n  ${opts.install ? "" : "pnpm install\n  "}pnpm dev\n\n${pc.dim("Same stack later:")} ${command}`,
@@ -152,7 +172,7 @@ export const createConfig = {
     Flag.withDefault(false),
   ),
   json: Flag.Boolean("json").pipe(
-    Flag.withDescription("With --dry-run: print {stack, command, files} as JSON (implies --yes)"),
+    Flag.withDescription("Print only {stack, command, files} as JSON on stdout (implies --yes)"),
     Flag.withDefault(false),
   ),
   install: Flag.Boolean("install").pipe(

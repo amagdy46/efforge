@@ -1,4 +1,12 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
@@ -149,3 +157,24 @@ it.effect("writeTree fails with TargetNotEmpty on a non-empty dir, accepts an em
     expect(existsSync(join(dir, "c.txt"))).toBe(false)
   }).pipe(Effect.provide(NodeServices.layer)),
 )
+
+it("a non-empty target is refused before the confirm prompt", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {})
+  mkdirSync(join(tmp, "app"))
+  writeFileSync(join(tmp, "app", "mine.txt"), "keep")
+  const { s, p } = cli(
+    ["--no-install", "--no-git"],
+    ["app", "postgres", "drizzle", "none", "none", "none", []],
+  )
+  await p
+  expect(process.exitCode).toBe(1)
+  expect(s.shown.map((x) => x.id)).not.toContain("confirm")
+})
+
+it("--json without --dry-run keeps stdout JSON-only and writes the project", async () => {
+  const { s, p } = cli(["app", "--json", "--no-install", "--no-git", ...stackFlags])
+  await p
+  expect(s.output).toEqual([])
+  expect(Object.keys(JSON.parse(logs.join("\n"))).sort()).toEqual(["command", "files", "stack"])
+  expect(existsSync(join(tmp, "app", "efforge.jsonc"))).toBe(true)
+})
