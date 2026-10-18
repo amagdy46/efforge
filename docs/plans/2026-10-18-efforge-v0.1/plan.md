@@ -262,9 +262,9 @@ Each transform is a no-op when its edit is already present.
 
 **Blocked by:** 6
 
-- [ ] Add e2e cases `pg-drizzle` and `d1-effect-sql` (`auth=none`); run; expect fail
-- [ ] Implement; run; expect pass. For `pg-drizzle`, also run `docker compose up -d`, `pnpm db:migrate` and `pnpm dev`, and check `/app` lists notes
-- [ ] Commit
+- [x] Add e2e cases `pg-drizzle` and `d1-effect-sql` (`auth=none`); run; expect fail
+- [x] Implement; run; expect pass. For `pg-drizzle`, also run `docker compose up -d`, `pnpm db:migrate` and `pnpm dev`, and check `/app` lists notes
+- [x] Commit
 
 ### Task 8: Auth add-ons with organizations UI
 
@@ -282,10 +282,10 @@ Each transform is a no-op when its edit is already present.
 
 **Blocked by:** 7
 
-- [ ] Add e2e cases `pg-drizzle-orgs`, `pg-effect-sql-orgs` and `d1-drizzle-auth`; run; expect fail
-- [ ] Implement; run; expect pass
-- [ ] Add a Playwright check inside the e2e helper, gated by the env `EFFORGE_E2E_BROWSER=1`, against `pg-drizzle-orgs` running on `pnpm dev`. It must: sign up, create an org, invite (link shown), sign up a second user via the link, and see both members
-- [ ] Commit
+- [x] Add e2e cases `pg-drizzle-orgs`, `pg-effect-sql-orgs` and `d1-drizzle-auth`; run; expect fail
+- [x] Implement; run; expect pass
+- [x] Add a Playwright check inside the e2e helper, gated by the env `EFFORGE_E2E_BROWSER=1`, against `pg-drizzle-orgs` running on `pnpm dev`. It must: sign up, create an org, invite (link shown), sign up a second user via the link, and see both members
+- [x] Commit
 
 ### Task 9: Infra (alchemy vs wrangler)
 
@@ -300,11 +300,11 @@ Each transform is a no-op when its edit is already present.
 Database add-ons also declare `when: {infra:["alchemy"]}` transforms (`addAlchemyResource`) for Hyperdrive and D1.
 **Blocked by:** 8
 
-- [ ] Write a failing unit test in `test/generate.test.ts`:
+- [x] Write a failing unit test in `test/generate.test.ts`:
   - With `infra=alchemy`, there is no `wrangler.jsonc`, `alchemy.run.ts` contains a `Hyperdrive` resource, and `deploy.yml` exists.
   - With `infra=none`, `wrangler.jsonc` has a `hyperdrive` binding.
-- [ ] Add e2e case `pg-drizzle-orgs-alchemy`; implement; run both; expect pass (typecheck and build only, no deploy)
-- [ ] Commit
+- [x] Add e2e case `pg-drizzle-orgs-alchemy`; implement; run both; expect pass (typecheck and build only, no deploy)
+- [x] Commit
 
 ### Task 10: AI and extras add-ons
 
@@ -332,10 +332,10 @@ Database add-ons also declare `when: {infra:["alchemy"]}` transforms (`addAlchem
 Each extra registers its layer via `addLayer`, and its binding via `addWranglerBinding` or `addAlchemyResource` with `when`.
 **Blocked by:** 9
 
-- [ ] Turn on the Task 3 "every option has a folder" test; expect fail
-- [ ] Add the e2e case `house`: `postgres, drizzle, better-auth-orgs, alchemy, effect-ai-byok`, with every extra. This is the Spoorline stack. Expect fail
-- [ ] Implement each add-on; run unit tests and `pnpm test:e2e -t house`; expect pass. In CI, also check `docker build apps/browser`
-- [ ] Commit (one commit per add-on is fine)
+- [x] Turn on the Task 3 "every option has a folder" test; expect fail
+- [x] Add the e2e case `house`: `postgres, drizzle, better-auth-orgs, alchemy, effect-ai-byok`, with every extra. This is the Spoorline stack. Expect fail
+- [x] Implement each add-on; run unit tests and `pnpm test:e2e -t house`; expect pass. In CI, also check `docker build apps/browser`
+- [x] Commit (one commit per add-on is fine)
 
 ### Task 11: Interactive prompts and `create` command
 
@@ -361,14 +361,14 @@ Each extra registers its layer via `addLayer`, and its binding via `addWranglerB
 
 **Blocked by:** 4 (it can run in parallel with Tasks 6–10)
 
-- [ ] Write failing tests with a scripted `PromptIO` test layer:
+- [x] Write failing tests with a scripted `PromptIO` test layer:
   - The answer sequence with a back step yields the expected config.
   - `--database=none` means the orm and auth prompts are never shown.
   - `--auth=better-auth --database=none` fails with `IncompatibleStack`.
   - `-y` asks nothing.
   - `create --dry-run --json` prints valid JSON and writes nothing.
-- [ ] Implement; run `pnpm test`; expect pass. Run `node src/bin.ts` interactively once and record a short asciinema or a screenshot in the PR
-- [ ] Commit
+- [x] Implement; run `pnpm test`; expect pass. Run `node src/bin.ts` interactively once and record a short asciinema or a screenshot in the PR
+- [x] Commit
 
 ### Task 12: `add` command
 

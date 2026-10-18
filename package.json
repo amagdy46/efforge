@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node spike/main.ts",
+    "start": "node src/bin.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "vitest run -c vitest.e2e.config.ts",
