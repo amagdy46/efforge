@@ -1,6 +1,6 @@
 ---
 type: design
-status: draft
+status: approved
 created: 2026-10-18
 tags: [design, efforge]
 ---
@@ -125,6 +125,7 @@ Why now: Spoorline is about to start M0 (auth, workspaces, DB, infra, deploy). T
 
   Neon and Supabase become `database.provider` hints in v0.2. (my call)
 - **CI tiers:** unit tests on the rules and generator, plus snapshot tests of generated trees. On every PR, one curated set of about 6 stacks is fully installed, typechecked and built. Live deploys stay out of CI. (my call)
+- **Prompts support going back to the previous question**, grouped into sections, like better-t-stack's navigable group. Each prompt reads earlier answers to filter its options, and a flag skips its prompt. (user approved)
 - **No telemetry in v0.1. If it's added later, it's opt-in.** (my call)
 
 - **ORM is its own slot.** It is only asked when `database≠none`. (user asked for ORM options; options are my call)
