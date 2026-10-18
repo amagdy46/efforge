@@ -108,6 +108,11 @@ export const create = (opts: CreateOptions) =>
     yield* io.step("Writing files", writeTree(dir, tree))
     if (opts.install) {
       yield* io.step("Installing dependencies (pnpm install)", exec("pnpm", ["install"], dir))
+      // Transforms insert code and bindings without Biome's formatting or import order, so tidy
+      // them now: the first `pnpm lint` then passes. Anything Biome can't fix is the user's to see.
+      yield* io
+        .step("Formatting (biome)", exec("pnpm", ["exec", "biome", "check", "--write", "."], dir))
+        .pipe(Effect.catchTag("CommandFailed", () => Effect.void))
     }
     if (opts.git) {
       // Plain commit: whatever identity git is configured with. A failure here must not fail the scaffold.

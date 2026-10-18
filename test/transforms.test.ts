@@ -252,3 +252,110 @@ it("addWranglerBinding reports a missing file and a non-array key", async () => 
   expect(e.anchor).toContain("d1_databases")
   expect(e.snippet).toContain("DB")
 })
+
+it("addWranglerBinding supports a dotted key path and creates missing parents", async () => {
+  const doBinding: TransformCall = {
+    name: "addWranglerBinding",
+    args: { key: "durable_objects.bindings", value: '{"name":"ROOM","class_name":"Room"}' },
+  }
+  const tree = await once({ [WF]: '{\n  "name": "app"\n}\n' }, doBinding)
+  expect(parse(tree.get(WF) as string).durable_objects).toEqual({
+    bindings: [{ name: "ROOM", class_name: "Room" }],
+  })
+  const two = await once(
+    { [WF]: '{ "durable_objects": { "bindings": [{ "name": "MINE", "class_name": "M" }] } }' },
+    doBinding,
+  )
+  expect(parse(two.get(WF) as string).durable_objects.bindings).toHaveLength(2)
+  const e = (await fail(
+    new Map([[WF, '{"durable_objects": []}']]),
+    doBinding,
+  )) as TransformAnchorMissing
+  expect(e.anchor).toContain("durable_objects.bindings")
+})
+
+it("addWranglerBinding dedupes entries without binding or name by content", async () => {
+  const migration: TransformCall = {
+    name: "addWranglerBinding",
+    args: { key: "migrations", value: '{"tag":"realtime-v1","new_sqlite_classes":["Room"]}' },
+  }
+  const tree = await once({ [WF]: "{}" }, migration)
+  const two = await once(Object.fromEntries(tree), {
+    name: "addWranglerBinding",
+    args: { key: "migrations", value: '{"tag":"browser-v1","new_sqlite_classes":["B"]}' },
+  })
+  expect(parse(two.get(WF) as string).migrations).toHaveLength(2)
+})
+
+// ---- addExport
+const exp = (spec: string, from = "./room", file = "w.ts"): TransformCall => ({
+  name: "addExport",
+  args: { file, export: spec, from },
+})
+
+it("addExport appends a re-export, merges names into an existing one, and is idempotent", async () => {
+  const a = await once({ "w.ts": 'import x from "x"\nexport default x\n' }, exp("Room"))
+  expect(a.get("w.ts")).toBe('import x from "x"\nexport default x\nexport { Room } from "./room"\n')
+  const b = await once({ "w.ts": 'export { A } from "./room"\n' }, exp("B"))
+  expect(b.get("w.ts")).toBe('export { A, B } from "./room"\n')
+  const c = await once({ "w.ts": "export const a = 1" }, exp("*"))
+  expect(c.get("w.ts")).toBe('export const a = 1\nexport * from "./room"\n')
+  expect((await once({ "w.ts": 'export { A, B } from "./room"\n' }, exp("A, B"))).get("w.ts")).toBe(
+    'export { A, B } from "./room"\n',
+  )
+})
+
+it("addExport fails on a missing file", async () => {
+  const e = await fail(new Map(), exp("Room", "./room", "nope.ts"))
+  expect(e).toBeInstanceOf(TransformAnchorMissing)
+})
+
+// ---- addArrayItem
+const arr = (item = "storageRoute", extra: Record<string, string> = {}): TransformCall => ({
+  name: "addArrayItem",
+  args: { file: "r.ts", name: "workerRoutes", item, ...extra },
+})
+const routesSrc = (body = "/* efforge:routes */") =>
+  `export const workerRoutes: ReadonlyArray<string> = [${body}]\n`
+
+it("addArrayItem appends to the named array, adds the import, and is idempotent", async () => {
+  const a = await once(
+    { "r.ts": routesSrc() },
+    arr("storageRoute", { import: "storageRoute", from: "./storage" }),
+  )
+  expect(a.get("r.ts")).toBe(
+    `import { storageRoute } from "./storage"\n${routesSrc("/* efforge:routes */ storageRoute")}`,
+  )
+  const b = await run(a, arr("roomRoute"))
+  expect(b.get("r.ts")).toContain("/* efforge:routes */ storageRoute, roomRoute]")
+})
+
+it("addArrayItem keeps user formatting in multi-line arrays", async () => {
+  const src = routesSrc("\n  mine,\n  other(),\n")
+  const t = await once({ "r.ts": src }, arr())
+  expect(t.get("r.ts")).toContain("  other(),\n  storageRoute,\n]")
+})
+
+it("addArrayItem fails when the array is missing", async () => {
+  const e = await fail(new Map([["r.ts", "export const x = 1\n"]]), arr())
+  expect(e).toBeInstanceOf(TransformAnchorMissing)
+  expect((e as TransformAnchorMissing).anchor).toContain("workerRoutes")
+})
+
+// ---- setWranglerValue
+const setDev: TransformCall = {
+  name: "setWranglerValue",
+  args: { key: "dev.enable_containers", value: "false" },
+}
+
+it("setWranglerValue sets a dotted path when absent, keeps comments, and never overwrites", async () => {
+  const tree = await once({ [WF]: '{\n  // keep\n  "name": "app"\n}\n' }, setDev)
+  expect(tree.get(WF)).toContain("// keep")
+  expect(parse(tree.get(WF) as string).dev).toEqual({ enable_containers: false })
+  const mine = await once({ [WF]: '{ "dev": { "enable_containers": true } }' }, setDev)
+  expect(parse(mine.get(WF) as string).dev.enable_containers).toBe(true)
+})
+
+it("setWranglerValue reports a missing file", async () => {
+  expect(((await fail(new Map(), setDev)) as TransformAnchorMissing).anchor).toBe("file")
+})

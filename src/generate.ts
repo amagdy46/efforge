@@ -119,6 +119,8 @@ export const generate = (
               }),
           })
           const deps = { ...((pkg[key] as Record<string, string> | undefined) ?? {}) }
+          // a Docker build context can't see the root catalog, so such a package pins exact versions
+          const standalone = tree.has(`${pkgDir === "." ? "" : `${pkgDir}/`}Dockerfile`)
           for (const name of names) {
             if (versions[name] === undefined)
               return yield* new GenerateError({
@@ -126,8 +128,11 @@ export const generate = (
                 package: name,
                 message: `${manifest.id} uses "${name}", which has no entry in versions.ts`,
               })
-            deps[name] = "catalog:"
-            used.add(name)
+            if (standalone) deps[name] = versions[name]
+            else {
+              deps[name] = "catalog:"
+              used.add(name)
+            }
           }
           tree = new Map(tree).set(target, json({ ...pkg, [key]: sortKeys(deps) }))
         }

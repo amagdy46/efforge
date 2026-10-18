@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { widgets } from "@/components/widgets"
 import { getGreeting } from "@/server/greeting"
 
 export const Route = createFileRoute("/app/")({
@@ -20,6 +21,7 @@ function Dashboard() {
           </CardDescription>
         </CardHeader>
       </Card>
+      {widgets}
     </div>
   )
 }
