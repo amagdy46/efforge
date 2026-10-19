@@ -1,10 +1,18 @@
-# efforge
+<p align="center">
+  <img src="https://raw.githubusercontent.com/amagdy46/efforge/main/.github/assets/logo.svg" width="96" height="96" alt="efforge logo: three stacked layers, the top one glowing orange">
+</p>
 
-[![npm](https://img.shields.io/npm/v/create-efforge)](https://www.npmjs.com/package/create-efforge)
-[![CI](https://github.com/amagdy46/efforge/actions/workflows/ci.yml/badge.svg)](https://github.com/amagdy46/efforge/actions/workflows/ci.yml)
-[![license](https://img.shields.io/npm/l/create-efforge)](https://github.com/amagdy46/efforge/blob/main/LICENSE)
+<h1 align="center">efforge</h1>
 
-Start an [Effect](https://effect.website) app with database, auth, and Cloudflare services already wired together.
+<p align="center">
+  Start an <a href="https://effect.website">Effect</a> app with database, auth, and Cloudflare services already wired together.
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/create-efforge"><img src="https://img.shields.io/npm/v/create-efforge" alt="npm version"></a>
+  <a href="https://github.com/amagdy46/efforge/actions/workflows/ci.yml"><img src="https://github.com/amagdy46/efforge/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://github.com/amagdy46/efforge/blob/main/LICENSE"><img src="https://img.shields.io/github/license/amagdy46/efforge" alt="MIT license"></a>
+</p>
 
 `npm create efforge` generates a TypeScript monorepo: a [TanStack Start](https://tanstack.com/start) app on Cloudflare Workers, where each capability is an Effect service and layer. You choose the database, ORM, auth, infrastructure tool, AI and extras when you create the project, and `efforge add` adds more later.
 
