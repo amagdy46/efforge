@@ -1,6 +1,6 @@
 # Contributing to efforge
 
-Needs Node 24.11 or newer and pnpm 12.
+Needs Node 24.11+ or 26+ (not 25) and pnpm 12.
 
 ```sh
 pnpm install

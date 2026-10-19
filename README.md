@@ -16,7 +16,7 @@
 
 `npm create efforge` generates a TypeScript monorepo: a [TanStack Start](https://tanstack.com/start) app on Cloudflare Workers, where each capability is an Effect service and layer. You choose the database, ORM, auth, infrastructure tool, AI and extras when you create the project, and `efforge add` adds more later.
 
-Status: v0.1, early. The default ORM (Drizzle) is pinned to a release candidate, and the optional Alchemy support uses a beta. Needs Node 24.11+ and pnpm. MIT licensed.
+Status: v0.1, early. The default ORM (Drizzle) is pinned to a release candidate, and the optional Alchemy support uses a beta. Needs Node 24.11+ or 26+ (Vite+ does not support Node 25) and pnpm. MIT licensed.
 
 ```console
 $ npm create efforge my-app -- --yes --database=d1 --orm=effect-sql --auth=better-auth --extras=storage
