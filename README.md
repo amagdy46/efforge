@@ -44,7 +44,7 @@ $ npm create efforge my-app -- --yes --database=d1 --orm=effect-sql --auth=bette
 
 ## Why efforge
 
-Several scaffolders already cover parts of this stack. [Better-T-Stack](https://www.better-t-stack.dev) offers TanStack Start, Workers, a choice of database and auth, Alchemy, and add-ons after creation. [create-effect-app](https://github.com/Effect-TS/examples) gives you a basic, CLI or monorepo Effect project. `npm create cloudflare` gives you a TanStack Start app on Workers.
+Other scaffolders cover parts of this stack. [create-effect-app](https://github.com/Effect-TS/examples) gives you a basic, CLI or monorepo Effect project. `npm create cloudflare` gives you a TanStack Start app on Workers.
 
 efforge is narrower: it is for writing the whole server side in Effect, on Cloudflare.
 
