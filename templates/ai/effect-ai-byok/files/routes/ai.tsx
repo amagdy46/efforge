@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router"
-import { type FormEvent, useState } from "react"
+import { type SubmitEvent, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -56,7 +56,7 @@ function AiSettings() {
   const { canManage, configured, last4 } = settings
   const needsUrl = provider === "ollama" || provider === "openai"
 
-  async function save(event: FormEvent<HTMLFormElement>) {
+  async function save(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = event.currentTarget
     const data = new FormData(form)
@@ -113,7 +113,7 @@ function AiSettings() {
           </p>
         )}
         {canManage ? (
-          <form onSubmit={save} className="space-y-4">
+          <form onSubmit={(event) => void save(event)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="ai-provider">Provider</Label>
               <select
@@ -172,10 +172,10 @@ function AiSettings() {
               <Button type="submit">Save</Button>
               {configured ? (
                 <>
-                  <Button type="button" variant="outline" onClick={test}>
+                  <Button type="button" variant="outline" onClick={() => void test()}>
                     Test
                   </Button>
-                  <Button type="button" variant="outline" onClick={clear}>
+                  <Button type="button" variant="outline" onClick={() => void clear()}>
                     Remove key
                   </Button>
                 </>

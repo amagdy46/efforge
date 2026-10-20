@@ -12,6 +12,7 @@ Adopted in the generated project:
 
 - `lint/effect-tests.js`, a local oxlint JS plugin: `Effect.run*` and `ManagedRuntime.make` in `*.test.ts(x)` are errors; tests use `it.effect` and `it.layer`. Adapted from rat-stack's `scripts/oxlint-plugin-effect-tests.ts`. The `effect-ai-byok` crypto test was rewritten to comply.
 - `no-restricted-imports` for `env` from `cloudflare:workers`, switched off for `apps/web/src/server/cloudflare.ts`. The "only cloudflare.ts reads env" rule was documentation; now lint enforces it.
+- Two rules from Ultracite's oxlint preset (rat-stack lints with Ultracite): `typescript/no-deprecated` and `typescript/no-misused-promises`. On the generated house stack they found 6 uses of React's deprecated `FormEvent` (now `SubmitEvent`) and 14 async event handlers passed where React expects a void return (now `() => void handler()`). The rest of Ultracite was not adopted: on that stack its `core`, `react` and `anti-slop` presets reported 895 issues in 90 files, nearly all style, several against Effect idiom (`func-names` flags every `Effect.gen(function* () {})`), and its oxfmt preset would replace the Vite+ format settings from 0001.
 - `AGENTS.md`: a Tests section (test layers rather than module mocks, check workerd behaviour under `pnpm dev` where a fake can differ) and "model lifecycles as tagged states, not boolean flags".
 
 Not adopted, for now:

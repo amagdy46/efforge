@@ -5,11 +5,13 @@
 ### Added
 
 - Generated projects lint two rules that `AGENTS.md` only described before: `Effect.run*` and `ManagedRuntime.make` in test files (a local oxlint plugin, `lint/effect-tests.js`), and importing `env` from `cloudflare:workers` outside `server/cloudflare.ts`.
+- Generated projects lint `typescript/no-deprecated` and `typescript/no-misused-promises`.
 - The generated `AGENTS.md` has a Tests section and asks for lifecycles as tagged states. See `docs/decisions/0003-rat-stack-learnings.md`.
 
 ### Changed
 
 - The `effect-ai-byok` crypto test uses `it.effect` instead of `Effect.runPromise`.
+- Template forms and buttons use React's `SubmitEvent` instead of the deprecated `FormEvent`, and wrap async handlers as `() => void handler()`.
 
 ## 0.1.0 (2026-10-19)
 

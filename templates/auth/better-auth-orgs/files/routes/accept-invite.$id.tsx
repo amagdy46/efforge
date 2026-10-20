@@ -60,7 +60,7 @@ function AcceptInvite() {
           {error}
         </p>
       )}
-      <Button className="w-full" onClick={accept} disabled={pending}>
+      <Button className="w-full" onClick={() => void accept()} disabled={pending}>
         Accept invitation
       </Button>
     </AuthCard>

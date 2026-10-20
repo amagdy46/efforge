@@ -47,7 +47,7 @@ export function OrgSwitcher({
       <DropdownMenuContent align="start" className="w-56">
         <DropdownMenuLabel>Organizations</DropdownMenuLabel>
         {organizations.map((org) => (
-          <DropdownMenuItem key={org.id} onSelect={() => select(org.id)}>
+          <DropdownMenuItem key={org.id} onSelect={() => void select(org.id)}>
             <span className="flex-1 truncate">{org.name}</span>
             {org.id === activeId ? <Check className="size-4" /> : null}
           </DropdownMenuItem>

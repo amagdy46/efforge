@@ -21,6 +21,8 @@ export default defineConfig({
     rules: {
       "typescript/no-explicit-any": "error",
       "typescript/no-floating-promises": "error",
+      "typescript/no-misused-promises": "error",
+      "typescript/no-deprecated": "error",
       "no-unused-vars": "error",
       "react/exhaustive-deps": "error",
       "no-console": ["error", { allow: ["warn", "error"] }],
