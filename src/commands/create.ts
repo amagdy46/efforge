@@ -1,13 +1,15 @@
+import { readdirSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { Console, Context, Effect, FileSystem, Option, Path } from "effect"
+import { Console, Context, Effect, Option, Path, Schema } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import pc from "picocolors"
 import { loadAddons } from "../addon.ts"
-import { exec } from "../exec.ts"
+import { exec, has } from "../exec.ts"
 import { generate } from "../generate.ts"
 import { askStack, DEFAULT_NAME, type StackFlags } from "../prompts/flow.ts"
 import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
+import { projectDirName } from "../projectName.ts"
 import { generateRouteTree } from "../routeTree.ts"
 import { slots } from "../slots.ts"
 import { type StackConfig, toCommand } from "../stack.ts"
@@ -49,20 +51,66 @@ const silentIO = (io: PromptIOShape): PromptIOShape => ({
   intro: () => Effect.void,
   section: () => Effect.void,
   info: () => Effect.void,
+  warn: () => Effect.void,
   note: () => Effect.void,
   outro: () => Effect.void,
   step: (_label, eff) => eff,
+  task: (_label, eff) => eff(() => {}),
 })
 
 /** Files `vp fmt` can format; the lockfile and dotfiles like .gitignore are left alone. */
 const formattable = /\.(?:tsx?|jsx?|json|jsonc|css|md)$/
+
+/** pnpm is required; checked before any prompt so nobody answers everything and then fails. */
+export class PnpmMissing extends Schema.TaggedError<PnpmMissing>()("PnpmMissing", {}) {}
+
+/** A post-write step failed: the files are on disk, `remaining` finishes the setup by hand. */
+export class SetupIncomplete extends Schema.TaggedError<SetupIncomplete>()("SetupIncomplete", {
+  dir: Schema.String,
+  command: Schema.String,
+  output: Schema.String,
+  remaining: Schema.Array(Schema.String),
+}) {}
+
+/** Node versions Vite+ supports; mirrors `engines` in package.json. */
+const nodeSupported = (version: string): boolean => {
+  const [major = 0, minor = 0] = version.replace(/^v/, "").split(".").map(Number)
+  return (major === 24 && minor >= 11) || major >= 26
+}
+
+/** What to run after `create`, for this stack. */
+export const nextSteps = (
+  stack: StackConfig,
+  o: { readonly dirName: string; readonly inPlace: boolean; readonly installed: boolean },
+): string => {
+  const steps: Array<[string, string?]> = []
+  if (!o.inPlace) steps.push([`cd ${o.dirName}`])
+  if (!o.installed) steps.push(["pnpm install"])
+  if (stack.infra === "alchemy") {
+    steps.push(["cp .env.example .env", "local values for Alchemy"])
+    if (stack.database === "postgres") steps.push(["docker compose up -d --wait", "local Postgres"])
+    if (stack.database !== "none") steps.push(["pnpm db:migrate"])
+    steps.push(["pnpm dev", "alchemy dev; deploying: see infra/README.md"])
+  } else {
+    if (stack.database === "postgres") steps.push(["docker compose up -d --wait", "local Postgres"])
+    if (stack.database !== "none")
+      steps.push(["pnpm db:migrate", stack.database === "d1" ? "local D1" : undefined])
+    steps.push(["pnpm dev", "http://localhost:5173"])
+  }
+  const width = Math.max(...steps.map(([c]) => c.length))
+  return steps
+    .map(
+      ([c, note]) =>
+        `  ${pc.cyan(c)}${note === undefined ? "" : `  ${" ".repeat(width - c.length)}${pc.dim(`# ${note}`)}`}`,
+    )
+    .join("\n")
+}
 
 /** validate -> generate -> (dry-run | write -> git init -> pnpm install -> route tree -> format -> commit). */
 export const create = (opts: CreateOptions) =>
   Effect.gen(function* () {
     const live = yield* PromptIO
     const path = yield* Path.Path
-    const fs = yield* FileSystem.FileSystem
     const templatesDir = yield* TemplatesDir
     // --json must keep stdout machine-readable: it never prompts and prints no chrome.
     const quiet = opts.json
@@ -71,17 +119,44 @@ export const create = (opts: CreateOptions) =>
 
     if (!quiet)
       yield* io.intro(
-        `${pc.bgCyan(pc.black(" create-efforge "))}${pc.dim("  Effect apps on Cloudflare, already wired")}`,
+        `${pc.bgCyan(pc.black(" efforge "))}${pc.dim("  Effect apps on Cloudflare, already wired")}`,
       )
 
-    const stack = yield* askStack(opts.flags, io, { yes })
-    const command = toCommand(stack)
-    const dirName = stack.name.split("/").pop() ?? stack.name
-    const dir = path.resolve(dirName)
-    // Fail before generating (and before the confirm prompt) rather than after the user answered everything.
-    if (!opts.dryRun && (yield* fs.exists(dir)) && (yield* fs.readDirectory(dir)).length > 0) {
-      return yield* new TargetNotEmpty({ dir })
+    // `.` scaffolds into the current directory, named after it.
+    const inPlace = opts.flags.name === "."
+    const flags = inPlace ? { ...opts.flags, name: path.basename(process.cwd()) } : opts.flags
+
+    let git = opts.git
+    if (!opts.dryRun) {
+      if (!nodeSupported(process.version))
+        yield* io.warn(
+          `Node ${process.version} isn't supported by the generated project (Vite+ needs Node 24.11+ or 26+).`,
+        )
+      if (opts.install && !(yield* has("pnpm", process.cwd()))) return yield* new PnpmMissing()
+      if (git && !(yield* has("git", process.cwd()))) {
+        yield* io.warn("git isn't installed: skipping git init and the initial commit.")
+        git = false
+      }
     }
+
+    const targetFor = (name: string) =>
+      inPlace ? process.cwd() : path.resolve(projectDirName(name))
+    const stack = yield* askStack(flags, io, {
+      yes,
+      checkName: opts.dryRun
+        ? undefined
+        : (name) => {
+            const dir = targetFor(name)
+            return isOccupied(dir)
+              ? `${path.relative(process.cwd(), dir) || "."} already exists and isn't empty; pick another name`
+              : undefined
+          },
+    })
+    const command = toCommand(stack)
+    const dirName = projectDirName(stack.name)
+    const dir = targetFor(stack.name)
+    // Fail before generating (and before the confirm prompt) rather than after the user answered everything.
+    if (!opts.dryRun && isOccupied(dir)) return yield* new TargetNotEmpty({ dir })
     const addons = yield* loadAddons(templatesDir)
     const tree = yield* generate(stack, addons)
     const files = [...tree.keys()].toSorted()
@@ -91,86 +166,128 @@ export const create = (opts: CreateOptions) =>
         yield* Console.log(JSON.stringify({ stack, command, files }, null, 2))
       } else {
         yield* io.note(summary(stack), "Your stack")
-        yield* Console.log(files.join("\n"))
-        yield* io.outro(`${pc.dim("dry run: nothing written")}  ${command}`)
+        yield* io.note(files.join("\n"), `${files.length} files`)
+        yield* io.outro(
+          `${pc.dim("dry run: nothing written.")} Run it for real:\n  ${command.replace(/ --dry-run\b/, "")}`,
+        )
       }
       return
     }
 
-    yield* io.note(
-      `${summary(stack)}\n\n${pc.dim("re-run non-interactively:")}\n${command}`,
-      "Your stack",
-    )
+    yield* io.note(summary(stack), "Your stack")
     if (!yes) {
-      const ok = yield* io.confirm({ id: "confirm", message: "Create it?", initial: true })
+      const ok = yield* io.confirm({
+        id: "confirm",
+        message: `Create it in ${inPlace ? "this directory" : `./${dirName}`}?`,
+        initial: true,
+      })
       if (ok !== true) {
         yield* io.outro("Nothing written.")
         return
       }
     }
 
-    yield* io.step("Writing files", writeTree(dir, tree))
-    // Init before formatting: oxfmt honors .gitignore files up the directory tree, so a project
-    // outside any repo would otherwise pick up a parent's ignore rules (a `*` hides every file).
-    // A failure here must not fail the scaffold.
-    const gitReady = opts.git
-      ? yield* io.step("Initializing git", exec("git", ["init"], dir)).pipe(
-          Effect.as(true),
-          Effect.catchTag("CommandFailed", (e) =>
-            io
-              .info(
-                `git setup skipped: ${e.command} failed. ${e.output.trim().split("\n")[0] ?? ""}`,
-              )
-              .pipe(Effect.as(false)),
-          ),
-        )
-      : false
-    if (opts.install) {
-      yield* io.step("Installing dependencies (pnpm install)", exec("pnpm", ["install"], dir))
-      // routeTree.gen.ts isn't committed to templates: write it now, so typecheck and format see it.
-      yield* io
-        .step("Generating the route tree (tsr generate)", generateRouteTree(dir))
-        .pipe(
-          Effect.catchTag("CommandFailed", (e) =>
-            io.info(
-              `route tree skipped: ${e.command} failed. ${e.output.trim().split("\n")[0] ?? ""}; \`pnpm typecheck\` regenerates it`,
+    const remaining: string[] = []
+    const setup = Effect.gen(function* () {
+      yield* io.step(`Writing ${files.length} files`, writeTree(dir, tree))
+      // Init before formatting: oxfmt honors .gitignore files up the directory tree, so a project
+      // outside any repo would otherwise pick up a parent's ignore rules (a `*` hides every file).
+      // A failure here must not fail the scaffold.
+      const gitReady = git
+        ? yield* io.step("Initializing git", exec("git", ["init"], dir)).pipe(
+            Effect.as(true),
+            Effect.catchTag("CommandFailed", (e) =>
+              io
+                .info(
+                  `git setup skipped: ${e.command} failed. ${e.output.trim().split("\n")[0] ?? ""}`,
+                )
+                .pipe(Effect.as(false)),
             ),
-          ),
+          )
+        : false
+      if (opts.install) {
+        remaining.push("pnpm install", "pnpm format")
+        if (gitReady) remaining.push("git add -A && git commit -m 'Initial commit'")
+        yield* io.task("Installing dependencies (pnpm install)", (log) =>
+          exec("pnpm", ["install"], dir, log),
         )
-      // Transforms insert code and bindings unformatted, so tidy them now: the first `pnpm check`
-      // passes. Without a repo of its own, a parent repo's ignore rules could hide every file, so
-      // name the files: explicit paths bypass ignore files. Anything oxfmt can't fix is the user's to see.
-      const targets = gitReady ? [] : files.filter((f) => formattable.test(f))
-      yield* io
-        .step("Formatting (vp fmt)", exec("pnpm", ["format", ...targets], dir))
-        .pipe(Effect.catchTag("CommandFailed", () => Effect.void))
-    }
-    if (gitReady) {
-      // Plain commit: whatever identity git is configured with.
-      yield* io
-        .step(
-          "Creating the initial commit",
-          Effect.gen(function* () {
-            yield* exec("git", ["add", "-A"], dir)
-            yield* exec("git", ["commit", "-m", "Initial commit from efforge"], dir)
+        remaining.shift()
+        // routeTree.gen.ts isn't committed to templates: write it now, so typecheck and format see it.
+        yield* io
+          .step("Generating the route tree", generateRouteTree(dir))
+          .pipe(
+            Effect.catchTag("CommandFailed", (e) =>
+              io.info(
+                `route tree skipped: ${e.command} failed. ${e.output.trim().split("\n")[0] ?? ""}; \`pnpm typecheck\` regenerates it`,
+              ),
+            ),
+          )
+        // Transforms insert code and bindings unformatted, so tidy them now: the first `pnpm check`
+        // passes. Without a repo of its own, a parent repo's ignore rules could hide every file, so
+        // name the files: explicit paths bypass ignore files. Anything oxfmt can't fix is the user's to see.
+        const targets = gitReady ? [] : files.filter((f) => formattable.test(f))
+        yield* io
+          .step("Formatting", exec("pnpm", ["format", ...targets], dir))
+          .pipe(Effect.catchTag("CommandFailed", () => Effect.void))
+        remaining.shift()
+      }
+      if (gitReady) {
+        // Plain commit: whatever identity git is configured with.
+        yield* io
+          .step(
+            "Creating the initial commit",
+            Effect.gen(function* () {
+              yield* exec("git", ["add", "-A"], dir)
+              yield* exec("git", ["commit", "-m", "Initial commit from efforge"], dir)
+            }),
+          )
+          .pipe(
+            Effect.catchTag("CommandFailed", (e) =>
+              io.info(
+                `git commit skipped: ${e.command} failed. ${e.output.trim().split("\n")[0] ?? ""}${/identity|user\.(name|email)/i.test(e.output) ? " Set git config user.name and user.email, then commit." : ""}`,
+              ),
+            ),
+          )
+        remaining.length = 0
+      }
+    })
+    yield* setup.pipe(
+      Effect.catchTag("CommandFailed", (e) =>
+        Effect.fail(
+          new SetupIncomplete({
+            dir,
+            command: e.command,
+            output: e.output,
+            remaining: [...remaining],
           }),
-        )
-        .pipe(
-          Effect.catchTag("CommandFailed", (e) =>
-            io.info(
-              `git commit skipped: ${e.command} failed. ${e.output.trim().split("\n")[0] ?? ""}`,
-            ),
-          ),
-        )
-    }
+        ),
+      ),
+      Effect.onInterrupt(() =>
+        io.warn(
+          `Stopped. ./${dirName} is only partly set up: delete it, or finish with${remaining.length === 0 ? " nothing more" : `:\n  ${remaining.join("\n  ")}`}`,
+        ),
+      ),
+    )
+
     if (opts.json) {
       yield* Console.log(JSON.stringify({ stack, command, files }, null, 2))
       return
     }
+    yield* io.note(nextSteps(stack, { dirName, inPlace, installed: opts.install }), "Next steps")
     yield* io.outro(
-      `${pc.green("Done.")}\n\n  cd ${dirName}\n  ${opts.install ? "" : "pnpm install\n  "}pnpm dev\n\n${pc.dim("Same stack later:")} ${command}`,
+      `${pc.green("Done.")} ${pc.dim("Add more later:")} npx create-efforge add <add-on>  ${pc.dim("(efforge list shows them)")}\n   ${pc.dim("Same stack again:")} ${command}`,
     )
   })
+
+/** Exists and has something in it besides `.git` and OS clutter. */
+export const isOccupied = (dir: string): boolean => {
+  try {
+    return readdirSync(dir).some((f) => !ignorable.has(f))
+  } catch {
+    return false
+  }
+}
+const ignorable = new Set([".git", ".DS_Store", "Thumbs.db"])
 
 // --- CLI -----------------------------------------------------------------------
 
@@ -261,32 +378,58 @@ export const toCreateOptions = (input: {
   git: input.git,
 })
 
+const flagHint = (id: string, options: ReadonlyArray<string>): string =>
+  id === "name"
+    ? "pass a project name"
+    : id === "confirm"
+      ? "pass --yes to create without confirming"
+      : `pass --${id}=${options.join("|")}${id === "extras" ? " (comma-separated, or --extras= for none)" : ""}`
+
 const describe = (
   e: { readonly _tag: string; readonly message?: string } & Record<string, unknown>,
 ): string => {
   switch (e._tag) {
-    case "IncompatibleStack":
-      return `--${String(e.slot)}=${String(e.value)} isn't available with the other choices. Options: ${(e.allowed as string[]).join(", ")}${typeof e.reason === "string" ? `. ${e.reason}` : ""}`
+    case "IncompatibleStack": {
+      const slot = slots.find((x) => x.id === e.slot)
+      const known = slot?.options.some((o) => o.id === e.value) ?? false
+      const allowed = (e.allowed as string[]).join(", ")
+      return known
+        ? `--${String(e.slot)}=${String(e.value)} can't be used here${typeof e.reason === "string" ? `: ${e.reason}` : ""}. Options: ${allowed}`
+        : `Unknown --${String(e.slot)}=${String(e.value)}. Options: ${allowed}`
+    }
+    case "InvalidProjectName":
+      return String(e.message)
     case "TargetNotEmpty":
-      return `${String(e.dir)} already exists and is not empty. Pick another name or remove it.`
-    case "CommandFailed":
-      return `\`${String(e.command)}\` failed. The project was written; run it yourself.\n${String(e.output).trim()}`
+      return `${String(e.dir)} already exists and isn't empty. Pick another name or remove it.`
+    case "NeedsInput":
+      return `No terminal to ask for "${String(e.id)}": ${flagHint(String(e.id), e.options as string[])}, or --yes to accept the defaults.`
+    case "PnpmMissing":
+      return "efforge projects use pnpm, and it isn't on your PATH. Install it (corepack enable pnpm, or https://pnpm.io/installation) and re-run, or pass --no-install."
+    case "SetupIncomplete": {
+      const rest = e.remaining as string[]
+      return `\`${String(e.command)}\` failed. The files are in ${String(e.dir)}${rest.length > 0 ? `; to finish, run there:\n  ${rest.join("\n  ")}` : "."}\n\n${String(e.output).trim().split("\n").slice(-15).join("\n")}`
+    }
     default:
       return e.message ?? e._tag
   }
 }
 
-/** Command handler: reports failures as one clear line and exit code 1; cancelling exits 0. */
+/** Command handler: one clear error and exit code 1; cancelling exits 130 like any Ctrl-C. */
 export const createHandler = (input: Parameters<typeof toCreateOptions>[0]) =>
   create(toCreateOptions(input)).pipe(
     Effect.catch((e) =>
       Effect.gen(function* () {
         const io = yield* PromptIO
-        if (e._tag === "Cancelled") return yield* io.outro("Cancelled.")
-        yield* Console.error(pc.red(describe(e as never)))
+        const cancelled = e._tag === "Cancelled"
         yield* Effect.sync(() => {
-          process.exitCode = 1
+          process.exitCode = cancelled ? 130 : 1
         })
+        if (cancelled) return yield* io.outro("Cancelled. Nothing written.")
+        if (input.json)
+          return yield* Console.log(
+            JSON.stringify({ error: { code: e._tag, message: describe(e as never) } }, null, 2),
+          )
+        yield* Console.error(pc.red(describe(e as never)))
       }),
     ),
   )

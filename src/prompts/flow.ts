@@ -1,8 +1,8 @@
 import { Effect, Schema } from "effect"
 import { IncompatibleStack, validate } from "../rules.ts"
-import { available, type OptionDef, slots } from "../slots.ts"
+import { available, type OptionDef, slots, whyUnavailable } from "../slots.ts"
 import { ProjectName, type SlotId, type StackConfig } from "../stack.ts"
-import { type Cancelled, GoBack, type PromptIOShape } from "./navigable.ts"
+import { GoBack, type PromptError, type PromptIOShape } from "./navigable.ts"
 
 export class InvalidProjectName extends Schema.TaggedError<InvalidProjectName>()(
   "InvalidProjectName",
@@ -24,6 +24,8 @@ export interface StackFlags {
 export interface AskOptions {
   /** Accept defaults for everything a flag didn't set. */
   readonly yes?: boolean | undefined
+  /** Extra check on the project name (e.g. the target directory is not empty), run while prompting. */
+  readonly checkName?: ((name: string) => string | undefined) | undefined
 }
 
 export const DEFAULT_NAME = "my-app"
@@ -32,7 +34,9 @@ const nameError = (name: string): string | undefined => {
   const r = Schema.decodeUnknownExit(ProjectName)(name)
   return r._tag === "Success"
     ? undefined
-    : "Use a valid npm package name: lowercase letters, digits, - . _ ~ (optionally @scope/name), no '..'"
+    : name.includes("/") && !name.startsWith("@")
+      ? `"${name}" is a path; run efforge from the parent directory and pass just the name`
+      : `"${name}" isn't a valid npm package name: use lowercase letters, digits, - . _ ~ (optionally @scope/name)`
 }
 
 type Draft = Record<string, string | ReadonlyArray<string>>
@@ -52,7 +56,7 @@ export const askStack = (
   flags: StackFlags,
   io: PromptIOShape,
   opts: AskOptions = {},
-): Effect.Effect<StackConfig, Cancelled | IncompatibleStack | InvalidProjectName> =>
+): Effect.Effect<StackConfig, PromptError | IncompatibleStack | InvalidProjectName> =>
   Effect.gen(function* () {
     // 1. name
     let name = flags.name
@@ -64,7 +68,7 @@ export const askStack = (
           message: "Project name",
           placeholder: DEFAULT_NAME,
           defaultValue: DEFAULT_NAME,
-          validate: nameError,
+          validate: (n) => nameError(n) ?? opts.checkName?.(n),
         })
         name = answer === GoBack ? DEFAULT_NAME : answer
       }
@@ -88,10 +92,15 @@ export const askStack = (
         const values = typeof flag === "string" ? [flag] : flag
         for (const value of values) {
           if (!ids.includes(value)) {
-            return yield* new IncompatibleStack({ slot: slot.id, value, allowed: ids })
+            const reason = whyUnavailable(slot.id, value, draft)
+            return yield* new IncompatibleStack(
+              reason === undefined
+                ? { slot: slot.id, value, allowed: ids }
+                : { slot: slot.id, value, allowed: ids, reason },
+            )
           }
         }
-        draft[slot.id] = slot.multi ? values : flag
+        draft[slot.id] = slot.multi ? [...new Set(values)] : flag
         i++
         continue
       }

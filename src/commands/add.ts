@@ -21,7 +21,8 @@ import {
   type TransformAnchorMissing,
   type UnknownTransform,
 } from "../transforms/index.ts"
-import { versions } from "../versions.ts"
+import { PromptIO } from "../prompts/navigable.ts"
+import { efforgeVersion, versions } from "../versions.ts"
 import { TemplatesDir } from "./create.ts"
 
 export class NotAnEfforgeProject extends Schema.TaggedError<NotAnEfforgeProject>()(
@@ -45,12 +46,24 @@ export interface AddOptions {
 export interface AddResult {
   /** Overlay files created or replaced, plus package.json, workspace, env and manifest updates. */
   readonly written: string[]
+  /** The subset of `written` that didn't exist before. */
+  readonly created: string[]
   /** Existing seam files edited by transforms. */
   readonly transformed: string[]
   /** Ids already in the stack, and overlays that already match. */
   readonly skipped: string[]
   /** Generated files the add-on replaces (e.g. wrangler.jsonc for infra/alchemy). */
   readonly removed: string[]
+  /** Add-ons this run added, for the summary and next steps. */
+  readonly added: ReadonlyArray<{
+    readonly id: string
+    readonly title: string
+    readonly docs?: string
+  }>
+  /** Env vars this run added to `.env.example`. */
+  readonly envVars: ReadonlyArray<{ readonly name: string; readonly description: string }>
+  /** `<package.json>: <script>` entries whose existing command an add-on replaced. */
+  readonly replacedScripts: string[]
 }
 
 export type AddError =
@@ -74,14 +87,42 @@ const allIds = slots.flatMap((s) =>
   s.options.filter((o) => o.id !== "none").map((o) => `${s.id}/${o.id}`),
 )
 
+/** Edit distance, for "did you mean". */
+const distance = (a: string, b: string): number => {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0] as number
+    row[0] = i
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = row[j] as number
+      row[j] = Math.min(
+        (row[j] as number) + 1,
+        (row[j - 1] as number) + 1,
+        prev + (a[i - 1] === b[j - 1] ? 0 : 1),
+      )
+      prev = tmp
+    }
+  }
+  return row[b.length] as number
+}
+
+const suggest = (id: string): string | undefined => {
+  const best = allIds
+    .flatMap((full) => [full, full.split("/")[1] as string])
+    .map((c) => [c, distance(id, c)] as const)
+    .toSorted((a, b) => a[1] - b[1])[0]
+  return best !== undefined && best[1] <= 3 ? best[0] : undefined
+}
+
 const isNewPackageJson = (target: string) => target.endsWith("/package.json")
 
 const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
 /** `email`, `extras/email`, `ai/effect-ai-byok`, `ai=effect-ai-byok` -> slot + option. */
 const parseId = (
-  id: string,
+  raw: string,
 ): Effect.Effect<{ slot: SlotDef; option: string }, IncompatibleStack> => {
+  const id = raw.trim().toLowerCase()
   const [slotPart, option = ""] = id.includes("=")
     ? id.split("=", 2)
     : id.includes("/")
@@ -93,7 +134,12 @@ const parseId = (
     (s) => (slotPart === undefined || s.id === slotPart) && s.options.some((o) => o.id === option),
   )
   const [first] = candidates
-  if (first === undefined) return unknown(`"${id}" is not an add-on.`)
+  if (first === undefined) {
+    const guess = suggest(id)
+    return unknown(
+      `"${raw}" is not an add-on.${guess === undefined ? "" : ` Did you mean ${guess}?`} Run efforge list to see them all.`,
+    )
+  }
   if (candidates.length > 1)
     return unknown(
       `"${id}" is ambiguous; write it as ${candidates.map((s) => `${s.id}/${id}`).join(" or ")}.`,
@@ -133,16 +179,38 @@ const applyIds = (
           `${slot.id} is already "${current}"; swapping an existing choice isn't supported in v0.1. Create a new project to use a different ${slot.id}.`,
         )
     }
-    return { stack: yield* validate(next), skipped }
+    const valid = yield* validate(next).pipe(
+      Effect.mapError((e) => {
+        // the stack rules hold across slots: say which ids to add together
+        const typed = ids.join(" ")
+        const hint =
+          next.database === "none" && (e.slot === "orm" || e.slot === "auth")
+            ? ` Add a database and an ORM in the same command: efforge add database/d1 orm/effect-sql ${typed}`
+            : e.slot === "orm" && next.orm === "none"
+              ? ` Add an ORM with it: efforge add ${typed} orm/drizzle (or orm/effect-sql)`
+              : ""
+        return hint === ""
+          ? e
+          : incompatible(
+              e.slot,
+              e.value,
+              [...e.allowed],
+              `${e.reason ?? "not compatible with the current stack"}.${hint}`,
+            )
+      }),
+    )
+    return { stack: valid, skipped }
   })
 
-const readManifest = (
+export const readManifest = (
   dir: string,
 ): Effect.Effect<EfforgeManifest, NotAnEfforgeProject, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const fail = (reason: string) => new NotAnEfforgeProject({ dir, reason })
+    if (!(yield* fs.exists(dir).pipe(Effect.orElseSucceed(() => false))))
+      return yield* fail("the directory does not exist")
     const text = yield* fs
       .readFileString(path.join(dir, "efforge.jsonc"))
       .pipe(Effect.mapError(() => fail("efforge.jsonc not found")))
@@ -390,6 +458,7 @@ export const addAddons = (
           )
         }
     // scripts of the new add-ons (they replace same-named ones, like generate does)
+    const replacedScripts: string[] = []
     for (const { manifest: m } of fresh)
       for (const [pkgDir, scripts] of Object.entries(m.scripts ?? {})) {
         const target = pkgDir === "." ? "package.json" : `${pkgDir}/package.json`
@@ -401,7 +470,11 @@ export const addAddons = (
             message: `${m.id} adds scripts to ${target}, which does not exist`,
           })
         const pkg = JSON.parse(text) as Record<string, unknown>
-        const merged = { ...(pkg.scripts as Record<string, string> | undefined), ...scripts }
+        const existingScripts = (pkg.scripts as Record<string, string> | undefined) ?? {}
+        for (const [name, cmd] of Object.entries(scripts))
+          if (existingScripts[name] !== undefined && existingScripts[name] !== cmd)
+            replacedScripts.push(`${target}: ${name}`)
+        const merged = { ...existingScripts, ...scripts }
         const indent = /^([ \t]+)"/m.exec(text)?.[1] ?? "  "
         const next = `${JSON.stringify({ ...pkg, scripts: merged }, null, indent)}${text.endsWith("\n") ? "\n" : ""}`
         if (next !== text) packages.set(target, next)
@@ -434,9 +507,13 @@ export const addAddons = (
     const envText = (yield* read(".env.example")) ?? ""
     const have = new Set(envText.split("\n").map((l) => l.split("=")[0]?.trim()))
     const groups: string[] = []
+    const envVars: Array<{ name: string; description: string }> = []
     for (const { manifest: m } of scope) {
       const vars = m.envVars.filter((v) => switchedOn(m.id, v.when) && !have.has(v.name))
-      for (const v of vars) have.add(v.name)
+      for (const v of vars) {
+        have.add(v.name)
+        envVars.push({ name: v.name, description: v.description })
+      }
       if (vars.length > 0)
         groups.push(`# ${m.title}\n${vars.map((v) => `${v.name}=${v.example}`).join("\n")}`)
     }
@@ -466,9 +543,17 @@ export const addAddons = (
 
     const result: AddResult = {
       written: [...written].toSorted(),
+      created: [...written].filter((f) => disk.has(f) && disk.get(f) === undefined).toSorted(),
       transformed: [...transformed].toSorted(),
       skipped: skipped.toSorted(),
       removed: [...removed].toSorted(),
+      added: fresh.map(({ manifest: m }) =>
+        m.docs === undefined
+          ? { id: m.id, title: m.title }
+          : { id: m.id, title: m.title, docs: m.docs },
+      ),
+      envVars,
+      replacedScripts,
     }
     if (opts.dryRun) return result
 
@@ -496,7 +581,9 @@ const describe = (
     case "NotAnEfforgeProject":
       return `${String(e.dir)} is not an efforge project (${String(e.reason)}). Run this from the project root or pass --cwd.`
     case "IncompatibleStack":
-      return `Can't add "${String(e.value)}" (${String(e.slot)}): ${typeof e.reason === "string" ? e.reason : "not compatible with the current stack."} Options: ${(e.allowed as string[]).join(", ")}`
+      return typeof e.reason === "string" && e.reason.includes("efforge list")
+        ? e.reason
+        : `Can't add ${String(e.slot)}/${String(e.value)}: ${typeof e.reason === "string" ? e.reason : "not compatible with the current stack."}`
     case "OverlayConflict":
       return `You've edited ${String(e.file)} since it was generated. Nothing was written. Re-run with --overwrite to replace it.\n\n${String(e.diff)}`
     case "TransformAnchorMissing":
@@ -535,6 +622,20 @@ export const addConfig = {
   ),
 }
 
+/** `a.b.c` -> numbers, for the "project is newer than this CLI" check. */
+const newer = (a: string, b: string): boolean => {
+  const pa = a.split(/[.-]/).map(Number)
+  const pb = b.split(/[.-]/).map(Number)
+  for (let i = 0; i < 3; i++) {
+    const x = pa[i] ?? 0
+    const y = pb[i] ?? 0
+    if (x !== y) return x > y
+  }
+  return false
+}
+
+const list = (files: ReadonlyArray<string>, mark: string) => files.map((f) => `${mark} ${f}`)
+
 export const addHandler = (input: {
   ids: ReadonlyArray<string>
   overwrite: boolean
@@ -545,40 +646,121 @@ export const addHandler = (input: {
 }) =>
   Effect.gen(function* () {
     const path = yield* Path.Path
-    const result = yield* addAddons(path.resolve(input.cwd), input.ids, {
-      overwrite: input.overwrite,
-      dryRun: input.dryRun,
-      install: input.install,
-    })
+    const live = yield* PromptIO
+    const dir = path.resolve(input.cwd)
+    const io = input.json
+      ? { ...live, step: <A, E, R>(_: string, eff: Effect.Effect<A, E, R>) => eff }
+      : live
+    if (!input.json)
+      yield* io.intro(
+        `${pc.bgCyan(pc.black(" efforge add "))}${pc.dim(`  ${input.ids.join(" ")}`)}`,
+      )
+
+    const manifest = yield* readManifest(dir)
+    if (!input.json && newer(manifest.efforgeVersion, efforgeVersion))
+      yield* io.warn(
+        `This project was made with efforge ${manifest.efforgeVersion}, newer than this CLI (${efforgeVersion}). Use npx create-efforge@latest add.`,
+      )
+    const opts = { overwrite: input.overwrite, install: false }
+    // plan first (in memory): the dirty-tree warning only matters when something will change
+    const plan = yield* addAddons(dir, input.ids, { ...opts, dryRun: true })
+    const changes = plan.written.length + plan.transformed.length + plan.removed.length > 0
+    if (changes && !input.dryRun && !input.json) {
+      const dirty = yield* exec("git", ["status", "--porcelain"], dir).pipe(
+        Effect.map((out) => out.trim() !== ""),
+        Effect.catchTag("CommandFailed", () => Effect.succeed(false)),
+      )
+      if (dirty)
+        yield* io.warn(
+          "You have uncommitted changes, so git diff will mix them with efforge's edits. Commit or stash first to review them on their own.",
+        )
+    }
+    const result =
+      input.dryRun || !changes ? plan : yield* addAddons(dir, input.ids, { ...opts, dryRun: false })
     if (input.json)
       return yield* Console.log(JSON.stringify({ dryRun: input.dryRun, ...result }, null, 2))
-    const section = (title: string, files: string[]) =>
-      files.length === 0 ? [] : [`${pc.bold(title)}\n${files.map((f) => `  ${f}`).join("\n")}`]
-    yield* Console.log(
+
+    const changed = result.written.length + result.transformed.length + result.removed.length > 0
+    if (!changed) {
+      yield* io.info(`Already there: ${result.skipped.join(", ")}`)
+      return yield* io.outro("Nothing to do.")
+    }
+    yield* io.note(
       [
-        ...section(input.dryRun ? "Would write" : "Wrote", result.written),
-        ...section(input.dryRun ? "Would edit" : "Edited", result.transformed),
-        ...section(input.dryRun ? "Would remove" : "Removed", result.removed),
-        ...section("Unchanged", result.skipped),
-        ...(result.written.length === 0 &&
-        result.transformed.length === 0 &&
-        result.removed.length === 0
-          ? ["Nothing to do."]
-          : []),
-        ...(input.dryRun ? [pc.dim("dry run: nothing written")] : []),
-      ].join("\n\n"),
+        ...list(result.created, pc.green("+")),
+        ...list(
+          [
+            ...result.written.filter((f) => !result.created.includes(f)),
+            ...result.transformed,
+          ].toSorted(),
+          pc.yellow("~"),
+        ),
+        ...list(result.removed, pc.red("-")),
+      ].join("\n"),
+      `${input.dryRun ? "Would change" : "Changed"}: ${result.added.map((a) => a.title).join(", ") || "stack"}`,
     )
+    if (result.removed.length > 0)
+      yield* io.warn(
+        `${input.dryRun ? "Would remove" : "Removed"} ${result.removed.join(", ")}: the new add-ons replace it.`,
+      )
+    if (result.replacedScripts.length > 0)
+      yield* io.warn(
+        `${input.dryRun ? "Would replace" : "Replaced"} existing package scripts: ${result.replacedScripts.join(", ")}`,
+      )
+    if (input.dryRun) return yield* io.outro(pc.dim("dry run: nothing written"))
+
+    if (input.install) {
+      yield* io.task("Installing dependencies (pnpm install)", (log) =>
+        exec("pnpm", ["install"], dir, log),
+      )
+      // add-ons may add or replace routes
+      yield* io.step("Generating the route tree", generateRouteTree(dir))
+    }
+    const steps = [
+      ...(input.install ? [] : [`  ${pc.cyan("pnpm install")}`]),
+      ...(result.envVars.length > 0
+        ? [
+            `${pc.bold("New env vars")} ${pc.dim("(in .env.example; local values in .dev.vars)")}`,
+            ...result.envVars.map((v) => {
+              const width = Math.max(...result.envVars.map((x) => x.name.length))
+              const room = Math.max(20, (process.stdout.columns || 80) - width - 14)
+              const brief = v.description.split(/;\s|\s\(/)[0] ?? v.description
+              return `  ${v.name.padEnd(width)}  ${pc.dim(brief.length > room ? `${brief.slice(0, room - 1)}…` : brief)}`
+            }),
+          ]
+        : []),
+      ...result.added
+        .filter((a) => a.docs !== undefined)
+        .map((a) => `${a.title}: ${pc.dim(a.docs as string)}`),
+    ]
+    if (steps.length > 0) yield* io.note(steps.join("\n"), "Next steps")
+    yield* io.outro(`${pc.green("Done.")} ${pc.dim("Review the changes with")} git diff`)
   }).pipe(
     Effect.catch((e) =>
       Effect.gen(function* () {
-        yield* Console.error(pc.red(describe(e as never)))
         yield* Effect.sync(() => {
           process.exitCode = 1
         })
+        if (input.json)
+          return yield* Console.log(
+            JSON.stringify({ error: { code: e._tag, message: describe(e as never) } }, null, 2),
+          )
+        yield* Console.error(pc.red(describe(e as never)))
       }),
     ),
   )
 
 export const addCommand = Command.make("add", addConfig, addHandler).pipe(
   Command.withDescription("Add an add-on to an existing efforge project"),
+  Command.withExamples([
+    { command: "npx create-efforge add email", description: "Add the email add-on" },
+    {
+      command: "npx create-efforge add ai/effect-ai-byok extras/storage --dry-run",
+      description: "Show what would change; write nothing",
+    },
+    {
+      command: "npx create-efforge add database/d1 orm/effect-sql auth/better-auth",
+      description: "Add a database, an ORM and auth together",
+    },
+  ]),
 )
