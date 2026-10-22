@@ -21,7 +21,7 @@ import {
   type TransformAnchorMissing,
   type UnknownTransform,
 } from "../transforms/index.ts"
-import { PromptIO } from "../prompts/navigable.ts"
+import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
 import { efforgeVersion, versions } from "../versions.ts"
 import { PnpmMissing, TemplatesDir } from "./create.ts"
 
@@ -704,8 +704,13 @@ export const addHandler = (input: {
     const path = yield* Path.Path
     const live = yield* PromptIO
     const dir = path.resolve(input.cwd)
-    const io = input.json
-      ? { ...live, step: <A, E, R>(_: string, eff: Effect.Effect<A, E, R>) => eff }
+    // --json keeps stdout to the one JSON document: steps still run, silently
+    const io: PromptIOShape = input.json
+      ? {
+          ...live,
+          step: (_label, eff) => eff,
+          task: (_label, eff) => eff(() => {}),
+        }
       : live
     if (!input.json)
       yield* io.intro(
@@ -736,8 +741,23 @@ export const addHandler = (input: {
     }
     const result =
       input.dryRun || !changes ? plan : yield* addAddons(dir, input.ids, { ...opts, dryRun: false })
-    if (input.json)
+    // only when dependencies changed: package.json files or the catalog
+    const depsChanged = result.written.some(
+      (f) => f.endsWith("package.json") || f === "pnpm-workspace.yaml",
+    )
+    const finish = Effect.gen(function* () {
+      if (!input.install || input.dryRun || !changes) return
+      if (depsChanged)
+        yield* io.task("Installing dependencies (pnpm install)", (log) =>
+          exec("pnpm", ["install"], dir, log),
+        )
+      // add-ons may add or replace routes
+      yield* io.step("Generating the route tree", generateRouteTree(dir))
+    })
+    if (input.json) {
+      yield* finish
       return yield* Console.log(JSON.stringify({ dryRun: input.dryRun, ...result }, null, 2))
+    }
 
     const changed = result.written.length + result.transformed.length + result.removed.length > 0
     if (!changed) {
@@ -768,18 +788,7 @@ export const addHandler = (input: {
       )
     if (input.dryRun) return yield* io.outro(pc.dim("dry run: nothing written"))
 
-    // only when dependencies changed: package.json files or the catalog
-    const depsChanged = result.written.some(
-      (f) => f.endsWith("package.json") || f === "pnpm-workspace.yaml",
-    )
-    if (input.install) {
-      if (depsChanged)
-        yield* io.task("Installing dependencies (pnpm install)", (log) =>
-          exec("pnpm", ["install"], dir, log),
-        )
-      // add-ons may add or replace routes
-      yield* io.step("Generating the route tree", generateRouteTree(dir))
-    }
+    yield* finish
     // a new database needs its tables before the app (or sign-up) can use it
     const database = result.added.find((a) => a.id.startsWith("database/"))?.id.split("/")[1]
     const alchemy =

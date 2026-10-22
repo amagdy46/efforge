@@ -12,9 +12,11 @@ import { isOccupied, nextSteps, TemplatesDir } from "../src/commands/create.ts"
 import { listAddons } from "../src/commands/list.ts"
 import { generate } from "../src/generate.ts"
 import { CANCEL, scriptedPromptIO } from "../src/prompts/navigable.ts"
+import { ROUTE_TREE_COMMAND } from "../src/routeTree.ts"
 import { whyUnavailable } from "../src/slots.ts"
 import { withDefaults } from "../src/stack.ts"
 import { writeTree } from "../src/write.ts"
+import { recordingSpawner } from "./recordingSpawner.ts"
 
 const fixtures = new URL("./fixtures/templates", import.meta.url).pathname
 const env = Layer.mergeAll(NodeServices.layer, Layer.succeed(TemplatesDir, fixtures))
@@ -196,3 +198,18 @@ it.effect("list marks what the project already has", () =>
     expect(inside.addons.find((a) => a.id === "extras/email")?.installed).toBe(false)
   }).pipe(Effect.provide(env)),
 )
+
+it("add --json still installs, and stdout stays one JSON document", async () => {
+  const dir = await Effect.runPromise(noDbProject().pipe(Effect.provide(env)))
+  const logs: string[] = []
+  vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => void logs.push(a.join(" ")))
+  const calls: string[] = []
+  await runWith(["add", "email", "--json", "--cwd", dir]).pipe(
+    Effect.provide(Layer.mergeAll(env, scriptedPromptIO([]).layer, recordingSpawner(calls))),
+    Effect.runPromise,
+  )
+  expect(JSON.parse(logs.join("\n")).added.map((a: { id: string }) => a.id)).toEqual([
+    "extras/email",
+  ])
+  expect(calls).toContain(ROUTE_TREE_COMMAND)
+})
