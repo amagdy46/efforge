@@ -1,6 +1,6 @@
 {
   "name": "create-efforge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Start an Effect app with database, auth, and Cloudflare services already wired together",
   "keywords": [
     "cloudflare",
