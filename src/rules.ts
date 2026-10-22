@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { available, slots } from "./slots.ts"
+import { available, slots, whyUnavailable } from "./slots.ts"
 import { SlotId, type StackConfig } from "./stack.ts"
 
 export class IncompatibleStack extends Schema.TaggedError<IncompatibleStack>()(
@@ -21,7 +21,12 @@ export const validate = (config: StackConfig): Effect.Effect<StackConfig, Incomp
       const values = slot.id === "extras" ? config.extras : [config[slot.id]]
       for (const value of values) {
         if (!allowed.includes(value)) {
-          return yield* new IncompatibleStack({ slot: slot.id, value, allowed })
+          const reason = whyUnavailable(slot.id, value, config)
+          return yield* new IncompatibleStack(
+            reason === undefined
+              ? { slot: slot.id, value, allowed }
+              : { slot: slot.id, value, allowed, reason },
+          )
         }
       }
     }

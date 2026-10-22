@@ -84,8 +84,9 @@ it("the printed command replays the stack without prompting", async () => {
 })
 
 it("dry-run without json lists the paths and writes nothing", async () => {
-  await cli(["app", "--dry-run", "-y", ...stackFlags]).p
-  expect(logs.join("\n")).toContain("efforge.jsonc")
+  const { s, p } = cli(["app", "--dry-run", "-y", ...stackFlags])
+  await p
+  expect(s.output.join("\n")).toContain("efforge.jsonc")
   expect(readdirSync(tmp)).toEqual([])
 })
 
@@ -95,11 +96,10 @@ it("writes the project with -y --no-install --no-git", async () => {
   expect(s.shown).toEqual([])
   expect(existsSync(join(tmp, "app", "efforge.jsonc"))).toBe(true)
   expect(existsSync(join(tmp, "app", ".git"))).toBe(false)
-  expect(
-    s.output.some(
-      (o) => o.startsWith("outro:") && o.includes("cd app") && o.includes("npm create efforge app"),
-    ),
-  ).toBe(true)
+  expect(s.output.some((o) => o.startsWith("note Next steps:") && o.includes("cd app"))).toBe(true)
+  expect(s.output.some((o) => o.startsWith("outro:") && o.includes("npm create efforge app"))).toBe(
+    true,
+  )
 })
 
 it("--install=false and --git=false are accepted too", async () => {
@@ -139,7 +139,7 @@ it("incompatible flags fail with exit code 1 and write nothing", async () => {
   const err = vi.spyOn(console, "error").mockImplementation(() => {})
   await cli(["app", "-y", "--database=none", "--auth=better-auth"]).p
   expect(process.exitCode).toBe(1)
-  expect(String(err.mock.calls[0]?.[0])).toContain("Options: none")
+  expect(String(err.mock.calls[0]?.[0])).toContain("auth stores users in the database")
   expect(readdirSync(tmp)).toEqual([])
 })
 
@@ -150,7 +150,7 @@ it("an existing non-empty target is refused", async () => {
   process.exitCode = undefined
   await cli(["app", "-y", "--no-install", "--no-git", ...stackFlags]).p
   expect(process.exitCode).toBe(1)
-  expect(String(err.mock.calls.at(-1)?.[0])).toContain("not empty")
+  expect(String(err.mock.calls.at(-1)?.[0])).toContain("isn't empty")
   expect(readFileSync(join(tmp, "app", "mine.txt"), "utf8")).toBe("keep")
 })
 
@@ -178,17 +178,17 @@ it.effect("writeTree fails with TargetNotEmpty on a non-empty dir, accepts an em
   }).pipe(Effect.provide(NodeServices.layer)),
 )
 
-it("a non-empty target is refused before the confirm prompt", async () => {
-  vi.spyOn(console, "error").mockImplementation(() => {})
+it("a non-empty target is refused at the name prompt", async () => {
   mkdirSync(join(tmp, "app"))
   writeFileSync(join(tmp, "app", "mine.txt"), "keep")
   const { s, p } = cli(
     ["--no-install", "--no-git"],
-    ["app", "postgres", "drizzle", "none", "none", "none", []],
+    ["app", "other", "postgres", "drizzle", "none", "none", "none", [], false],
   )
   await p
-  expect(process.exitCode).toBe(1)
-  expect(s.shown.map((x) => x.id)).not.toContain("confirm")
+  expect(s.shown.filter((x) => x.id === "name")).toHaveLength(2)
+  expect(s.output.some((o) => o.startsWith("invalid name:"))).toBe(true)
+  expect(readFileSync(join(tmp, "app", "mine.txt"), "utf8")).toBe("keep")
 })
 
 it("--json without --dry-run keeps stdout JSON-only and writes the project", async () => {
@@ -220,6 +220,8 @@ const runRecorded = (args: string[]) => {
 it("git init runs before pnpm format, and the commit comes after it", async () => {
   const calls = await runRecorded(["app", "-y", ...stackFlags])
   expect(calls).toEqual([
+    "pnpm --version",
+    "git --version",
     "git init",
     "pnpm install",
     ROUTE_TREE_COMMAND,
@@ -232,9 +234,10 @@ it("git init runs before pnpm format, and the commit comes after it", async () =
 it("without git, format names the files so a parent repo's ignore rules cannot hide them", async () => {
   const calls = await runRecorded(["app", "-y", "--no-git", ...stackFlags])
   expect(calls.map((c) => c.split(" ").slice(0, 2).join(" "))).toEqual([
+    "pnpm --version",
     "pnpm install",
     "pnpm --filter",
     "pnpm format",
   ])
-  expect(calls[2]).toContain("package.json")
+  expect(calls[3]).toContain("package.json")
 })

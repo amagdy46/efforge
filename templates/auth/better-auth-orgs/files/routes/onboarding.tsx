@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router"
-import { type FormEvent, useState } from "react"
+import { type SubmitEvent, useState } from "react"
 import { AuthCard } from "@/components/auth-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,7 +28,7 @@ function Onboarding() {
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
     const name = formField(new FormData(event.currentTarget), "name").trim()
     setPending(true)
@@ -47,7 +47,7 @@ function Onboarding() {
       title="Create your organization"
       description="Organizations hold your members and your data. You can create more later."
     >
-      <form method="post" onSubmit={onSubmit} className="space-y-4">
+      <form method="post" onSubmit={(event) => void onSubmit(event)} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="name">Organization name</Label>
           <Input id="name" name="name" placeholder="Acme Inc." required />

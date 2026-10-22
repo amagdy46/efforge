@@ -169,8 +169,8 @@ it("single-select slots: set when none, refuse a swap", async () => {
 })
 
 it("rejects unknown and ambiguous ids", async () => {
-  expect((await fail(addAddons(dir, ["nope"], opts)))._tag).toBe("IncompatibleStack")
-  expect((await fail(addAddons(dir, ["none"], opts)))._tag).toBe("IncompatibleStack")
+  expect((await fail(addAddons(dir, ["nope"], opts)))._tag).toBe("UnknownAddon")
+  expect((await fail(addAddons(dir, ["none"], opts)))._tag).toBe("UnknownAddon")
 })
 
 it("rejects a directory that is not an efforge project", async () => {
@@ -238,9 +238,13 @@ it("a second add is a no-op: all skipped, no install", async () => {
   const again = await run(addAddons(dir, ["email"], { overwrite: false, dryRun: false }))
   expect(again).toEqual({
     written: [],
+    created: [],
     transformed: [],
     skipped: ["extras/email"],
     removed: [],
+    added: [],
+    envVars: [],
+    replacedScripts: [],
   })
   expect(snapshot()).toEqual(first)
 })

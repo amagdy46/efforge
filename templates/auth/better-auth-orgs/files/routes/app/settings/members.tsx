@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { type FormEvent, useState } from "react"
+import { type SubmitEvent, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -43,7 +43,7 @@ function Members() {
   const canManage = me?.role === "owner" || me?.role === "admin"
   const pending = org.invitations.filter((invitation) => invitation.status === "pending")
 
-  async function invite(event: FormEvent<HTMLFormElement>) {
+  async function invite(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = event.currentTarget
     const data = new FormData(form)
@@ -110,7 +110,7 @@ function Members() {
                         </option>
                       ))}
                     </select>
-                    <Button variant="outline" size="sm" onClick={() => remove(member.id)}>
+                    <Button variant="outline" size="sm" onClick={() => void remove(member.id)}>
                       Remove
                     </Button>
                   </>
@@ -132,7 +132,7 @@ function Members() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <form onSubmit={invite} className="flex items-end gap-2">
+            <form onSubmit={(event) => void invite(event)} className="flex items-end gap-2">
               <div className="flex-1 space-y-2">
                 <Label htmlFor="invite-email">Email</Label>
                 <Input id="invite-email" name="email" type="email" required />
@@ -159,7 +159,7 @@ function Members() {
                     value={link}
                     onFocus={(e) => e.target.select()}
                   />
-                  <Button variant="outline" onClick={() => copy(link)}>
+                  <Button variant="outline" onClick={() => void copy(link)}>
                     Copy
                   </Button>
                 </div>
@@ -178,11 +178,15 @@ function Members() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => copy(inviteLink(invitation.id))}
+                        onClick={() => void copy(inviteLink(invitation.id))}
                       >
                         Copy link
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => cancel(invitation.id)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void cancel(invitation.id)}
+                      >
                         Cancel
                       </Button>
                     </li>

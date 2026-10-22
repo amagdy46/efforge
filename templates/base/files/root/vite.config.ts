@@ -16,10 +16,13 @@ export default defineConfig({
     categories: { correctness: "error", suspicious: "error", perf: "error" },
     // an explicit list replaces oxlint's defaults, so keep oxc/typescript/unicorn
     plugins: ["oxc", "typescript", "unicorn", "react", "import", "effecttsgo"],
+    jsPlugins: ["./lint/effect-tests.js"],
     options: { typeAware: true, typeCheck: true },
     rules: {
       "typescript/no-explicit-any": "error",
       "typescript/no-floating-promises": "error",
+      "typescript/no-misused-promises": "error",
+      "typescript/no-deprecated": "error",
       "no-unused-vars": "error",
       "react/exhaustive-deps": "error",
       "no-console": ["error", { allow: ["warn", "error"] }],
@@ -30,8 +33,30 @@ export default defineConfig({
       "react/react-in-jsx-scope": "off",
       // exact pins make "unstable" Effect APIs safe; this flags it.effect itself
       "effecttsgo/unstable-api-usage": "off",
+      // bindings reach code through effect-cf layers; cloudflare.ts is the one file that reads env
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "cloudflare:workers",
+              importNames: ["env"],
+              message:
+                "Read bindings through effect-cf layers; only server/cloudflare.ts reads env.",
+            },
+          ],
+        },
+      ],
     },
     overrides: [
+      {
+        files: ["**/*.test.ts", "**/*.test.tsx"],
+        rules: { "effect-tests/no-manual-runtime": "error" },
+      },
+      {
+        files: ["apps/web/src/server/cloudflare.ts"],
+        rules: { "no-restricted-imports": "off" },
+      },
       {
         // entry points are where layers get provided: the server runtime and one-off scripts
         files: ["apps/web/src/server/runtime.ts", "packages/*/scripts/**"],

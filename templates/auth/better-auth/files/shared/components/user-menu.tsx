@@ -37,7 +37,7 @@ export function UserMenu({ name, email }: { name: string; email: string }) {
           <div className="text-xs font-normal text-muted-foreground">{email}</div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={signOut}>Sign out</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void signOut()}>Sign out</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

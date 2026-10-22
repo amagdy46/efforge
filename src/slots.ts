@@ -120,3 +120,23 @@ export const available = (
     return true
   })
 }
+
+/**
+ * Why `value` isn't available for `slot` given `partial`, phrased for the user; undefined when it is
+ * available, or isn't an option of the slot at all (an unknown value, not a conflict).
+ */
+export const whyUnavailable = (
+  slot: SlotId,
+  value: string,
+  partial: Partial<StackConfig>,
+): string | undefined => {
+  const def = slots.find((s) => s.id === slot)
+  if (def === undefined || !def.options.some((o) => o.id === value)) return undefined
+  if (available(slot, partial).some((o) => o.id === value)) return undefined
+  if (cloudflareOnly.has(value)) return `${value} needs the Cloudflare runtime`
+  if (slot === "orm" && partial.database === "none")
+    return "an ORM needs a database, and the database is none"
+  if (slot === "orm") return `a database needs an ORM; pick one of drizzle, effect-sql`
+  if (slot === "auth") return "auth stores users in the database, and the database is none"
+  return undefined
+}

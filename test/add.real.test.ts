@@ -120,3 +120,15 @@ for (const extra of ["storage", "email"] as const)
     expect(devVars).toMatch(/^BETTER_AUTH_SECRET=/m)
     expect(devVars).toMatch(extra === "storage" ? /^STORAGE_SIGNING_SECRET=/m : /^MAIL_FROM=/m)
   })
+
+it("add infra/alchemy after earlier adds: wrangler.jsonc they edited is not a user edit", async () => {
+  // the QA repro: d1 + storage, then realtime, then alchemy
+  await run(
+    writeTree(dir, await generated(withDefaults({ ...base, database: "d1", extras: ["storage"] }))),
+  )
+  await run(addAddons(dir, ["realtime"], opts))
+  await run(addAddons(dir, ["infra/alchemy"], opts))
+  const { existsSync } = await import("node:fs")
+  expect(existsSync(join(dir, "wrangler.jsonc"))).toBe(false)
+  expect(existsSync(join(dir, "infra/alchemy.run.ts"))).toBe(true)
+})

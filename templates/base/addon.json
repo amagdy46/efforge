@@ -56,6 +56,10 @@
       "target": "vite.config.ts"
     },
     {
+      "path": "files/root/lint/effect-tests.js",
+      "target": "lint/effect-tests.js"
+    },
+    {
       "path": "files/web/components.json",
       "target": "apps/web/components.json"
     },

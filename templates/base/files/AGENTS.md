@@ -19,10 +19,22 @@ Rules for AI agents (and humans) working in this repo. Read this before changing
 - Failures are tagged errors (`Data.TaggedError`) in the error channel, handled with `Effect.catchTag`.
 - Validate data at boundaries (requests, env, storage, third-party responses) with `Schema`.
 - Reach Cloudflare bindings (R2, D1, KV, Durable Objects, ...) only through `effect-cf`.
+  `apps/web/src/server/cloudflare.ts` is the one file that imports `env` from `cloudflare:workers`;
+  lint rejects it anywhere else.
 - Never wrap an Effect in `try/catch`, and never use `async`/`await` inside `Effect.gen`; use `yield*`.
 - Provide layers at entry points only (`runtime.ts`, scripts), not inside library code.
 - No `any`. Use `unknown` and narrow it with `Schema` or a type guard.
 - Keep `E` types specific; `unknown` or `any` in an error channel is a lint error.
+- Model a multi-step lifecycle (order, invite, job) as a tagged union of states
+  (`Data.TaggedEnum`) and match on it, not as a set of boolean flags.
+
+## Tests
+
+- Write Effect tests with `it.effect` and `it.layer` from `@effect/vitest`. `Effect.run*` and
+  `ManagedRuntime.make` in a test file are lint errors (`lint/effect-tests.js`).
+- Swap services with test layers; do not mock modules.
+- Where a fake would behave differently from the platform (D1, R2, Durable Objects, Workflows),
+  check the behaviour under `pnpm dev` too: it runs your Worker in workerd with local bindings.
 
 ## UI
 

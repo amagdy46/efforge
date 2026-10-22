@@ -1,5 +1,6 @@
+import { stripVTControlCharacters } from "node:util"
 import * as p from "@clack/prompts"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Cause, Context, Effect, type Exit, Layer, Schema } from "effect"
 import pc from "picocolors"
 
 /** Returned by a prompt when the user picked "Back". */
@@ -7,6 +8,14 @@ export const GoBack: unique symbol = Symbol.for("efforge/GoBack")
 export type GoBack = typeof GoBack
 
 export class Cancelled extends Schema.TaggedError<Cancelled>()("Cancelled", {}) {}
+
+/** A prompt was needed but stdin is not a terminal (CI, pipes): fail fast instead of hanging. */
+export class NeedsInput extends Schema.TaggedError<NeedsInput>()("NeedsInput", {
+  id: Schema.String,
+  options: Schema.Array(Schema.String),
+}) {}
+
+export type PromptError = Cancelled | NeedsInput
 
 export interface Choice {
   readonly value: string
@@ -43,20 +52,26 @@ export interface ConfirmOptions {
 }
 
 export interface PromptIOShape {
-  readonly select: (o: SelectOptions) => Effect.Effect<string | GoBack, Cancelled>
+  readonly select: (o: SelectOptions) => Effect.Effect<string | GoBack, PromptError>
   readonly multiselect: (
     o: MultiselectOptions,
-  ) => Effect.Effect<ReadonlyArray<string> | GoBack, Cancelled>
-  readonly text: (o: TextOptions) => Effect.Effect<string | GoBack, Cancelled>
-  readonly confirm: (o: ConfirmOptions) => Effect.Effect<boolean | GoBack, Cancelled>
+  ) => Effect.Effect<ReadonlyArray<string> | GoBack, PromptError>
+  readonly text: (o: TextOptions) => Effect.Effect<string | GoBack, PromptError>
+  readonly confirm: (o: ConfirmOptions) => Effect.Effect<boolean | GoBack, PromptError>
   /** Non-interactive output, kept on the service so tests stay silent. */
   readonly intro: (title: string) => Effect.Effect<void>
   readonly section: (title: string) => Effect.Effect<void>
   readonly info: (message: string) => Effect.Effect<void>
+  readonly warn: (message: string) => Effect.Effect<void>
   readonly note: (body: string, title: string) => Effect.Effect<void>
   readonly outro: (message: string) => Effect.Effect<void>
-  /** Runs `eff` under a spinner labelled `label`. */
+  /** Runs `eff` under a spinner labelled `label`, then reports how long it took. */
   readonly step: <A, E, R>(label: string, eff: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  /** Like `step`, but shows the latest output line (fed through `log`) while it runs. */
+  readonly task: <A, E, R>(
+    label: string,
+    eff: (log: (line: string) => void) => Effect.Effect<A, E, R>,
+  ) => Effect.Effect<A, E, R>
 }
 
 export class PromptIO extends Context.Service<PromptIO, PromptIOShape>()("efforge/PromptIO") {}
@@ -64,10 +79,30 @@ export class PromptIO extends Context.Service<PromptIO, PromptIOShape>()("efforg
 const BACK = "\u0000back"
 const backChoice: p.Option<string> = { value: BACK, label: pc.dim("← Back") }
 
-const ask = <A>(run: () => Promise<A | symbol>): Effect.Effect<A, Cancelled> =>
-  Effect.promise(run).pipe(
-    Effect.flatMap((v) => (p.isCancel(v) ? Effect.fail(new Cancelled()) : Effect.succeed(v as A))),
-  )
+const ask = <A>(
+  id: string,
+  options: ReadonlyArray<string>,
+  run: () => Promise<A | symbol>,
+): Effect.Effect<A, PromptError> =>
+  process.stdin.isTTY
+    ? Effect.promise(run).pipe(
+        Effect.flatMap((v) =>
+          p.isCancel(v) ? Effect.fail(new Cancelled()) : Effect.succeed(v as A),
+        ),
+      )
+    : Effect.fail(new NeedsInput({ id, options }))
+
+const interactive = (): boolean => process.stdout.isTTY && !p.isCI()
+
+/** Elapsed time, shown only once it's worth reading (`always` for installs). */
+const seconds = (start: number, always = false): string => {
+  const s = (performance.now() - start) / 1000
+  return always || s >= 1 ? ` ${pc.dim(`${s.toFixed(1)}s`)}` : ""
+}
+
+/** Keeps the streamed lines readable: no colour codes, no carriage-return progress redraws. */
+const clean = (line: string): string =>
+  stripVTControlCharacters(line.split("\r").pop() ?? "").trimEnd()
 
 const toOption = (c: Choice) =>
   (c.hint === undefined
@@ -80,41 +115,51 @@ const toOption = (c: Choice) =>
  */
 export const livePromptIO: PromptIOShape = {
   select: (o) =>
-    ask<string>(() =>
-      p.select<string>({
-        message: o.message,
-        options: [...o.options.map(toOption), ...(o.canGoBack ? [backChoice] : [])],
-        ...(o.initial === undefined ? {} : { initialValue: o.initial }),
-      }),
+    ask<string>(
+      o.id,
+      o.options.map((c) => c.value),
+      () =>
+        p.select<string>({
+          message: o.message,
+          options: [...o.options.map(toOption), ...(o.canGoBack ? [backChoice] : [])],
+          ...(o.initial === undefined ? {} : { initialValue: o.initial }),
+        }),
     ).pipe(Effect.map((v) => (v === BACK ? GoBack : v))),
   multiselect: (o) =>
-    ask<string[]>(() =>
-      p.multiselect<string>({
-        message: o.canGoBack
-          ? `${o.message} ${pc.dim("(select Back alone to go back)")}`
-          : o.message,
-        options: [...o.options.map(toOption), ...(o.canGoBack ? [backChoice] : [])],
-        initialValues: [...(o.initial ?? [])],
-        required: false,
-      }),
+    ask<string[]>(
+      o.id,
+      o.options.map((c) => c.value),
+      () =>
+        p.multiselect<string>({
+          message: o.canGoBack
+            ? `${o.message} ${pc.dim("(select Back alone to go back)")}`
+            : o.message,
+          options: [...o.options.map(toOption), ...(o.canGoBack ? [backChoice] : [])],
+          initialValues: [...(o.initial ?? [])],
+          required: false,
+        }),
     ).pipe(
       Effect.map((v) =>
         v.includes(BACK) && v.length === 1 ? GoBack : v.filter((x) => x !== BACK),
       ),
     ),
   text: (o) =>
-    ask<string>(() =>
+    ask<string>(o.id, [], () =>
       p.text({
         message: o.message,
         ...(o.placeholder === undefined ? {} : { placeholder: o.placeholder }),
         ...(o.defaultValue === undefined ? {} : { defaultValue: o.defaultValue }),
         ...(o.validate === undefined
           ? {}
-          : { validate: (v: string | undefined) => o.validate?.(v ?? o.defaultValue ?? "") }),
+          : {
+              // an emptied field submits "" (not undefined) after an error; both mean the default
+              validate: (v: string | undefined) =>
+                o.validate?.(v === undefined || v === "" ? (o.defaultValue ?? "") : v),
+            }),
       }),
     ),
   confirm: (o) =>
-    ask<boolean>(() =>
+    ask<boolean>(o.id, [], () =>
       p.confirm({
         message: o.message,
         ...(o.initial === undefined ? {} : { initialValue: o.initial }),
@@ -125,22 +170,92 @@ export const livePromptIO: PromptIOShape = {
   info: (message) => Effect.sync(() => p.log.info(message)),
   note: (body, title) => Effect.sync(() => p.note(body, title)),
   outro: (message) => Effect.sync(() => p.outro(message)),
-  step: (label, eff) =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const s = p.spinner()
-        s.start(label)
-        return s
-      }),
-      () => eff,
-      (s, exit) =>
-        Effect.sync(() =>
-          exit._tag === "Success"
-            ? s.stop(`${pc.green("✓")} ${label}`)
-            : s.error(`${label} failed`),
-        ),
-    ),
+  warn: (message) => Effect.sync(() => p.log.warn(message)),
+  // Spinners redraw the terminal: in CI or a pipe, print one line per step instead.
+  step: (label, eff) => run(label, () => eff, false),
+  task: (label, eff) => run(label, eff, true),
 }
+
+/**
+ * A one-line spinner. Not clack's: that one puts stdin in raw mode and answers Ctrl-C with
+ * `process.exit(0)`, which skips cleanup and reports success. Here Ctrl-C stays a SIGINT, so the
+ * run is interrupted, child processes stop, and the caller can say what is left to do.
+ */
+const spinner = (label: string) => {
+  const out = process.stdout
+  const frames = ["◒", "◐", "◓", "◑"]
+  let text = label
+  let frame = 0
+  // a wrapped line can't be redrawn with \r, so everything is cut to the terminal width
+  const fit = (s: string) => {
+    const room = (out.columns || 80) - 4
+    const plain = stripVTControlCharacters(s)
+    return plain.length <= room ? s : `${plain.slice(0, room - 1)}…`
+  }
+  const render = () =>
+    out.write(`\r\u001b[2K${pc.magenta(frames[frame++ % 4] ?? "")}  ${fit(text)}`)
+  const showCursor = () => out.write("\u001b[?25h")
+  out.write(`${pc.gray("│")}\n\u001b[?25l`)
+  process.once("exit", showCursor)
+  render()
+  const timer = setInterval(render, 80)
+  return {
+    message: (s: string) => {
+      text = s
+    },
+    end: (symbol: string, s: string) => {
+      clearInterval(timer)
+      process.off("exit", showCursor)
+      out.write(`\r\u001b[2K${symbol}  ${fit(s)}\n`)
+      showCursor()
+    },
+  }
+}
+
+const run = <A, E, R>(
+  label: string,
+  eff: (log: (line: string) => void) => Effect.Effect<A, E, R>,
+  live: boolean,
+): Effect.Effect<A, E, R> =>
+  Effect.suspend(() => {
+    const start = performance.now()
+    const done = (exit: Exit.Exit<A, E>) => {
+      const ok = exit._tag === "Success"
+      const interrupted = !ok && Cause.hasInterruptsOnly(exit.cause)
+      return {
+        ok,
+        interrupted,
+        msg: ok
+          ? `${pc.green("✓")} ${label}${seconds(start, live)}`
+          : interrupted
+            ? `${label} ${pc.dim("(cancelled)")}`
+            : `${label} failed`,
+      }
+    }
+    if (!interactive()) {
+      if (live) p.log.message(`${label}…`)
+      return eff(() => {}).pipe(
+        Effect.onExit((exit) =>
+          Effect.sync(() => {
+            const { ok, interrupted, msg } = done(exit)
+            ;(ok ? p.log.message : interrupted ? p.log.warn : p.log.error)(msg)
+          }),
+        ),
+      )
+    }
+    const s = spinner(label)
+    return eff((line) => {
+      const text = clean(line)
+      if (text !== "") s.message(`${label}  ${pc.dim(text)}`)
+    }).pipe(
+      Effect.onExit((exit) =>
+        Effect.sync(() => {
+          const { ok, interrupted, msg } = done(exit)
+          s.end(ok ? pc.green("◇") : interrupted ? pc.red("■") : pc.red("▲"), msg)
+        }),
+      ),
+    )
+  })
 
 export const PromptIOLive: Layer.Layer<PromptIO> = Layer.succeed(PromptIO, livePromptIO)
 
@@ -168,7 +283,7 @@ export const scriptedPromptIO = (answers: ReadonlyArray<Answer>): Scripted => {
   const shown: Shown[] = []
   const output: string[] = []
   let next = 0
-  const take = (s: Shown): Effect.Effect<Answer, Cancelled> => {
+  const take = (s: Shown): Effect.Effect<Answer, PromptError> => {
     shown.push(s)
     if (next >= answers.length) return Effect.die(`scripted PromptIO: no answer left for "${s.id}"`)
     const a = answers[next++] as Answer
@@ -181,31 +296,47 @@ export const scriptedPromptIO = (answers: ReadonlyArray<Answer>): Scripted => {
         id: o.id,
         options: o.options.map((c) => c.value),
         canGoBack: o.canGoBack,
-      }) as Effect.Effect<string | GoBack, Cancelled>,
+      }) as Effect.Effect<string | GoBack, PromptError>,
     multiselect: (o) =>
       take({
         kind: "multiselect",
         id: o.id,
         options: o.options.map((c) => c.value),
         canGoBack: o.canGoBack,
-      }) as Effect.Effect<ReadonlyArray<string> | GoBack, Cancelled>,
-    text: (o) =>
-      take({ kind: "text", id: o.id, options: [], canGoBack: false }) as Effect.Effect<
-        string | GoBack,
-        Cancelled
-      >,
+      }) as Effect.Effect<ReadonlyArray<string> | GoBack, PromptError>,
+    // like the live prompt, an answer that fails `validate` is reported and asked again
+    text: (o) => {
+      const loop: Effect.Effect<string | GoBack, PromptError> = Effect.suspend(
+        () =>
+          take({ kind: "text", id: o.id, options: [], canGoBack: false }) as Effect.Effect<
+            string | GoBack,
+            PromptError
+          >,
+      ).pipe(
+        Effect.flatMap((a) => {
+          const error = typeof a === "string" ? o.validate?.(a) : undefined
+          if (error === undefined) return Effect.succeed(a)
+          output.push(`invalid ${o.id}: ${error}`)
+          return loop
+        }),
+      )
+      return loop
+    },
     confirm: (o) =>
       take({ kind: "confirm", id: o.id, options: [], canGoBack: false }) as Effect.Effect<
         boolean | GoBack,
-        Cancelled
+        PromptError
       >,
     intro: (t) => Effect.sync(() => void output.push(`intro: ${t}`)),
     section: (t) => Effect.sync(() => void output.push(`section: ${t}`)),
     info: (m) => Effect.sync(() => void output.push(`info: ${m}`)),
+    warn: (m) => Effect.sync(() => void output.push(`warn: ${m}`)),
     note: (b, t) => Effect.sync(() => void output.push(`note ${t}: ${b}`)),
     outro: (m) => Effect.sync(() => void output.push(`outro: ${m}`)),
     step: (label, eff) =>
       Effect.sync(() => void output.push(`step: ${label}`)).pipe(Effect.andThen(eff)),
+    task: (label, eff) =>
+      Effect.sync(() => void output.push(`step: ${label}`)).pipe(Effect.andThen(eff(() => {}))),
   }
   return { layer: Layer.succeed(PromptIO, io), shown, output }
 }

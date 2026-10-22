@@ -10,6 +10,8 @@ export class WriteFailed extends Schema.TaggedError<WriteFailed>()("WriteFailed"
   message: Schema.String,
 }) {}
 
+const ignorable = new Set([".git", ".DS_Store", "Thumbs.db"])
+
 export type WriteError = TargetNotEmpty | WriteFailed
 
 /** Writes `tree` under `dir`. Refuses an existing non-empty directory; creates it otherwise. */
@@ -22,7 +24,8 @@ export const writeTree = (
     const path = yield* Path.Path
     if (yield* fs.exists(dir)) {
       const entries = yield* fs.readDirectory(dir)
-      if (entries.length > 0) return yield* new TargetNotEmpty({ dir })
+      // an empty repo (only .git) or OS clutter still counts as empty
+      if (entries.some((f) => !ignorable.has(f))) return yield* new TargetNotEmpty({ dir })
     }
     yield* fs.makeDirectory(dir, { recursive: true })
     for (const [rel, content] of tree) {
