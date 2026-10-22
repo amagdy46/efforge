@@ -88,8 +88,11 @@ export const nextSteps = (
   if (!o.installed) steps.push(["pnpm install"])
   if (stack.infra === "alchemy") {
     steps.push(["cp .env.example .env", "local values for Alchemy"])
-    if (stack.database === "postgres") steps.push(["docker compose up -d --wait", "local Postgres"])
-    if (stack.database !== "none") steps.push(["pnpm db:migrate"])
+    // D1 migrations still need wrangler.jsonc under Alchemy (a known v0.1 gap, docs/limits.md)
+    if (stack.database === "postgres") {
+      steps.push(["docker compose up -d --wait", "local Postgres"])
+      steps.push(["pnpm db:migrate"])
+    }
     steps.push(["pnpm dev", "alchemy dev; deploying: see infra/README.md"])
   } else {
     if (stack.database === "postgres") steps.push(["docker compose up -d --wait", "local Postgres"])
@@ -275,7 +278,7 @@ export const create = (opts: CreateOptions) =>
     }
     yield* io.note(nextSteps(stack, { dirName, inPlace, installed: opts.install }), "Next steps")
     yield* io.outro(
-      `${pc.green("Done.")} ${pc.dim("Add more later:")} npx create-efforge add <add-on>  ${pc.dim("(efforge list shows them)")}\n   ${pc.dim("Same stack again:")} ${command}`,
+      `${pc.green("Done.")} ${pc.dim("Add more later:")} npx create-efforge list\n   ${pc.dim("Same stack again:")} ${command}`,
     )
   })
 

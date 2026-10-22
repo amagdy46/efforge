@@ -9,6 +9,10 @@ pnpm install
 pnpm dev        # http://localhost:5173 (or the port Vite prints)
 ```
 
+With a database, set it up before the first `pnpm dev`: for Postgres, `docker compose up -d --wait`, then `pnpm db:migrate` (Postgres and D1). Anything that queries it, sign-up included, fails until the tables exist. `AGENTS.md` describes the database workflow for this stack.
+
+Local secrets live in `.dev.vars` (in `.env` with Alchemy); `.env.example` lists the variables each add-on needs.
+
 ## Scripts
 
 | Command          | What it does                     |

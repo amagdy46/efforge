@@ -709,22 +709,27 @@ export const addHandler = (input: {
       )
     if (input.dryRun) return yield* io.outro(pc.dim("dry run: nothing written"))
 
+    // only when dependencies changed: package.json files or the catalog
+    const depsChanged = result.written.some(
+      (f) => f.endsWith("package.json") || f === "pnpm-workspace.yaml",
+    )
     if (input.install) {
-      yield* io.task("Installing dependencies (pnpm install)", (log) =>
-        exec("pnpm", ["install"], dir, log),
-      )
+      if (depsChanged)
+        yield* io.task("Installing dependencies (pnpm install)", (log) =>
+          exec("pnpm", ["install"], dir, log),
+        )
       // add-ons may add or replace routes
       yield* io.step("Generating the route tree", generateRouteTree(dir))
     }
     const steps = [
-      ...(input.install ? [] : [`  ${pc.cyan("pnpm install")}`]),
+      ...(input.install || !depsChanged ? [] : [`  ${pc.cyan("pnpm install")}`]),
       ...(result.envVars.length > 0
         ? [
             `${pc.bold("New env vars")} ${pc.dim("(in .env.example; local values in .dev.vars)")}`,
             ...result.envVars.map((v) => {
               const width = Math.max(...result.envVars.map((x) => x.name.length))
               const room = Math.max(20, (process.stdout.columns || 80) - width - 14)
-              const brief = v.description.split(/;\s|\s\(/)[0] ?? v.description
+              const brief = v.description.split(/;\s/)[0] ?? v.description
               return `  ${v.name.padEnd(width)}  ${pc.dim(brief.length > room ? `${brief.slice(0, room - 1)}…` : brief)}`
             }),
           ]
