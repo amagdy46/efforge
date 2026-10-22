@@ -30,7 +30,12 @@ export interface AskOptions {
 
 export const DEFAULT_NAME = "my-app"
 
+/** Names npm refuses, or that would shadow a well-known directory. */
+const reserved = new Set(["node_modules", "favicon.ico", "test", "tests", "src", "dist"])
+
 const nameError = (name: string): string | undefined => {
+  if (name.length > 214) return `the name is ${name.length} characters; npm allows 214`
+  if (reserved.has(name)) return `"${name}" is a reserved or confusing package name; pick another`
   const r = Schema.decodeUnknownExit(ProjectName)(name)
   return r._tag === "Success"
     ? undefined

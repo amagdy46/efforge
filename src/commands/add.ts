@@ -6,7 +6,7 @@ import pc from "picocolors"
 import { parseDocument } from "yaml"
 import { type AddonLoadError, addonIdsFor, loadAddons } from "../addon.ts"
 import { unifiedDiff } from "../diff.ts"
-import { type CommandFailed, exec } from "../exec.ts"
+import { type CommandFailed, exec, has } from "../exec.ts"
 import { GenerateError, generate, isComputed, matches } from "../generate.ts"
 import { EfforgeManifest, hash, renderManifest } from "../manifest.ts"
 import { applyProjectName } from "../projectName.ts"
@@ -23,12 +23,18 @@ import {
 } from "../transforms/index.ts"
 import { PromptIO } from "../prompts/navigable.ts"
 import { efforgeVersion, versions } from "../versions.ts"
-import { TemplatesDir } from "./create.ts"
+import { PnpmMissing, TemplatesDir } from "./create.ts"
 
 export class NotAnEfforgeProject extends Schema.TaggedError<NotAnEfforgeProject>()(
   "NotAnEfforgeProject",
   { dir: Schema.String, reason: Schema.String },
 ) {}
+
+/** An id that names no add-on (typo, removal via `none`, or ambiguous). */
+export class UnknownAddon extends Schema.TaggedError<UnknownAddon>()("UnknownAddon", {
+  id: Schema.String,
+  message: Schema.String,
+}) {}
 
 /** A target file that exists, differs from what efforge generated, and `--overwrite` wasn't given. */
 export class OverlayConflict extends Schema.TaggedError<OverlayConflict>()("OverlayConflict", {
@@ -68,6 +74,7 @@ export interface AddResult {
 
 export type AddError =
   | NotAnEfforgeProject
+  | UnknownAddon
   | IncompatibleStack
   | OverlayConflict
   | TransformAnchorMissing
@@ -107,6 +114,9 @@ const distance = (a: string, b: string): number => {
 }
 
 const suggest = (id: string): string | undefined => {
+  // a slot name or a fragment ("ai", "auth", "better") before edit distance, which favours short ids
+  const partial = allIds.filter((full) => full.split("/").some((part) => part.startsWith(id)))
+  if (partial.length > 0) return partial.join(", ")
   const best = allIds
     .flatMap((full) => [full, full.split("/")[1] as string])
     .map((c) => [c, distance(id, c)] as const)
@@ -114,22 +124,48 @@ const suggest = (id: string): string | undefined => {
   return best !== undefined && best[1] <= 3 ? best[0] : undefined
 }
 
+/** Same JSONC data and comments, ignoring formatting, key order and array order (earlier `add`s reorder bindings). */
+const sameJsonc = (a: string, b: string | undefined): boolean => {
+  if (b === undefined) return false
+  const canon = (v: unknown): unknown =>
+    Array.isArray(v)
+      ? v.map(canon).toSorted((x, y) => byName(JSON.stringify(x), JSON.stringify(y)))
+      : v !== null && typeof v === "object"
+        ? Object.fromEntries(
+            Object.entries(v as Record<string, unknown>)
+              .toSorted(([x], [y]) => byName(x, y))
+              .map(([k, x]) => [k, canon(x)]),
+          )
+        : v
+  const read = (t: string) => {
+    const errors: ParseError[] = []
+    const v = parse(t, errors, { allowTrailingComma: true }) as unknown
+    return errors.length > 0 ? undefined : JSON.stringify(canon(v))
+  }
+  // comments are user content too, and the parser drops them
+  const comments = (t: string) =>
+    (t.match(/\/\/.*$|\/\*[\s\S]*?\*\//gm) ?? [])
+      .map((c) => c.trim())
+      .toSorted()
+      .join("\n")
+  const x = read(a)
+  return x !== undefined && x === read(b) && comments(a) === comments(b)
+}
+
 const isNewPackageJson = (target: string) => target.endsWith("/package.json")
 
 const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
 /** `email`, `extras/email`, `ai/effect-ai-byok`, `ai=effect-ai-byok` -> slot + option. */
-const parseId = (
-  raw: string,
-): Effect.Effect<{ slot: SlotDef; option: string }, IncompatibleStack> => {
+const parseId = (raw: string): Effect.Effect<{ slot: SlotDef; option: string }, UnknownAddon> => {
   const id = raw.trim().toLowerCase()
   const [slotPart, option = ""] = id.includes("=")
     ? id.split("=", 2)
     : id.includes("/")
       ? id.split("/", 2)
       : [undefined, id]
-  const unknown = (why: string) => Effect.fail(incompatible("extras", id, allIds, why))
-  if (option === "none") return unknown("Removing an add-on isn't supported in v0.1.")
+  const unknown = (message: string) => Effect.fail(new UnknownAddon({ id: raw, message }))
+  if (option === "none") return unknown(`Removing an add-on isn't supported in v0.1 ("${raw}").`)
   const candidates = slots.filter(
     (s) => (slotPart === undefined || s.id === slotPart) && s.options.some((o) => o.id === option),
   )
@@ -151,7 +187,7 @@ const parseId = (
 const applyIds = (
   stack: StackConfig,
   ids: ReadonlyArray<string>,
-): Effect.Effect<{ stack: StackConfig; skipped: string[] }, IncompatibleStack> =>
+): Effect.Effect<{ stack: StackConfig; skipped: string[] }, IncompatibleStack | UnknownAddon> =>
   Effect.gen(function* () {
     let next = stack
     const skipped: string[] = []
@@ -182,21 +218,25 @@ const applyIds = (
     const valid = yield* validate(next).pipe(
       Effect.mapError((e) => {
         // the stack rules hold across slots: say which ids to add together
-        const typed = ids.join(" ")
-        const hint =
-          next.database === "none" && (e.slot === "orm" || e.slot === "auth")
-            ? ` Add a database and an ORM in the same command: efforge add database/d1 orm/effect-sql ${typed}`
-            : e.slot === "orm" && next.orm === "none"
-              ? ` Add an ORM with it: efforge add ${typed} orm/drizzle (or orm/effect-sql)`
-              : ""
-        return hint === ""
-          ? e
-          : incompatible(
-              e.slot,
-              e.value,
-              [...e.allowed],
-              `${e.reason ?? "not compatible with the current stack"}.${hint}`,
-            )
+        const typed = ids.map((x) => x.trim().toLowerCase())
+        const hasOrm = typed.some(
+          (x) => x.startsWith("orm/") || x === "drizzle" || x === "effect-sql",
+        )
+        if (next.database === "none" && (e.slot === "orm" || e.slot === "auth"))
+          return incompatible(
+            e.slot,
+            e.value,
+            [...e.allowed],
+            `${e.slot === "auth" ? "auth" : "an ORM"} needs a database, and this project has none. Add one in the same command: efforge add database/d1 ${[...(hasOrm ? [] : ["orm/effect-sql"]), ...typed].join(" ")}`,
+          )
+        if (e.slot === "orm" && next.orm === "none")
+          return incompatible(
+            "database",
+            next.database,
+            [...e.allowed],
+            `a database needs an ORM. Add one with it: efforge add ${typed.join(" ")} orm/drizzle (or orm/effect-sql)`,
+          )
+        return e
       }),
     )
     return { stack: valid, skipped }
@@ -352,7 +392,7 @@ export const addAddons = (
       const generated = (yield* generate(manifest.stack, addons)).get(WRANGLER_FILE)
       if (
         opts.overwrite ||
-        existing === generated ||
+        sameJsonc(existing, generated) ||
         manifest.files[WRANGLER_FILE] === hash(existing)
       )
         removed.add(WRANGLER_FILE)
@@ -580,10 +620,12 @@ const describe = (
   switch (e._tag) {
     case "NotAnEfforgeProject":
       return `${String(e.dir)} is not an efforge project (${String(e.reason)}). Run this from the project root or pass --cwd.`
+    case "PnpmMissing":
+      return "efforge projects use pnpm, and it isn't on your PATH. Install it (corepack enable pnpm, or https://pnpm.io/installation) and re-run, or pass --no-install."
+    case "UnknownAddon":
+      return String(e.message)
     case "IncompatibleStack":
-      return typeof e.reason === "string" && e.reason.includes("efforge list")
-        ? e.reason
-        : `Can't add ${String(e.slot)}/${String(e.value)}: ${typeof e.reason === "string" ? e.reason : "not compatible with the current stack."}`
+      return `Can't add ${String(e.slot)}/${String(e.value)}: ${typeof e.reason === "string" ? e.reason : "not compatible with the current stack."}`
     case "OverlayConflict":
       return `You've edited ${String(e.file)} since it was generated. Nothing was written. Re-run with --overwrite to replace it.\n\n${String(e.diff)}`
     case "TransformAnchorMissing":
@@ -634,6 +676,20 @@ const newer = (a: string, b: string): boolean => {
   return false
 }
 
+/** Word-wraps `text` to `width` columns. */
+const wrap = (text: string, width: number): string[] => {
+  const lines: string[] = []
+  let line = ""
+  for (const word of text.split(/\s+/)) {
+    if (line !== "" && line.length + 1 + word.length > width) {
+      lines.push(line)
+      line = word
+    } else line = line === "" ? word : `${line} ${word}`
+  }
+  if (line !== "") lines.push(line)
+  return lines
+}
+
 const list = (files: ReadonlyArray<string>, mark: string) => files.map((f) => `${mark} ${f}`)
 
 export const addHandler = (input: {
@@ -662,6 +718,9 @@ export const addHandler = (input: {
         `This project was made with efforge ${manifest.efforgeVersion}, newer than this CLI (${efforgeVersion}). Use npx create-efforge@latest add.`,
       )
     const opts = { overwrite: input.overwrite, install: false }
+    // checked before anything is written: install and the route tree both need pnpm
+    if (input.install && !input.dryRun && !(yield* has("pnpm", dir)))
+      return yield* new PnpmMissing()
     // plan first (in memory): the dirty-tree warning only matters when something will change
     const plan = yield* addAddons(dir, input.ids, { ...opts, dryRun: true })
     const changes = plan.written.length + plan.transformed.length + plan.removed.length > 0
@@ -705,7 +764,7 @@ export const addHandler = (input: {
       )
     if (result.replacedScripts.length > 0)
       yield* io.warn(
-        `${input.dryRun ? "Would replace" : "Replaced"} existing package scripts: ${result.replacedScripts.join(", ")}`,
+        `${input.dryRun ? "Would replace" : "Replaced"} existing package scripts:\n${result.replacedScripts.map((x) => `  ${x}`).join("\n")}`,
       )
     if (input.dryRun) return yield* io.outro(pc.dim("dry run: nothing written"))
 
@@ -721,17 +780,29 @@ export const addHandler = (input: {
       // add-ons may add or replace routes
       yield* io.step("Generating the route tree", generateRouteTree(dir))
     }
+    // a new database needs its tables before the app (or sign-up) can use it
+    const database = result.added.find((a) => a.id.startsWith("database/"))?.id.split("/")[1]
+    const alchemy =
+      manifest.stack.infra === "alchemy" || result.added.some((a) => a.id === "infra/alchemy")
+    const commands = [
+      ...(input.install || !depsChanged ? [] : ["pnpm install"]),
+      ...(database === "postgres" ? ["docker compose up -d --wait", "pnpm db:migrate"] : []),
+      ...(database === "d1" && !alchemy ? ["pnpm db:migrate"] : []),
+    ]
+    const width = Math.max(0, ...result.envVars.map((x) => x.name.length))
+    const room = Math.max(30, (process.stdout.columns || 80) - 14)
     const steps = [
-      ...(input.install || !depsChanged ? [] : [`  ${pc.cyan("pnpm install")}`]),
+      ...commands.map((c) => `  ${pc.cyan(c)}`),
       ...(result.envVars.length > 0
         ? [
-            `${pc.bold("New env vars")} ${pc.dim("(in .env.example; local values in .dev.vars)")}`,
-            ...result.envVars.map((v) => {
-              const width = Math.max(...result.envVars.map((x) => x.name.length))
-              const room = Math.max(20, (process.stdout.columns || 80) - width - 14)
-              const brief = v.description.split(/;\s/)[0] ?? v.description
-              return `  ${v.name.padEnd(width)}  ${pc.dim(brief.length > room ? `${brief.slice(0, room - 1)}…` : brief)}`
-            }),
+            `${commands.length > 0 ? "\n" : ""}${pc.bold("New env vars")} ${pc.dim("(in .env.example; local values in .dev.vars)")}`,
+            // full descriptions, wrapped under the name: the hint at the end is often the useful part
+            ...result.envVars.map(
+              (v) =>
+                `  ${v.name.padEnd(width)}\n${wrap(v.description, room)
+                  .map((l) => `    ${pc.dim(l)}`)
+                  .join("\n")}`,
+            ),
           ]
         : []),
       ...result.added

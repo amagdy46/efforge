@@ -10,6 +10,7 @@
 - `efforge list` shows every add-on, and marks the ones a project already has.
 - `npm create efforge .` creates the project in the current directory. A directory that holds only `.git` counts as empty.
 - `create` ends with next steps for the stack: start Postgres, run migrations, then `pnpm dev`.
+- A dry run warns when the target directory isn't empty. Names npm rejects (over 214 characters, `node_modules`) and confusing ones (`test`, `src`) are refused.
 - Help shows examples.
 
 ### Changed
@@ -23,7 +24,7 @@
 - Errors for incompatible flags say why (for example, auth needs a database), and unknown values say they are unknown. With `--json`, errors are JSON on stdout.
 - The install shows its latest output line, and steps show how long they took. In CI or a pipe, each step prints one line.
 - `add` shows a summary of new (`+`) and changed (`~`) files, warns about removed files, replaced package scripts and a dirty git tree, and lists the env vars to fill in. It runs `pnpm install` only when dependencies changed.
-- `add` accepts ids in any case, suggests a fix for typos, and says which ids to add together (database, ORM and auth).
+- `add` accepts ids in any case, suggests a fix for typos (unknown ids are an `UnknownAddon` error), says which ids to add together (database, ORM and auth), checks for pnpm before writing, and prints the database setup steps when it adds a database.
 - The README is shorter, with a demo recording (`.github/assets/demo.tape`); the limits moved to `docs/limits.md`.
 - The generated README explains the database setup.
 
@@ -31,6 +32,9 @@
 
 - Duplicate `--extras` values are dropped.
 - The name prompt accepts the default again after showing an error.
+- `add infra/alchemy` no longer refuses to remove a `wrangler.jsonc` that only earlier `add`s changed. It compares the data and comments, not the text.
+- Piping output into `head` no longer crashes with EPIPE.
+- `list --cwd` with a missing directory is an error; piped `list` output keeps full descriptions.
 
 ## 0.1.0 (2026-10-19)
 

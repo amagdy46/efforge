@@ -20,9 +20,12 @@ export interface ListedAddon {
 export const listAddons = (cwd: string) =>
   Effect.gen(function* () {
     const addons = yield* loadAddons(yield* TemplatesDir)
+    // outside a project, list everything; a --cwd that doesn't exist is a mistake worth reporting
     const stack = yield* readManifest(cwd).pipe(
       Effect.map((m) => m.stack),
-      Effect.orElseSucceed(() => undefined),
+      Effect.catchTag("NotAnEfforgeProject", (e) =>
+        e.reason === "efforge.jsonc not found" ? Effect.succeed(undefined) : Effect.fail(e),
+      ),
     )
     const out: ListedAddon[] = []
     for (const slot of slots) {
@@ -76,6 +79,8 @@ export const listCommand = Command.make(
       const { project, addons } = yield* listAddons(path.resolve(input.cwd))
       if (input.json) return yield* Console.log(JSON.stringify(addons, null, 2))
       const width = Math.max(...addons.map((a) => a.id.length))
+      // cut descriptions to the terminal; piped output keeps them whole, a very narrow one drops them
+      const room = process.stdout.isTTY ? (process.stdout.columns || 80) - width - 6 : undefined
       const lines: string[] = []
       let slot = ""
       for (const a of addons) {
@@ -85,8 +90,12 @@ export const listCommand = Command.make(
           lines.push("", pc.bold(def?.title ?? slot))
         }
         const mark = a.installed === true ? pc.green("✓") : " "
+        if (room !== undefined && room < 20) {
+          lines.push(`${mark} ${a.installed === true ? pc.dim(a.id) : pc.cyan(a.id)}`)
+          continue
+        }
         lines.push(
-          `${mark} ${a.installed === true ? pc.dim(a.id.padEnd(width)) : pc.cyan(a.id.padEnd(width))}  ${pc.dim(short(a.description, (process.stdout.columns || 100) - width - 6))}`,
+          `${mark} ${a.installed === true ? pc.dim(a.id.padEnd(width)) : pc.cyan(a.id.padEnd(width))}  ${pc.dim(room === undefined ? a.description : short(a.description, room))}`,
         )
       }
       lines.push(

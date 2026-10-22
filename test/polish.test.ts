@@ -165,7 +165,7 @@ it.effect("add: auth or ORM without a database says to add them together", () =>
       Effect.flip,
     )
     expect(e._tag).toBe("IncompatibleStack")
-    expect((e as { reason?: string }).reason).toContain("efforge add database/d1 orm/effect-sql")
+    expect((e as { reason?: string }).reason).toContain("efforge add database/d1 orm/drizzle")
     const db = yield* addAddons(dir, ["database/d1"], { overwrite: false, dryRun: true }).pipe(
       Effect.flip,
     )
@@ -177,7 +177,8 @@ it.effect("add: unknown ids get a did-you-mean, ids are case-insensitive", () =>
   Effect.gen(function* () {
     const dir = yield* noDbProject()
     const e = yield* addAddons(dir, ["emial"], { overwrite: false, dryRun: true }).pipe(Effect.flip)
-    expect((e as { reason?: string }).reason).toContain("Did you mean email?")
+    expect(e._tag).toBe("UnknownAddon")
+    expect((e as { message?: string }).message).toContain("Did you mean email?")
     const ok = yield* addAddons(dir, ["Email"], { overwrite: false, dryRun: true })
     expect(ok.added.map((a) => a.id)).toEqual(["extras/email"])
   }).pipe(Effect.provide(env)),

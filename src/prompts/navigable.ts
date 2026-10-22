@@ -1,6 +1,6 @@
 import { stripVTControlCharacters } from "node:util"
 import * as p from "@clack/prompts"
-import { Cause, Context, Effect, Layer, Schema } from "effect"
+import { Cause, Context, Effect, type Exit, Layer, Schema } from "effect"
 import pc from "picocolors"
 
 /** Returned by a prompt when the user picked "Back". */
@@ -171,67 +171,91 @@ export const livePromptIO: PromptIOShape = {
   note: (body, title) => Effect.sync(() => p.note(body, title)),
   outro: (message) => Effect.sync(() => p.outro(message)),
   warn: (message) => Effect.sync(() => p.log.warn(message)),
-  // Spinners and live logs redraw the terminal: in CI or a pipe, print one line per step instead.
-  step: (label, eff) =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const start = performance.now()
-        if (!interactive()) return { start, s: undefined }
-        const s = p.spinner()
-        s.start(label)
-        return { start, s }
-      }),
-      () => eff,
-      ({ start, s }, exit) =>
-        Effect.sync(() => {
-          const ok = exit._tag === "Success"
-          const interrupted = !ok && Cause.hasInterruptsOnly(exit.cause)
-          const msg = ok
-            ? `${pc.green("✓")} ${label}${seconds(start)}`
-            : interrupted
-              ? `${label} ${pc.dim("(cancelled)")}`
-              : `${label} failed`
-          if (s === undefined) (ok ? p.log.message : p.log.error)(msg)
-          else if (ok) s.stop(msg)
-          else if (interrupted) s.cancel(msg)
-          else s.error(msg)
-        }),
-    ),
-  task: (label, eff) =>
-    Effect.suspend(() => {
-      const start = performance.now()
-      if (!interactive()) {
-        p.log.message(`${label}…`)
-        return eff(() => {}).pipe(
-          Effect.tap(() =>
-            Effect.sync(() => p.log.message(`${pc.green("✓")} ${label}${seconds(start, true)}`)),
-          ),
-        )
+  // Spinners redraw the terminal: in CI or a pipe, print one line per step instead.
+  step: (label, eff) => run(label, () => eff, false),
+  task: (label, eff) => run(label, eff, true),
+}
+
+/**
+ * A one-line spinner. Not clack's: that one puts stdin in raw mode and answers Ctrl-C with
+ * `process.exit(0)`, which skips cleanup and reports success. Here Ctrl-C stays a SIGINT, so the
+ * run is interrupted, child processes stop, and the caller can say what is left to do.
+ */
+const spinner = (label: string) => {
+  const out = process.stdout
+  const frames = ["◒", "◐", "◓", "◑"]
+  let text = label
+  let frame = 0
+  // a wrapped line can't be redrawn with \r, so everything is cut to the terminal width
+  const fit = (s: string) => {
+    const room = (out.columns || 80) - 4
+    const plain = stripVTControlCharacters(s)
+    return plain.length <= room ? s : `${plain.slice(0, room - 1)}…`
+  }
+  const render = () =>
+    out.write(`\r\u001b[2K${pc.magenta(frames[frame++ % 4] ?? "")}  ${fit(text)}`)
+  const showCursor = () => out.write("\u001b[?25h")
+  out.write(`${pc.gray("│")}\n\u001b[?25l`)
+  process.once("exit", showCursor)
+  render()
+  const timer = setInterval(render, 80)
+  return {
+    message: (s: string) => {
+      text = s
+    },
+    end: (symbol: string, s: string) => {
+      clearInterval(timer)
+      process.off("exit", showCursor)
+      out.write(`\r\u001b[2K${symbol}  ${fit(s)}\n`)
+      showCursor()
+    },
+  }
+}
+
+const run = <A, E, R>(
+  label: string,
+  eff: (log: (line: string) => void) => Effect.Effect<A, E, R>,
+  live: boolean,
+): Effect.Effect<A, E, R> =>
+  Effect.suspend(() => {
+    const start = performance.now()
+    const done = (exit: Exit.Exit<A, E>) => {
+      const ok = exit._tag === "Success"
+      const interrupted = !ok && Cause.hasInterruptsOnly(exit.cause)
+      return {
+        ok,
+        interrupted,
+        msg: ok
+          ? `${pc.green("✓")} ${label}${seconds(start, live)}`
+          : interrupted
+            ? `${label} ${pc.dim("(cancelled)")}`
+            : `${label} failed`,
       }
-      // One line that updates in place: the spinner shows the latest output line, cut to fit.
-      // (clack's taskLog miscounts wrapped lines when clearing and erases output above it.)
-      const s = p.spinner()
-      s.start(label)
-      const room = Math.max(20, (process.stdout.columns || 80) - label.length - 12)
-      return eff((line) => {
-        const text = clean(line)
-        if (text !== "")
-          s.message(
-            `${label}  ${pc.dim(text.length > room ? `${text.slice(0, room - 1)}…` : text)}`,
-          )
-      }).pipe(
+    }
+    if (!interactive()) {
+      if (live) p.log.message(`${label}…`)
+      return eff(() => {}).pipe(
         Effect.onExit((exit) =>
-          Effect.sync(() =>
-            exit._tag === "Success"
-              ? s.stop(`${pc.green("✓")} ${label}${seconds(start, true)}`)
-              : Cause.hasInterruptsOnly(exit.cause)
-                ? s.cancel(`${label} ${pc.dim("(cancelled)")}`)
-                : s.error(`${label} failed`),
-          ),
+          Effect.sync(() => {
+            const { ok, interrupted, msg } = done(exit)
+            ;(ok ? p.log.message : interrupted ? p.log.warn : p.log.error)(msg)
+          }),
         ),
       )
-    }),
-}
+    }
+    const s = spinner(label)
+    return eff((line) => {
+      const text = clean(line)
+      if (text !== "") s.message(`${label}  ${pc.dim(text)}`)
+    }).pipe(
+      Effect.onExit((exit) =>
+        Effect.sync(() => {
+          const { ok, interrupted, msg } = done(exit)
+          s.end(ok ? pc.green("◇") : interrupted ? pc.red("■") : pc.red("▲"), msg)
+        }),
+      ),
+    )
+  })
 
 export const PromptIOLive: Layer.Layer<PromptIO> = Layer.succeed(PromptIO, livePromptIO)
 

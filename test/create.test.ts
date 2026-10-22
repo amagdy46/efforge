@@ -139,7 +139,7 @@ it("incompatible flags fail with exit code 1 and write nothing", async () => {
   const err = vi.spyOn(console, "error").mockImplementation(() => {})
   await cli(["app", "-y", "--database=none", "--auth=better-auth"]).p
   expect(process.exitCode).toBe(1)
-  expect(String(err.mock.calls[0]?.[0])).toContain("Options: none")
+  expect(String(err.mock.calls[0]?.[0])).toContain("auth stores users in the database")
   expect(readdirSync(tmp)).toEqual([])
 })
 

@@ -164,14 +164,19 @@ export const create = (opts: CreateOptions) =>
     const tree = yield* generate(stack, addons)
     const files = [...tree.keys()].toSorted()
 
+    const shownCommand = inPlace ? command.replace(` ${stack.name} --`, " . --") : command
     if (opts.dryRun) {
+      if (!opts.json && isOccupied(dir))
+        yield* io.warn(
+          `${inPlace ? "This directory" : `./${dirName}`} isn't empty, so a real run would stop here.`,
+        )
       if (opts.json) {
         yield* Console.log(JSON.stringify({ stack, command, files }, null, 2))
       } else {
         yield* io.note(summary(stack), "Your stack")
         yield* io.note(files.join("\n"), `${files.length} files`)
         yield* io.outro(
-          `${pc.dim("dry run: nothing written.")} Run it for real:\n  ${command.replace(/ --dry-run\b/, "")}`,
+          `${pc.dim("dry run: nothing written.")} Run it for real:\n  ${shownCommand}`,
         )
       }
       return
@@ -191,8 +196,10 @@ export const create = (opts: CreateOptions) =>
     }
 
     const remaining: string[] = []
+    let written = false
     const setup = Effect.gen(function* () {
       yield* io.step(`Writing ${files.length} files`, writeTree(dir, tree))
+      written = true
       // Init before formatting: oxfmt honors .gitignore files up the directory tree, so a project
       // outside any repo would otherwise pick up a parent's ignore rules (a `*` hides every file).
       // A failure here must not fail the scaffold.
@@ -208,9 +215,9 @@ export const create = (opts: CreateOptions) =>
             ),
           )
         : false
+      if (opts.install) remaining.push("pnpm install", "pnpm format")
+      if (gitReady) remaining.push("git add -A && git commit -m 'Initial commit'")
       if (opts.install) {
-        remaining.push("pnpm install", "pnpm format")
-        if (gitReady) remaining.push("git add -A && git commit -m 'Initial commit'")
         yield* io.task("Installing dependencies (pnpm install)", (log) =>
           exec("pnpm", ["install"], dir, log),
         )
@@ -267,7 +274,11 @@ export const create = (opts: CreateOptions) =>
       ),
       Effect.onInterrupt(() =>
         io.warn(
-          `Stopped. ./${dirName} is only partly set up: delete it, or finish with${remaining.length === 0 ? " nothing more" : `:\n  ${remaining.join("\n  ")}`}`,
+          !written
+            ? `Stopped while writing files. Delete ${inPlace ? "what was written here" : `./${dirName}`} and run efforge again.`
+            : remaining.length === 0
+              ? `Stopped. ./${dirName} is set up; only the last step was skipped.`
+              : `Stopped. ./${dirName} is only partly set up: delete it, or finish with:\n  ${remaining.join("\n  ")}`,
         ),
       ),
     )
@@ -397,7 +408,7 @@ const describe = (
       const known = slot?.options.some((o) => o.id === e.value) ?? false
       const allowed = (e.allowed as string[]).join(", ")
       return known
-        ? `--${String(e.slot)}=${String(e.value)} can't be used here${typeof e.reason === "string" ? `: ${e.reason}` : ""}. Options: ${allowed}`
+        ? `--${String(e.slot)}=${String(e.value)} can't be used here${typeof e.reason === "string" ? `: ${e.reason}.` : `. Options: ${allowed}`}`
         : `Unknown --${String(e.slot)}=${String(e.value)}. Options: ${allowed}`
     }
     case "InvalidProjectName":
