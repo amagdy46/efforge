@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/create-efforge/schemas/list.schema.json",
+  "type": "object",
+  "properties": {
+    "efforge": {
+      "type": "string",
+      "description": "The CLI version that printed this."
+    },
+    "contract": {
+      "type": "number",
+      "enum": [
+        1
+      ],
+      "description": "The version of this contract. It changes only when a field is renamed, removed or changes meaning."
+    },
+    "ok": {
+      "type": "boolean",
+      "enum": [
+        true
+      ]
+    },
+    "project": {
+      "type": "boolean",
+      "description": "--cwd (default: the current directory) is an efforge project."
+    },
+    "directory": {
+      "type": "string"
+    },
+    "stack": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "runtime": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "cloudflare"
+              ]
+            }
+          ]
+        },
+        "database": {
+          "type": "string",
+          "enum": [
+            "postgres",
+            "d1",
+            "none"
+          ]
+        },
+        "orm": {
+          "type": "string",
+          "enum": [
+            "drizzle",
+            "effect-sql",
+            "none"
+          ]
+        },
+        "auth": {
+          "type": "string",
+          "enum": [
+            "better-auth-orgs",
+            "better-auth",
+            "none"
+          ]
+        },
+        "infra": {
+          "type": "string",
+          "enum": [
+            "none",
+            "alchemy"
+          ]
+        },
+        "ai": {
+          "type": "string",
+          "enum": [
+            "none",
+            "effect-ai-byok"
+          ]
+        },
+        "extras": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "workflows",
+              "realtime",
+              "browser",
+              "storage",
+              "email"
+            ]
+          }
+        }
+      },
+      "required": [
+        "name",
+        "runtime",
+        "database",
+        "orm",
+        "auth",
+        "infra",
+        "ai",
+        "extras"
+      ],
+      "additionalProperties": true
+    },
+    "nearby": {
+      "type": "string",
+      "description": "When project is false: the efforge project around or beside the directory (a parent, or the one child that has one). Pass it as --cwd."
+    },
+    "addons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "What to pass to `add`."
+          },
+          "slot": {
+            "type": "string"
+          },
+          "option": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "installed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "slot",
+          "option",
+          "title",
+          "description"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "efforge",
+    "contract",
+    "ok",
+    "project",
+    "addons"
+  ],
+  "additionalProperties": true,
+  "title": "efforge list --json"
+}

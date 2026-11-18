@@ -3,6 +3,12 @@ import type { Tree } from "./tree.ts"
 
 export class TargetNotEmpty extends Schema.TaggedError<TargetNotEmpty>()("TargetNotEmpty", {
   dir: Schema.String,
+  /** The directory already holds an efforge project: its stack and the setup it still needs. */
+  project: Schema.optionalKey(
+    Schema.Struct({ stack: Schema.Unknown, remaining: Schema.Array(Schema.String) }),
+  ),
+  /** The stack the create asked for, to tell whether the project there is the same one. */
+  requested: Schema.optionalKey(Schema.Unknown),
 }) {}
 
 export class WriteFailed extends Schema.TaggedError<WriteFailed>()("WriteFailed", {

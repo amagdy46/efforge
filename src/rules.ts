@@ -10,6 +10,8 @@ export class IncompatibleStack extends Schema.TaggedError<IncompatibleStack>()(
     allowed: Schema.Array(Schema.String),
     /** extra explanation (e.g. why `add` can't change a slot) */
     reason: Schema.optionalKey(Schema.String),
+    /** `add` only: the sets of ids that, added in the same command, satisfy the rules */
+    ways: Schema.optionalKey(Schema.Array(Schema.Array(Schema.String))),
   },
 ) {}
 

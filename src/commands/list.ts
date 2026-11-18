@@ -4,7 +4,10 @@ import pc from "picocolors"
 import { loadAddons } from "../addon.ts"
 import { introLine } from "../intro.ts"
 import { slots } from "../slots.ts"
-import { readManifest } from "./add.ts"
+import { relative } from "node:path"
+import { BIN, Invocation, printSuccess, quote, report } from "../contract.ts"
+import { nearbyProject } from "../fix.ts"
+import { addFailure, readManifest } from "./add.ts"
 import { TemplatesDir } from "./create.ts"
 
 export interface ListedAddon {
@@ -51,7 +54,9 @@ export const listAddons = (cwd: string) =>
         })
       }
     }
-    return { project: stack !== undefined, addons: out }
+    // not a project, but inside one or beside one: say where, as `add` would
+    const nearby = stack === undefined ? nearbyProject(cwd) : undefined
+    return { project: stack !== undefined, stack, nearby, addons: out }
   })
 
 /** First clause of a description, cut to fit the terminal. */
@@ -64,7 +69,9 @@ export const listCommand = Command.make(
   "list",
   {
     json: Flag.Boolean("json").pipe(
-      Flag.withDescription("Print the add-ons as JSON on stdout"),
+      Flag.withDescription(
+        "Print one JSON document on stdout, nothing else (https://github.com/amagdy46/efforge/blob/main/docs/json.md)",
+      ),
       Flag.withDefault(false),
     ),
     cwd: Flag.String("cwd").pipe(
@@ -77,8 +84,15 @@ export const listCommand = Command.make(
   (input) =>
     Effect.gen(function* () {
       const path = yield* Path.Path
-      const { project, addons } = yield* listAddons(path.resolve(input.cwd))
-      if (input.json) return yield* Console.log(JSON.stringify(addons, null, 2))
+      const dir = path.resolve(input.cwd)
+      const { project, stack, nearby, addons } = yield* listAddons(dir)
+      if (input.json)
+        return yield* printSuccess({
+          project,
+          ...(stack === undefined ? {} : { directory: dir, stack }),
+          ...(nearby === undefined ? {} : { nearby }),
+          addons,
+        })
       const width = Math.max(...addons.map((a) => a.id.length))
       // cut descriptions to the terminal; piped output keeps them whole, a very narrow one drops them
       const room = process.stdout.isTTY ? (process.stdout.columns || 80) - width - 6 : undefined
@@ -99,24 +113,25 @@ export const listCommand = Command.make(
           `${mark} ${a.installed === true ? pc.dim(a.id.padEnd(width)) : pc.cyan(a.id.padEnd(width))}  ${pc.dim(room === undefined ? a.description : short(a.description, room))}`,
         )
       }
-      lines.unshift(introLine("list"))
+      // in a pipe, stdout carries only the list (docs/json.md, "In a pipe")
+      if (process.stdout.isTTY) lines.unshift(introLine("list"))
+      const near = nearby === undefined ? undefined : relative(process.cwd(), nearby) || "."
       lines.push(
         "",
         pc.dim(
           project
-            ? "✓ already in this project. Add one with: npx create-efforge add <id>"
-            : "Pick them in npm create efforge, or add one later with: npx create-efforge add <id>",
+            ? `✓ already in this project. Add one with: ${BIN} add <id>`
+            : near !== undefined
+              ? `This directory isn't an efforge project; ${nearby} is. See what it has: ${BIN} list --cwd ${quote(near)}`
+              : `Pick them in ${BIN}, or add one later with: ${BIN} add <id>`,
         ),
       )
       yield* Console.log(lines.join("\n").replace(/^\n/, ""))
     }).pipe(
       Effect.catch((e) =>
         Effect.gen(function* () {
-          const err = e as { readonly _tag: string; readonly message?: string }
-          yield* Console.error(pc.red(err.message ?? err._tag))
-          yield* Effect.sync(() => {
-            process.exitCode = 1
-          })
+          const args = yield* Invocation
+          yield* report(input.json, addFailure(e as never, args))
         }),
       ),
     ),

@@ -79,20 +79,36 @@ export class PromptIO extends Context.Service<PromptIO, PromptIOShape>()("efforg
 const BACK = "\u0000back"
 const backChoice: p.Option<string> = { value: BACK, label: pc.dim("← Back") }
 
+/** `CI` set to anything but empty, `0` or `false` (clack only recognises `CI=true`). */
+export const isCI = (): boolean => {
+  const v = process.env.CI?.trim().toLowerCase()
+  return v !== undefined && v !== "" && v !== "0" && v !== "false"
+}
+
+/** Prompts need a terminal on stdin, and never run in CI: there a missing answer fails at once. */
+export const canPrompt = (): boolean => process.stdin.isTTY && !isCI()
+
+/** A section header waits for the first prompt under it, so a run that prompts for nothing prints none. */
+let pendingSection: string | undefined
+
 const ask = <A>(
   id: string,
   options: ReadonlyArray<string>,
   run: () => Promise<A | symbol>,
 ): Effect.Effect<A, PromptError> =>
-  process.stdin.isTTY
-    ? Effect.promise(run).pipe(
+  canPrompt()
+    ? Effect.sync(() => {
+        if (pendingSection !== undefined) p.log.step(pc.bold(pendingSection))
+        pendingSection = undefined
+      }).pipe(
+        Effect.andThen(Effect.promise(run)),
         Effect.flatMap((v) =>
           p.isCancel(v) ? Effect.fail(new Cancelled()) : Effect.succeed(v as A),
         ),
       )
     : Effect.fail(new NeedsInput({ id, options }))
 
-const interactive = (): boolean => process.stdout.isTTY && !p.isCI()
+const interactive = (): boolean => process.stdout.isTTY && !isCI()
 
 /** Elapsed time, shown only once it's worth reading (`always` for installs). */
 const seconds = (start: number, always = false): string => {
@@ -166,7 +182,10 @@ export const livePromptIO: PromptIOShape = {
       }),
     ),
   intro: (title) => Effect.sync(() => p.intro(title)),
-  section: (title) => Effect.sync(() => p.log.step(pc.bold(title))),
+  section: (title) =>
+    Effect.sync(() => {
+      pendingSection = title
+    }),
   info: (message) => Effect.sync(() => p.log.info(message)),
   note: (body, title) => Effect.sync(() => p.note(body, title)),
   outro: (message) => Effect.sync(() => p.outro(message)),

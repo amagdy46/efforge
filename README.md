@@ -66,6 +66,18 @@ npx create-efforge add ai/effect-ai-byok extras/storage --dry-run   # see what w
 
 `add` reads the stack from `efforge.jsonc`, checks the new choice is compatible, writes the add-on's files and edits the files that compose the app. It computes everything first and writes nothing if any step fails. Files you've edited since they were generated are left alone unless you pass `--overwrite`, and it shows you the diff. When it's done it lists the new env vars to fill in. Run it with a clean git tree and review the result with `git diff`.
 
+## For coding agents
+
+Tell your agent to use efforge, or install the skill: `npx skills add amagdy46/efforge`. Without it, these commands are all an agent needs. They need create-efforge 0.3.0 or later; every document then carries `contract: 1`. `--json` never prompts and prints one JSON document; on failure, `error.fix` is a command that does what was asked, or `null` with the values to choose from (and, when there are several ways out, `alternatives`: complete commands, one per way).
+
+```sh
+npx -y create-efforge@latest create my-app --json --database=d1 --auth=better-auth
+npx -y create-efforge@latest list --json --cwd my-app
+npx -y create-efforge@latest add email --json --cwd my-app
+```
+
+Then, in `my-app`: `pnpm typecheck && pnpm check && pnpm test && pnpm build`. The skill ([skills/efforge/SKILL.md](https://github.com/amagdy46/efforge/blob/main/skills/efforge/SKILL.md)) says what each error means; [docs/json.md](https://github.com/amagdy46/efforge/blob/main/docs/json.md) is the full contract, and [llms.txt](https://github.com/amagdy46/efforge/blob/main/llms.txt) lists the docs.
+
 ## What you get
 
 ```
@@ -87,6 +99,7 @@ Early: Cloudflare is the only runtime, add-ons can be added but not removed yet,
 ## Docs
 
 - [CLI reference](https://github.com/amagdy46/efforge/blob/main/docs/cli.md): every flag, CI and scripting, `add` in detail
+- [`--json` contract](https://github.com/amagdy46/efforge/blob/main/docs/json.md): the output scripts and agents read, every error code
 - [Contributing](https://github.com/amagdy46/efforge/blob/main/CONTRIBUTING.md) and the [changelog](https://github.com/amagdy46/efforge/blob/main/CHANGELOG.md)
 
 Prompts by [Clack](https://github.com/bombshell-dev/clack). MIT licensed.

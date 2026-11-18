@@ -20,7 +20,7 @@ Rules for AI agents (and humans) working in this repo. Read this before changing
   `lib/{highlight,layer-graph}.ts` and the cards' server files, then run `pnpm check`.
 - `apps/web/src/server/outcome.ts`: `runOutcome` runs an Effect for a server function and returns
   its tagged error as data (`{ ok: false, error: { _tag, message } }`), so the UI can match on it.
-- `efforge.jsonc`: the stack choices. `efforge add` reads it; leave it alone.
+- `efforge.jsonc`: the stack choices. `efforge add` reads it; leave it alone. To add a capability (email, storage, a database, auth, AI), run `npx -y create-efforge@latest add <id> --json` from the project root instead of wiring it by hand; `npx -y create-efforge@latest list --json` lists the ids.
 
 ## Effect
 
