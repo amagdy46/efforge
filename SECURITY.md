@@ -13,8 +13,10 @@ Include the efforge version, the command you ran (or the stack from `efforge.jso
 
 ## Out of scope
 
-- Vulnerabilities in dependencies (Effect, TanStack Start, Better Auth, Drizzle, wrangler, Alchemy and others). Report those upstream. If efforge pins a version with a known vulnerability, that is in scope.
+- Vulnerabilities in dependencies (Effect, TanStack Start, Better Auth, Drizzle, wrangler, Alchemy and others). Report those upstream.
 - Code you changed after generating the project.
 - Cloudflare's platform itself.
 
-Only the latest release gets fixes.
+## Supported versions
+
+Fixes are released in the latest version.

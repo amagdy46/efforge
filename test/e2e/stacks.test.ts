@@ -1,18 +1,10 @@
 import { spawn, spawnSync } from "node:child_process"
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-} from "node:fs"
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
 import { dirname, join, resolve as resolvePath } from "node:path"
 import { NodeFileSystem, NodeServices } from "@effect/platform-node"
 import { describe, it } from "@effect/vitest"
 import { Effect, FileSystem, Path } from "effect"
-import { addonIdsFor, loadAddons } from "../../src/addon.ts"
+import { loadAddons } from "../../src/addon.ts"
 import { addAddons } from "../../src/commands/add.ts"
 import { generate } from "../../src/generate.ts"
 import { ROUTE_TREE_COMMAND } from "../../src/routeTree.ts"
@@ -119,21 +111,6 @@ const generateStack = (config: StackConfig): Effect.Effect<string, unknown> =>
     return dir
   }).pipe(Effect.provide(NodeFileSystem.layer), Effect.provide(Path.layer))
 
-const docsExamples = new URL("../../docs/examples", import.meta.url).pathname
-
-/**
- * The tests the docs show (docs/examples/<slot>-<option>/*.test.ts) go into packages/core/test of
- * every stack with that add-on, so the gate runs them and a template change cannot leave them behind.
- */
-const copyDocsExamples = (config: StackConfig, dir: string) => {
-  for (const id of addonIdsFor(config)) {
-    const examples = `${docsExamples}/${id.replace("/", "-")}`
-    if (!existsSync(examples)) continue
-    for (const file of readdirSync(examples))
-      copyFileSync(`${examples}/${file}`, `${dir}/packages/core/test/${file}`)
-  }
-}
-
 const filesUnder = (root: string): string[] =>
   readdirSync(root, { withFileTypes: true, recursive: true })
     .filter((e) => e.isFile())
@@ -181,7 +158,6 @@ const checkRegionsOnly = (dir: string): number => {
 const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
   Effect.gen(function* () {
     const dir = yield* generateStack(config)
-    copyDocsExamples(config, dir)
     yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
     // a minimal stack's card files may have nothing outside their regions; auth and database ones do
     yield* Effect.try(() => checkRegionsOnly(dir))

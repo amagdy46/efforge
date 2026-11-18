@@ -12,4 +12,4 @@
 
 <!-- Paste the commands you ran and what they printed, or say which you skipped and why. -->
 
-A design decision goes in `docs/decisions/`. See [CONTRIBUTING.md](../CONTRIBUTING.md).
+A design decision goes in `docs/decisions/`. See [CONTRIBUTING.md](https://github.com/amagdy46/efforge/blob/main/CONTRIBUTING.md).
