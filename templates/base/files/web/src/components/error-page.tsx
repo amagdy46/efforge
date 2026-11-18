@@ -7,6 +7,8 @@ interface Missing {
   readonly _tag: "NotConfigured"
   readonly setting: string
   readonly file: string
+  /** What is wrong with it: "X is not set.", or the layer's own reason */
+  readonly problem?: string
 }
 
 const isMissing = (error: unknown): error is Missing =>
@@ -23,9 +25,10 @@ export function ErrorPage({ error, reset }: ErrorComponentProps) {
         <Settings2 aria-hidden className="size-6 text-muted-foreground" />
         <h1 className="text-2xl font-semibold tracking-tight">Not configured yet</h1>
         <p>
-          This page needs <code className="font-mono text-[0.9em]">{error.setting}</code>, which is
-          not set. Add it to <code className="font-mono text-[0.9em]">{error.file}</code> and
-          restart <code className="font-mono text-[0.9em]">pnpm dev</code>.
+          This page needs <code className="font-mono text-[0.9em]">{error.setting}</code>.{" "}
+          {error.problem ?? `${error.setting} is not set.`} Set it in{" "}
+          <code className="font-mono text-[0.9em]">{error.file}</code> and restart{" "}
+          <code className="font-mono text-[0.9em]">pnpm dev</code>.
         </p>
         <pre className="overflow-x-auto rounded-md border bg-code p-3 font-mono text-sm text-code-foreground">
           {`# ${error.file}\n${error.setting}=...`}
