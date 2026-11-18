@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:
 import { dirname, join, resolve as resolvePath } from "node:path"
 import { NodeFileSystem, NodeServices } from "@effect/platform-node"
 import { describe, it } from "@effect/vitest"
+import { vi } from "vitest"
 import { Effect, FileSystem, Layer, Path } from "effect"
 import { loadAddons } from "../../src/addon.ts"
 import { addAddons } from "../../src/commands/add.ts"
@@ -140,15 +141,21 @@ const checkDoctor = (dir: string) =>
     const json = (args: ReadonlyArray<string>) =>
       Effect.gen(function* () {
         const out: string[] = []
-        const log = console.log
-        console.log = (...a: unknown[]) => void out.push(a.join(" "))
+        const log = vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => {
+          out.push(a.join(" "))
+        })
         const before = process.env.DATABASE_URL
         process.env.DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:9/app"
         process.exitCode = undefined
-        yield* runWith(args).pipe(
+        // its own runtime: it.effect's test console would swallow the document
+        yield* Effect.promise(() =>
+          Effect.runPromise(
+            runWith(args).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, PromptIOLive))),
+          ),
+        ).pipe(
           Effect.ensuring(
             Effect.sync(() => {
-              console.log = log
+              log.mockRestore()
               if (before === undefined) delete process.env.DATABASE_URL
               else process.env.DATABASE_URL = before
             }),
@@ -171,7 +178,7 @@ const checkDoctor = (dir: string) =>
       throw new Error(
         `doctor failed on a new project:\n${failed.map((c) => `${c.id}: ${c.message}`).join("\n")}`,
       )
-  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, PromptIOLive)))
+  })
 
 /** Generates `config` into a tmp dir, installs, then runs the generated project's full gate: typecheck, check, test, build. */
 const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
