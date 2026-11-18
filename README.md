@@ -68,7 +68,7 @@ npx create-efforge add ai/effect-ai-byok extras/storage --dry-run   # see what w
 
 ## For coding agents
 
-Tell your agent to use efforge, or install the skill: `npx skills add amagdy46/efforge`. Without it, these commands are all an agent needs. They need create-efforge 0.3.0 or later; every document then carries `contract: 1`. `--json` never prompts and prints one JSON document; on failure, `error.fix` is a command that does what was asked, or `null` with the values to choose from.
+Tell your agent to use efforge, or install the skill: `npx skills add amagdy46/efforge`. Without it, these commands are all an agent needs. They need create-efforge 0.3.0 or later; every document then carries `contract: 1`. `--json` never prompts and prints one JSON document; on failure, `error.fix` is a command that does what was asked, or `null` with the values to choose from (and, when there are several ways out, `alternatives`: complete commands, one per way).
 
 ```sh
 npx -y create-efforge@latest create my-app --json --database=d1 --auth=better-auth

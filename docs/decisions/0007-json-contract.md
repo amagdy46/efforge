@@ -37,6 +37,23 @@ the CLI; the CLI itself is already the interface.
   creates something the caller didn't ask for (no renamed project, no words
   joined into a name), and never needs a prompt (it starts with
   `npx -y create-efforge`, and a create gets `--yes`).
+- The promise is enforced in one place, not per error. `src/fix.ts` reads
+  argv into an intent (the command, the name or add-on ids, the flags, with
+  `--` understood), and an error builds its fix only by editing that intent.
+  `fix()` re-reads the rendered command and refuses it (`null`) unless it
+  runs the same command (a fix for anything but a create is never a create),
+  keeps the name (only case and spaces normalised), the ids, `--cwd` and
+  every switch the caller set, changes a stack value or add-on id only under
+  the typo rule, and differs from what the caller ran. The command comes
+  first and added flags go before `--`. Setup steps (`finish()`) leave out
+  what `--no-install` and `--no-git` declined. A property test
+  (`test/fix-property.test.ts`) generates invocations from a seed, follows
+  their fixes and checks the rules, so a new error path can't break them
+  unnoticed.
+- More than one way out is the caller's choice: `fix` is `null` and
+  `alternatives` lists each as a complete command with a description
+  (`IncompatibleStack`; `add`'s `needs` names the slots to fill). A database
+  or an ORM can't be swapped after `add`, so efforge never picks one.
 - One typo rule decides when a value counts as meant (`isTypo` in
   `src/contract.ts`): options of one or two characters only match exactly;
   otherwise one edit (a swap of neighbours counts as one) for options up to
@@ -45,7 +62,9 @@ the CLI; the CLI itself is already the interface.
 - An interrupted `create --json` still prints one document (`Interrupted`,
   exit 130) with what was written and the steps that finish it. A failed
   install's document carries what success would have (`env`, `nextSteps`),
-  and `add` remembers an install it owes until one succeeds.
+  and whether `add` owes an install is read from the project (package.json
+  files and pnpm-workspace.yaml against pnpm's `node_modules/.pnpm/lock.yaml`),
+  so an install run by hand settles it.
 - Success documents carry what the next step needs without parsing prose: the
   project directory, the stack, the files, the env vars with where their local
   value lives, and the next commands, each with the directory to run it in.
@@ -61,10 +80,13 @@ the CLI; the CLI itself is already the interface.
   `npx skills add amagdy46/efforge`), plus `llms.txt` and a README section.
   The commands they teach are run by `test/doc-commands.test.ts`.
 - The root form takes exactly one word, checked before anything else
-  parses: a reserved word (`help`, `version`, and `upgrade`, `doctor`,
-  `info`, `graph` for commands to come), a typo of a command, more than one
-  word, or one word with a flag only `add` or `list` take is
-  `UnknownCommand`. `create <name>` still allows any valid name.
+  parses: a command in other case or a typo of one, a word people guess as a
+  command (`reservedWords` in `src/fix.ts`: `help`, `version`, `update`,
+  `init`, `install`, `remove`, `ls`, `run`, `build`, `deploy` and more), more
+  than one word, or one word with a flag only `add` or `list` take is
+  `UnknownCommand`. Inside an efforge project it creates nothing
+  (`InsideProject`): that is where `add` and `list` run. `create <name>` still
+  allows any valid name, anywhere.
 
 ## Consequences
 
@@ -80,7 +102,7 @@ the CLI; the CLI itself is already the interface.
 - `OverlayConflict`'s fix does what was asked, and also discards the user's
   edits to the files it lists. The docs and the skill say to show the diff
   first.
-- Projects named `lst`, `ad`, `help` or `graph` need `create` spelled out,
+- Projects named `lst`, `ad`, `help`, `update` or `graph` need `create` spelled out,
   and a new command must be added to the reserved words before it ships.
 - Fewer errors have a fix (`--database=mysql`, `add stripe`, a taken
   directory). An agent then has to choose, which is the point.

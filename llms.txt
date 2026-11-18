@@ -2,7 +2,7 @@
 
 > efforge (`npm create efforge`) creates a full-stack TypeScript app on Cloudflare Workers: TanStack Start on the front, Effect on the server, with a database, auth, email, storage and AI already wired as Effect services. `efforge add` wires another capability into an existing project with AST edits, and refuses to overwrite files you changed.
 
-Coding agents: run the CLI with `--json` and no prompts. Needs create-efforge 0.3.0 or later: every document then carries `contract: 1`, and one without it comes from an older CLI that this contract doesn't describe (`npx -y create-efforge@latest --version --json` checks). Every run prints one JSON document; on failure, `error.fix` is either a command that does what you asked or `null`, never a different capability.
+Coding agents: run the CLI with `--json` and no prompts. Needs create-efforge 0.3.0 or later: every document then carries `contract: 1`, and one without it comes from an older CLI that this contract doesn't describe (`npx -y create-efforge@latest --version --json` checks). Every run prints one JSON document; on failure, `error.fix` is either a command that does what you asked or `null`, never a different capability; when there are several ways out, `error.alternatives` lists them as complete commands to choose from.
 
 ```sh
 npx -y create-efforge@latest --version --json

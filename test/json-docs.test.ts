@@ -3,12 +3,13 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { stripVTControlCharacters } from "node:util"
 import { NodeServices } from "@effect/platform-node"
-import { Effect, Fiber, Layer } from "effect"
+import { Effect, Fiber, Layer, Schema } from "effect"
 import { afterEach, expect, it, vi } from "vitest"
 import { runWith } from "../src/cli.ts"
 import { errorCodes } from "../src/contract.ts"
 import { TemplatesDir } from "../src/commands/create.ts"
 import { livePromptIO, PromptIO } from "../src/prompts/navigable.ts"
+import { AddOutput, CreateOutput, ErrorOutput, ListOutput } from "../src/schemas.ts"
 import { recordingSpawner } from "./recordingSpawner.ts"
 
 // Every example in docs/json.md is the output of the command printed above it, run here against
@@ -111,6 +112,8 @@ const scenarios: Record<string, Scenario> = {
   NeedsInput: {},
   UnknownValue: {},
   IncompatibleStack: {},
+  "IncompatibleStack-add": { setup: project("my-app", "--database=none") },
+  InsideProject: { setup: myApp, cwd: "my-app" },
   InvalidProjectName: {},
   TargetNotEmpty: { setup: myApp },
   PnpmMissing: { fail: (c) => (c === "pnpm --version" ? "pnpm: not found" : undefined) },
@@ -176,9 +179,8 @@ const normalize = (text: string, work: string): string => {
   const elide = (v: unknown, key?: string): unknown => {
     if (Array.isArray(v)) {
       const items = v.map((x) => elide(x))
-      return (key === "files" || key === "addons") && items.length > 4
-        ? [...items.slice(0, 3), `... ${items.length - 3} more`]
-        : items
+      // cut to three items, and nothing else: the example must still match the schema
+      return (key === "files" || key === "addons") && items.length > 4 ? items.slice(0, 3) : items
     }
     if (v !== null && typeof v === "object")
       return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, elide(x, k)]))
@@ -212,10 +214,22 @@ it("every example in docs/json.md is what the command prints", { timeout: 120_00
       if (process.env.EFFORGE_UPDATE_DOCS === "1")
         updated = updated.replace(block, block.replace(shownOutput as string, out))
       else expect(unversioned(out), id).toBe(unversioned(shownOutput as string))
-      // error examples are errors, success examples aren't
+      // error examples are errors, success examples aren't, and each matches its schema
+      const code = (id as string).split("-")[0] as string
       expect(r.exitCode, `${id}: ${raw}`).toBe(
-        id === "Interrupted" ? 130 : (id as string) in errorCodes ? 1 : 0,
+        id === "Interrupted" ? 130 : code in errorCodes ? 1 : 0,
       )
+      if (out.startsWith("{")) {
+        const schema =
+          code in errorCodes
+            ? ErrorOutput
+            : code === "create"
+              ? CreateOutput
+              : code === "add"
+                ? AddOutput
+                : ListOutput
+        Schema.decodeUnknownSync(schema as Schema.Top as never)(JSON.parse(out))
+      }
     } finally {
       chmodSync(work, 0o755)
       for (const d of ["readonly"]) {

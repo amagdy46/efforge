@@ -10,14 +10,16 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - Generated apps get a placeholder favicon (`apps/web/public/favicon.svg`) and a "made with efforge" badge in their README.
 - `create`, `add` and `list` start with one line: an `ef` cell and the version. It is plain text under `NO_COLOR`, in a pipe and in CI. `--json` prints none of it.
 - `pnpm brand` regenerates every brand asset, the README header and the generated README's badge line from `scripts/brand/source.ts`, and a test fails when any of them is stale.
-- `--json` is a versioned contract ([docs/json.md](docs/json.md)). `create`, `add` and `list` print one JSON document on stdout, on success and on failure, carrying `efforge` (the CLI version), `contract` (1) and `ok`. Success documents include the project directory, the stack, the files, the env vars with where their local values go, and the next commands with the directory to run each in. Errors have a stable `code`, a `message` and a `fix`: a command that does what was asked, or `null` with the values to choose from. A `fix` never picks a different capability, never creates a project you didn't ask for, and never prompts.
+- `--json` is a versioned contract ([docs/json.md](docs/json.md)). `create`, `add` and `list` print one JSON document on stdout, on success and on failure, carrying `efforge` (the CLI version), `contract` (1) and `ok`. Success documents include the project directory, the stack, the files, the env vars with where their local values go, and the next commands with the directory to run each in. Errors have a stable `code`, a `message` and a `fix`: a command that does what was asked, or `null` with the values to choose from. A `fix` never picks a different capability, never creates a project you didn't ask for, keeps the name and flags you gave, and never prompts. Every fix is built and checked in one place (`src/fix.ts`), and a seeded property test runs hundreds of generated invocations, follows their fixes and holds them to those rules.
+- When there is more than one way out (`--database=none --auth=better-auth`, `add auth/better-auth` on a project without a database), the error has `fix: null` and `alternatives`: each way out as a complete command with a one-line description. `add`'s `needs` lists the slots to fill and the ids that can fill each.
 - Errors without `--json` end with `Try: <command>` when a command fixes them.
 - JSON Schemas for `efforge.jsonc` and the `--json` documents ship in the package under `schemas/`. New projects' `efforge.jsonc` points at its schema with `$schema`.
 - An agent skill, `skills/efforge/SKILL.md` (`npx skills add amagdy46/efforge`), an `llms.txt`, and a "For coding agents" section in the README.
 - The generated `AGENTS.md` says to add capabilities with `npx -y create-efforge@latest add <id> --json`.
 - `--completions` covers both bin names, `create-efforge` and `efforge`.
 - `--version --json` prints the contract envelope, `{ efforge, contract, ok }`.
-- An interrupted `create --json` (Ctrl-C, SIGTERM, a tool's timeout) prints an `Interrupted` document with what was written and the steps that finish it, and exits 130.
+- An interrupted `create --json` or `add --json` (Ctrl-C, SIGTERM, a tool's timeout) prints an `Interrupted` document with what was written and the steps that finish it, and exits 130.
+- `list --json` outside a project's root, but inside one or beside one, names it in `nearby`, and the text output says so.
 - `efforge add ai` (or `infra`) means the slot's one add-on.
 
 ### Changed
@@ -40,7 +42,7 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
   | `IncompatibleStack` when `add` would swap a choice | `SlotAlreadySet` |
   | `UnknownAddon` for `<slot>/none` | `RemoveNotSupported` |
   | `GenerateError`, `AddonLoadError`, `UnknownTransform` | `InternalError` |
-  | none | new: `UnknownCommand`, `Interrupted` |
+  | none | new: `UnknownCommand`, `InsideProject`, `Interrupted` |
 
   A script reading `envVars` or `written` gets `undefined` with no error, so check `contract`: documents from 0.3.0 on have it. From here, a rename or removal bumps `contract`; new fields and codes don't, and `schemas/error.schema.json` leaves `code` open.
 - `efforge add` with no ids prints a short error listing the add-ons the project can still add, not the help.
@@ -52,7 +54,14 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 
 ### Fixed
 
-- `npx create-efforge lst` no longer creates a project called "lst", and following the fixes for `ad email --cwd my-app` no longer ends in a project called `ad-email-my-app`. The root form takes exactly one name: a typo of a command, a reserved word (`help`, `version`, `upgrade`, `doctor`, `info`, `graph`), more words, or a flag only `add` and `list` take is refused with `UnknownCommand`, before anything else parses, with the corrected command or no fix. `create my app` is no longer turned into `my-app`.
+- `npx create-efforge lst` no longer creates a project called "lst", and following the fixes for `ad email --cwd my-app` no longer ends in a project called `ad-email-my-app`. The root form takes exactly one name: a command in other case (`Add`), a typo of one, a word people guess as a command (`help`, `version`, `update`, `init`, `install`, `remove`, `ls`, `new`, `run`, `dev`, `build`, `deploy` and more), more words, or a flag only `add` and `list` take is refused with `UnknownCommand`, before anything else parses, with the command it names or no fix. Inside an efforge project the root form creates nothing (`InsideProject`), so `update --json` there no longer makes `my-app/update`. `create <name>` still takes any valid name. `create my app` is no longer turned into `my-app`.
+- A wrong or missing value for a flag that isn't a stack choice (`--completions=nushell`, `--install=maybe`, `--log-level=nope`, `--cwd` with no value) gets `fix: null` and the allowed values, instead of a fix that dropped the flag and, for `--completions`, created a project.
+- A fix keeps flags before a `--`: `add --json -- email` no longer loops, adding `--cwd` after the `--` on every hop. A mistyped command is moved to the front (`--json lst` gets `list --json`), and `--name=app` becomes `create app`.
+- `create ../app` and `create apps/web` no longer get a fix that creates `./app` or `./web`; only case and spaces are normalised (`My App` to `my-app`). `CREATE` and `Add` are the commands they name. A name that starts with `-` is refused.
+- `TargetNotEmpty` offers to finish the project in the directory only when its stack is the one asked for, and never with an install or commit the caller turned off.
+- Whether an install is owed is read from the project (its package.json files and pnpm-workspace.yaml against pnpm's record of what it installed), not from a marker file, so an install run by hand settles it and a healthy project is never told it owes one.
+- `list --cwd <file>` is an error (`NotAnEfforgeProject`, with the project around the file as `fix`), like a directory that doesn't exist.
+- The failure documents keep `warnings`, and `add`'s also `skipped`, `replacedScripts` and `packageManager`.
 - A `fix` no longer swaps in a different capability: `add r2` used to suggest `database/d1`, `add stripe` `extras/storage`, and `--database=mysql` `--database=postgres`. Only a clear typo is corrected (one edit for options up to six characters, two above, never for one- or two-character options like `d1`); otherwise `fix` is `null` and the error lists `allowed` or `addons`. An unknown flag that isn't a typo is no longer dropped silently.
 - After a failed install, the `SetupIncomplete` and `CommandFailed` documents carry what success would have: the files, `env` and `nextSteps`. Running the same `add` again runs the install it still owes instead of reporting nothing to do.
 - Output without a terminal no longer starts with a section header (`◇ Data`) before an error.

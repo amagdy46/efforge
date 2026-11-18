@@ -2,7 +2,7 @@
 
 `create`, `add` and `list` take `--json`. With it, a run prints exactly one JSON document on stdout and nothing else, whether it succeeds or fails. Nothing goes to stderr either, except what a child process prints when it crashes outright. Progress is not printed; warnings and skipped steps go into the document. `--json` never prompts: on `create` it implies `--yes`.
 
-This page is the contract. Every example on it is the real output of the command above it, checked by `test/json-docs.test.ts` (paths shortened to `/home/me/projects`, long `files` and `addons` lists cut to three items). JSON Schemas for the documents ship in the package under `schemas/` ([create](../schemas/create.schema.json), [add](../schemas/add.schema.json), [list](../schemas/list.schema.json), [error](../schemas/error.schema.json)).
+This page is the contract. Every example on it is the real output of the command above it, checked by `test/json-docs.test.ts` (paths shortened to `/home/me/projects`, long `files` and `addons` lists cut to their first three items) and matches its schema. JSON Schemas for the documents ship in the package under `schemas/` ([create](../schemas/create.schema.json), [add](../schemas/add.schema.json), [list](../schemas/list.schema.json), [error](../schemas/error.schema.json)).
 
 Run efforge as `npx -y create-efforge ...` (create-efforge 0.3.0 or later; a document without `contract` comes from an older CLI). Under `npm create efforge`, npm prints its own lines on stdout before efforge's.
 
@@ -27,13 +27,16 @@ The schemas in `schemas/` leave `code` an open string for the same reason: a sch
 
 ### `fix` is a promise
 
-A `fix` is either a command that does what you were trying to do, or `null` with the facts you need to decide (allowed values, add-on ids, paths). It never swaps in a different capability, never creates something you didn't ask for, and never stops at a prompt:
+A `fix` is either a command that does what you were trying to do, or `null` with the facts you need to decide (allowed values, add-on ids, paths, and for a conflict `alternatives`). Every fix is built in one place (`src/fix.ts`), which checks it against what you ran before printing it, and `test/fix-property.test.ts` runs hundreds of generated invocations and follows their fixes to hold it to these rules:
 
-- It is your own command with the smallest change that gets past the error, so it keeps your flags (`--json`, `--dry-run`, `--cwd`). It may start with `cd <dir> &&`.
+- It is your own command with the smallest change that gets past the error. It keeps the command, the project name or add-on ids, and your flags (`--json`, `--dry-run`, `--no-install`, `--no-git`, `--cwd`). The command comes first, and any flag it adds goes before a `--`. It may start with `cd <dir> &&`.
+- A fix for `add`, `list`, or anything that isn't a create never creates a project. A fix for a create keeps its name; the only change it makes to one is lower case and hyphens for spaces (`My App` becomes `my-app`). A path (`../app`, `a/b`) is never turned into a name.
+- Only an error about a stack value or an add-on id suggests a different value, and only when what you typed is a clear typo of exactly one valid value. The rule: an option of one or two characters (`d1`) is only matched exactly; otherwise one edit (a swap of two neighbouring letters counts as one) for options up to six characters, two for longer ones. Add-on ids also take a fragment of three or more letters that starts exactly one id (`stor`). `--database=postgress` gets `--database=postgres`; `--database=mysql`, `--database=d2` and `add stripe` get `fix: null`, with `allowed` or `addons` to choose from. A flag name follows the same rule (`--databse`).
+- When there is more than one way out (`--database=none --auth=better-auth`, or `add auth/better-auth` on a project without a database), `fix` is `null` and `alternatives` lists each way out as a complete command with a one-line `description`. Pick one; efforge doesn't pick a database or drop a choice for you.
+- Setup steps (`pnpm install`, `pnpm format`, the initial commit) are offered only for the project your command would have made, and never one you turned off with `--no-install` or `--no-git`.
+- A fix never repeats the command you ran, and following fixes never loops or grows a command.
 - It starts with `npx -y create-efforge`. `-y` keeps npx from asking before a download. If you ran a pinned version (`create-efforge@0.3.0`) or `@latest`, run the fix with the same package spec, or npx may run a different cached version.
 - A `create` that would prompt gets `--yes`.
-- A value is corrected only when what you typed is a clear typo of exactly one valid value. The rule: an option of one or two characters (`d1`) is only matched exactly; otherwise one edit (a swap of two neighbouring letters counts as one) for options up to six characters, two for longer ones. `--database=postgress` gets `--database=postgres`; `--database=mysql`, `--database=d2` and `add stripe` get `fix: null`, with `allowed` or `addons` to choose from.
-- `fix` never renames your project or joins stray words into a name.
 
 ## Exit codes
 
@@ -41,7 +44,9 @@ A `fix` is either a command that does what you were trying to do, or `null` with
 |---|---|
 | `0` | Success. Also answering No at the confirmation prompt (never under `--json`). |
 | `1` | Any error, including a mistyped flag. With `--json`, the document says which. |
-| `130` | Stopped: Ctrl-C, SIGTERM, or a tool's timeout. With `--json`, `create` prints an [`Interrupted`](#interrupted) document saying what was written and how to finish. |
+| `130` | Stopped: Ctrl-C, SIGTERM, or a tool's timeout. With `--json`, `create` and `add` print an [`Interrupted`](#interrupted) document saying what was written and how to finish. |
+
+A signal in the first fraction of a second, before efforge has started, can end the run with no document and exit `130` (SIGINT) or `143` (SIGTERM). Nothing has been written at that point; run the same command again.
 
 ## Not part of the contract
 
@@ -82,8 +87,7 @@ npx -y create-efforge create my-app --json --database=d1 --auth=better-auth
   "files": [
     ".dev.vars",
     ".env.example",
-    ".gitignore",
-    "... 73 more"
+    ".gitignore"
   ],
   "installed": true,
   "git": "committed",
@@ -147,8 +151,7 @@ npx -y create-efforge create my-app --json --dry-run
   "files": [
     ".dev.vars",
     ".env.example",
-    ".gitignore",
-    "... 79 more"
+    ".gitignore"
   ],
   "installed": false,
   "git": "skipped",
@@ -371,7 +374,7 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
 
 ## `list`
 
-`addons` has every add-on you can pick or add: `id` is what `add` takes. Inside an efforge project (or with `--cwd`), `project` is `true`, the document has the project's `directory` and `stack`, and each add-on has `installed`.
+`addons` has every add-on you can pick or add: `id` is what `add` takes. In an efforge project's root (or with `--cwd` pointing at it), `project` is `true`, the document has the project's `directory` and `stack`, and each add-on has `installed`. Elsewhere `project` is `false`, as `add` would see it; when the directory is inside a project (`my-app/apps/web`) or holds exactly one, `nearby` is that project's path, to pass as `--cwd`.
 
 <!-- example: list -->
 
@@ -406,8 +409,7 @@ npx -y create-efforge list --json
       "option": "drizzle",
       "title": "Drizzle ORM",
       "description": "Drizzle 1.0 with its Effect drivers behind the Database service; migrations come from drizzle-kit."
-    },
-    "... 10 more"
+    }
   ]
 }
 ```
@@ -459,8 +461,7 @@ npx -y create-efforge list --json --cwd my-app
       "title": "Drizzle ORM",
       "description": "Drizzle 1.0 with its Effect drivers behind the Database service; migrations come from drizzle-kit.",
       "installed": true
-    },
-    "... 10 more"
+    }
   ]
 }
 ```
@@ -471,7 +472,7 @@ npx -y create-efforge list --json --cwd my-app
 
 A flag efforge doesn't have.
 
-Fields: `flag` (as typed), `suggestions` (closest flags). `fix`: The command with the flag corrected when it is a clear typo of one (the rule above); without it when it repeats a flag you also passed (`--jsn --json`); otherwise `null`, since dropping a flag you asked for would do something else.
+Fields: `flag` (as typed), `suggestions` (closest flags). `fix`: The command with the flag corrected when it is a clear typo of one (the rule above); without it when it repeats a flag you also passed (`--jsn --json`); with the command first when a flag came before it (`--cwd my-app list`); otherwise `null`, since dropping a flag you asked for would do something else.
 
 <!-- example: UnknownFlag -->
 
@@ -500,7 +501,7 @@ npx -y create-efforge create my-app --json --databse=d1
 
 A flag got a value it can't take, or no value.
 
-Fields: `flag`, `value`, `expected`, and `allowed` for a stack flag. `fix`: For an on/off flag, the bare flag; for `--log-level`, the command without it; for a stack flag, `null`: which value is your choice.
+Fields: `flag`, `value`, `expected`, and `allowed` when the flag takes a list of values (a stack flag, `--log-level`, `--completions`, an on/off flag). `fix`: `null`: which value you meant is your choice, and leaving the flag out would do something else.
 
 <!-- example: InvalidFlagValue -->
 
@@ -559,9 +560,9 @@ npx -y create-efforge create my app --json
 
 ### `UnknownCommand`
 
-The root form (`npx -y create-efforge <name>`) creates a project, so efforge refuses a first word that doesn't look like a name: a typo of a command (`lst`, `ad`, `crate`, by the rule above), a reserved word (`help`, `version`, and the names of commands to come: `upgrade`, `doctor`, `info`, `graph`), more than one word (`remove email`), or one word with a flag only `add` and `list` take (`foo --cwd my-app`). This check runs before anything else, so a mistyped `add email --cwd my-app` is reported as the mistyped command, not as a create with a stray `--cwd`.
+The root form (`npx -y create-efforge <name>`) creates a project, so efforge refuses a first word that doesn't look like a name: a command in other case (`Add`, `CREATE`) or a typo of one (`lst`, `ad`, `crate`, by the rule above), a word people and agents guess as a command (`help`, `version`, `update`, `upgrade`, `remove`, `rm`, `uninstall`, `delete`, `install`, `init`, `new`, `ls`, `show`, `status`, `info`, `doctor`, `graph`, `run`, `dev`, `start`, `build`, `check`, `lint`, `test`, `deploy`, `publish`, `migrate`, `generate`, `config`, `login`, `logout`; the list is `reservedWords` in `src/fix.ts`) or a typo of a long one (`hlep`), more than one word (`remove email`), or one word with a flag only `add` and `list` take (`foo --cwd my-app`). This check runs before anything else, so a mistyped `add email --cwd my-app` is reported as the mistyped command, not as a create with a stray `--cwd`.
 
-Fields: `command` (as typed), `suggestion` (when it is a typo of a real command), `commands`, and `arguments` or `flag` when those were the reason. `fix`: The command with the right command name, keeping every argument; otherwise `null`. To really name a project `lst` or `help`, run `npx -y create-efforge create lst`.
+Fields: `command` (as typed), `suggestion` (when it names a real command), `commands`, and `arguments` or `flag` when those were the reason. `fix`: The command it names, written out and first, keeping every argument and flag; otherwise `null`. To really name a project `lst`, `update` or `help`, run `npx -y create-efforge create lst`.
 
 <!-- example: UnknownCommand -->
 
@@ -580,6 +581,40 @@ npx -y create-efforge lst --json
     "fix": "npx -y create-efforge list --json",
     "command": "lst",
     "suggestion": "list",
+    "commands": [
+      "create",
+      "add",
+      "list"
+    ]
+  }
+}
+```
+
+### `InsideProject`
+
+The root form (no `create`) ran inside an efforge project: the current directory or a parent has an `efforge.jsonc`. That is where `add` and `list` are run, and a project nested in another is almost never meant, so efforge refuses before anything else. `create <name>` still creates one there.
+
+Fields: `project` (the project's directory), `name` (the word you gave, if any), `commands`. `fix`: None. To add to the project, run `add`; to create a project inside it anyway, run `npx -y create-efforge create <name>`.
+
+Here, run in `my-app`.
+
+<!-- example: InsideProject -->
+
+```sh
+npx -y create-efforge app2 --json
+```
+
+```json
+{
+  "efforge": "0.2.1",
+  "contract": 1,
+  "ok": false,
+  "error": {
+    "code": "InsideProject",
+    "message": "This is inside the efforge project /home/me/projects/my-app, so efforge doesn't create a project here without the word create. The commands are create, add, list. To add to this project, run npx -y create-efforge add <id>; to create a project inside it anyway, run npx -y create-efforge create app2.",
+    "fix": null,
+    "project": "/home/me/projects/my-app",
+    "name": "app2",
     "commands": [
       "create",
       "add",
@@ -642,7 +677,9 @@ npx -y create-efforge create my-app --json --database=mysql
 
 `create`: two choices conflict. `orm` is set exactly when `database` is, and `auth` needs a database. `add`: the add-on needs others with it (auth on a project without a database).
 
-Fields: `flag` and `value` (create) or `slot` and `value` (add), `allowed`, `reason`; for `add`, `needs` lists the ids to add in the same command. `fix`: `create`: the conflicting flag set to an allowed value. `add`: the same command with `needs` added.
+Each way out drops or swaps a choice you made, or makes one you didn't (which database, which ORM: `add` can't swap them later). So `fix` is `null`, and the error lists the ways out for you to choose from.
+
+Fields: `flag` and `value` (create) or `slot` and `value` (add), `allowed` (the values that slot can take as things stand), `reason`, and `alternatives`: every way out, each `{ command, description }`, where `command` is your command with one change, complete and non-interactive. For `create`, a way out is one flag changed (another value for either side of the conflict, or an extra left out). For `add`, it is your command with the smallest set of add-ons added that satisfies the rules. `add` also has `needs`: the slots that must be filled in the same command, each `{ slot, options }` with the ids that can fill it. `fix`: None. Pick one of `alternatives` (or ask the user which), and run it.
 
 <!-- example: IncompatibleStack -->
 
@@ -657,14 +694,89 @@ npx -y create-efforge create my-app --json --database=none --auth=better-auth
   "ok": false,
   "error": {
     "code": "IncompatibleStack",
-    "message": "--auth=better-auth can't be used here: auth stores users in the database, and the database is none.",
-    "fix": "npx -y create-efforge create my-app --json --database=none --auth=none",
+    "message": "--auth=better-auth can't be used here: auth stores users in the database, and the database is none. Change one of the two; alternatives lists the commands.",
+    "fix": null,
     "flag": "--auth",
     "value": "better-auth",
     "allowed": [
       "none"
     ],
-    "reason": "auth stores users in the database, and the database is none"
+    "reason": "auth stores users in the database, and the database is none",
+    "alternatives": [
+      {
+        "command": "npx -y create-efforge create my-app --json --database=postgres --auth=better-auth",
+        "description": "Use --database=postgres instead of --database=none"
+      },
+      {
+        "command": "npx -y create-efforge create my-app --json --database=d1 --auth=better-auth",
+        "description": "Use --database=d1 instead of --database=none"
+      },
+      {
+        "command": "npx -y create-efforge create my-app --json --database=none --auth=none",
+        "description": "Use --auth=none instead of --auth=better-auth"
+      }
+    ]
+  }
+}
+```
+
+For `add`: here, `my-app` was created with `--database=none`.
+
+<!-- example: IncompatibleStack-add -->
+
+```sh
+npx -y create-efforge add auth/better-auth --json --cwd my-app
+```
+
+```json
+{
+  "efforge": "0.2.1",
+  "contract": 1,
+  "ok": false,
+  "error": {
+    "code": "IncompatibleStack",
+    "message": "Can't add auth/better-auth: auth needs a database, and this project has none. Add one in the same command (alternatives lists the ways).",
+    "fix": null,
+    "slot": "auth",
+    "value": "better-auth",
+    "allowed": [
+      "none"
+    ],
+    "needs": [
+      {
+        "slot": "database",
+        "options": [
+          "database/postgres",
+          "database/d1"
+        ]
+      },
+      {
+        "slot": "orm",
+        "options": [
+          "orm/drizzle",
+          "orm/effect-sql"
+        ]
+      }
+    ],
+    "alternatives": [
+      {
+        "command": "npx -y create-efforge add database/postgres orm/drizzle auth/better-auth --json --cwd my-app",
+        "description": "Add database/postgres and orm/drizzle with it"
+      },
+      {
+        "command": "npx -y create-efforge add database/postgres orm/effect-sql auth/better-auth --json --cwd my-app",
+        "description": "Add database/postgres and orm/effect-sql with it"
+      },
+      {
+        "command": "npx -y create-efforge add database/d1 orm/drizzle auth/better-auth --json --cwd my-app",
+        "description": "Add database/d1 and orm/drizzle with it"
+      },
+      {
+        "command": "npx -y create-efforge add database/d1 orm/effect-sql auth/better-auth --json --cwd my-app",
+        "description": "Add database/d1 and orm/effect-sql with it"
+      }
+    ],
+    "reason": "auth needs a database, and this project has none. Add one in the same command (alternatives lists the ways)"
   }
 }
 ```
@@ -673,7 +785,7 @@ npx -y create-efforge create my-app --json --database=none --auth=better-auth
 
 The name isn't a valid npm package name, or is a path.
 
-Fields: `name`. `fix`: The command with a valid name made from it (`My App` becomes `my-app`).
+Fields: `name`, and `suggestion` when the name differs from a valid one only by case and spaces. `fix`: The command with that name (`My App` becomes `my-app`); otherwise `null`. A path (`../app`, `apps/web`) is never turned into a name: the project goes in `./<name>`, so run efforge from the directory it should go in (`cd ..` first) and pass just the name.
 
 <!-- example: InvalidProjectName -->
 
@@ -688,9 +800,10 @@ npx -y create-efforge create 'My App' --json
   "ok": false,
   "error": {
     "code": "InvalidProjectName",
-    "message": "\"My App\" isn't a valid npm package name: use lowercase letters, digits, - . _ ~ (optionally @scope/name)",
+    "message": "\"My App\" isn't a valid npm package name: use lowercase letters, digits, - . _ ~ (optionally @scope/name). Did you mean my-app?",
     "fix": "npx -y create-efforge create my-app --json",
-    "name": "My App"
+    "name": "My App",
+    "suggestion": "my-app"
   }
 }
 ```
@@ -699,14 +812,14 @@ npx -y create-efforge create 'My App' --json
 
 The project directory exists and has files in it (a directory holding only `.git` counts as empty). Nothing was written. `fix` never proposes another name: an agent retrying after a timeout would end with two projects.
 
-Fields: `directory`, `project` (whether it holds an efforge project). When it does: `stack`, `remaining` (setup steps that never ran: install and format when `node_modules` has no completed install, the commit when the repo has none) and `nextSteps` (those, then the usual steps for the stack). `fix`: The remaining steps, run in the project, when there are any; otherwise `null`: use the project as it is, or pick another name.
+Fields: `directory`, `project` (whether it holds an efforge project). When it does: `stack` (the project's), `requested` (the stack this command asked for), `remaining` (setup steps that never ran: install and format when `node_modules` has no completed install, the commit when the repo has none) and `nextSteps` (those, then the usual steps for the stack). `fix`: Only when `stack` is `requested` (it is the project this command would have made, typically a retry after a stop): the remaining steps, run in the project, without any you turned off with `--no-install` or `--no-git`. Otherwise `null`: use the project as it is, or pick another name.
 
-Here, `./my-app` holds a project whose install never ran.
+Here, `./my-app` holds a D1 project with Better Auth whose install never ran, and the command asks for the same stack.
 
 <!-- example: TargetNotEmpty -->
 
 ```sh
-npx -y create-efforge create my-app --json
+npx -y create-efforge create my-app --json --database=d1 --auth=better-auth
 ```
 
 ```json
@@ -716,11 +829,21 @@ npx -y create-efforge create my-app --json
   "ok": false,
   "error": {
     "code": "TargetNotEmpty",
-    "message": "/home/me/projects/my-app already holds an efforge project (my-app) whose setup didn't finish. To finish it, run there: pnpm install --no-frozen-lockfile, then pnpm format. Or pick another name.",
+    "message": "/home/me/projects/my-app already holds an efforge project with this stack, and its setup didn't finish. To finish it, run there: pnpm install --no-frozen-lockfile, then pnpm format. Or pick another name.",
     "fix": "cd my-app && pnpm install --no-frozen-lockfile && pnpm format",
     "directory": "/home/me/projects/my-app",
     "project": true,
     "stack": {
+      "name": "my-app",
+      "runtime": "cloudflare",
+      "database": "d1",
+      "orm": "drizzle",
+      "auth": "better-auth",
+      "infra": "none",
+      "ai": "none",
+      "extras": []
+    },
+    "requested": {
       "name": "my-app",
       "runtime": "cloudflare",
       "database": "d1",
@@ -831,8 +954,7 @@ npx -y create-efforge create my-app --json
     "files": [
       ".dev.vars",
       ".env.example",
-      ".gitignore",
-      "... 79 more"
+      ".gitignore"
     ],
     "env": [
       {
@@ -882,16 +1004,19 @@ npx -y create-efforge create my-app --json
         "longRunning": true,
         "cwd": "/home/me/projects/my-app"
       }
-    ]
+    ],
+    "warnings": []
   }
 }
 ```
 
 ### `Interrupted`
 
-`--json` only: `create` was stopped (Ctrl-C, SIGTERM, a tool's timeout). Exit code `130`. `create` installs dependencies and can take a few minutes; give it at least five.
+`--json` only: `create` or `add` was stopped (Ctrl-C, SIGTERM, a tool's timeout). Exit code `130`. `create` installs dependencies and can take a few minutes; give it at least five.
 
-Fields: `written` (whether all files were written). When they were: `remaining` and the fields `SetupIncomplete` has (`directory`, `stack`, `command`, `files`, `env`, `nextSteps`). `fix`: The remaining setup, run in the project; `null` when it stopped while writing (delete the directory and run the same command again) or after the setup finished. Running the same command again gets `TargetNotEmpty` with the same `fix`.
+Fields: `written` (whether files were written). For `create`, when they were: `remaining` and the fields `SetupIncomplete` has (`directory`, `stack`, `command`, `files`, `env`, `nextSteps`, `warnings`). `fix`: The remaining setup, run in the project; `null` when it stopped while writing (delete the directory and run the same command again) or after the setup finished. Running the same command again gets `TargetNotEmpty` with the same `fix`.
+
+For `add`: stopped before writing, `written` is `false` and nothing changed; run the same command again. Stopped while writing, `written` is `true`, `fix` is `null`, and running the same command again finishes what it can (see `git status` first). Stopped during the install, `remaining` is the install and the document has the fields `CommandFailed` has (`directory`, `stack`, `added`, `created`, `changed`, `env`, `nextSteps`, ...); `fix` runs the install.
 
 Here, the run was stopped during `pnpm install`.
 
@@ -931,8 +1056,7 @@ npx -y create-efforge create my-app --json
     "files": [
       ".dev.vars",
       ".env.example",
-      ".gitignore",
-      "... 79 more"
+      ".gitignore"
     ],
     "env": [
       {
@@ -982,7 +1106,8 @@ npx -y create-efforge create my-app --json
         "longRunning": true,
         "cwd": "/home/me/projects/my-app"
       }
-    ]
+    ],
+    "warnings": []
   }
 }
 ```
@@ -1017,9 +1142,9 @@ npx -y create-efforge create my-app --json
 
 ### `NotAnEfforgeProject`
 
-`add` ran in a directory without `efforge.jsonc`, or the file isn't valid. `list --cwd` gets it only when the directory doesn't exist or its `efforge.jsonc` isn't valid; `list` in a directory without one succeeds with `project: false`.
+`add` ran in a directory without `efforge.jsonc`, or the file isn't valid. `list --cwd` gets it only when the directory doesn't exist, isn't a directory, or its `efforge.jsonc` isn't valid; `list` in a directory without one succeeds with `project: false` (and `nearby`).
 
-Fields: `directory`, `reason`, and `project` when one was found nearby. `fix`: For `add`, when a parent directory, or exactly one child directory, is an efforge project: the same command with `--cwd` pointing at it; otherwise none. For `list`, the command without `--cwd`.
+Fields: `directory`, `reason`, and `project` when one was found nearby. `fix`: When a parent directory, or exactly one child directory, is an efforge project (also when `--cwd` names a file in one): the same command with `--cwd` pointing at it; otherwise none.
 
 Here, run from `my-app/apps/web`, inside a project.
 
@@ -1066,8 +1191,8 @@ npx -y create-efforge add --json --cwd my-app
   "ok": false,
   "error": {
     "code": "NoAddonIds",
-    "message": "Name the add-ons to add: infra/alchemy, ai/effect-ai-byok, extras/workflows, extras/realtime, extras/browser, extras/storage, extras/email. For example: npx create-efforge add infra/alchemy.",
-    "fix": "npx -y create-efforge list --json --cwd=my-app",
+    "message": "Name the add-ons to add: infra/alchemy, ai/effect-ai-byok, extras/workflows, extras/realtime, extras/browser, extras/storage, extras/email.",
+    "fix": "npx -y create-efforge list --json --cwd my-app",
     "available": [
       "infra/alchemy",
       "ai/effect-ai-byok",
@@ -1102,7 +1227,7 @@ npx -y create-efforge add emial --json --cwd my-app
   "ok": false,
   "error": {
     "code": "UnknownAddon",
-    "message": "\"emial\" is not an add-on. Did you mean extras/email? See which ones this project can add with npx create-efforge list --json.",
+    "message": "\"emial\" is not an add-on. Did you mean extras/email? See which ones this project can add: npx -y create-efforge list --json --cwd my-app",
     "fix": "npx -y create-efforge add extras/email --json --cwd my-app",
     "id": "emial",
     "suggestions": [
@@ -1111,8 +1236,7 @@ npx -y create-efforge add emial --json --cwd my-app
     "addons": [
       "runtime/cloudflare",
       "database/postgres",
-      "database/d1",
-      "... 11 more"
+      "database/d1"
     ]
   }
 }
@@ -1241,9 +1365,9 @@ npx -y create-efforge add email --json --cwd my-app
 
 `add` wrote its files, then a command it runs failed (`pnpm install`).
 
-Fields: `failed`, `output` (last 15 lines), and what the success document would have carried: `directory`, `stack`, `added`, `created`, `changed`, `removed`, `notes`, `env` and `nextSteps` (the failed command first). `fix`: The failed command, in the project. Running the same `add` again runs the install it still owes (or, with `--no-install`, puts it first in `nextSteps` and says so in `warnings`) instead of reporting nothing to do.
+Fields: `failed`, `output` (last 15 lines), and what the success document would have carried: `directory`, `stack`, `added`, `created`, `changed`, `removed`, `notes`, `env` and `nextSteps` (the failed command first). `fix`: The failed command, in the project. Whether an install is owed is read from the project itself: what its `package.json` files and `pnpm-workspace.yaml` declare against what pnpm recorded as installed (`node_modules/.pnpm/lock.yaml`). So running the `fix` by hand settles it, and the next `add` runs an install still owed (or, with `--no-install` or `--dry-run`, puts it first in `nextSteps` and says so in `warnings`) instead of reporting nothing to do.
 
-Here, the project was installed before, and `pnpm install` fails.
+Here, `pnpm install` fails.
 
 <!-- example: CommandFailed -->
 
@@ -1279,6 +1403,7 @@ npx -y create-efforge add ai --json --cwd my-app
         "title": "Effect AI (bring your own key)"
       }
     ],
+    "skipped": [],
     "created": [
       "apps/web/src/server/ai.ts",
       "apps/web/src/server/llm-provider.ts",
@@ -1296,6 +1421,8 @@ npx -y create-efforge add ai --json --cwd my-app
       "pnpm-workspace.yaml"
     ],
     "removed": [],
+    "replacedScripts": [],
+    "packageManager": null,
     "notes": [],
     "env": [
       {
@@ -1328,7 +1455,8 @@ npx -y create-efforge add ai --json --cwd my-app
         "command": "pnpm install --no-frozen-lockfile",
         "cwd": "/home/me/projects/my-app"
       }
-    ]
+    ],
+    "warnings": []
   }
 }
 ```

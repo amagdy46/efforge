@@ -18,7 +18,7 @@ npm create efforge [name] -- [flags]
 
 Pass `.` as the name to create the project in the current directory, named after it. The target directory must be empty; a directory holding only `.git` counts as empty.
 
-`npx create-efforge create my-app` is the same as `npx create-efforge my-app`. A first argument one typo away from a command (`lst`, `ad`) is refused rather than taken as a project name; `create lst` names a project `lst`.
+`npx create-efforge create my-app` is the same as `npx create-efforge my-app`. A first argument that looks like a command is refused rather than taken as a project name: a command in other case or one typo away (`Add`, `lst`, `ad`), or a word people guess as one (`help`, `update`, `init`, `install`, `ls` and the rest of `reservedWords` in `src/fix.ts`). Inside an efforge project the form without `create` creates nothing. `create lst` names a project `lst`, wherever you run it.
 
 Also available: `--help` (with examples), `--version`, `--completions bash|zsh|fish` (prints a completion script that covers both `create-efforge` and `efforge`) and `--log-level debug`.
 
@@ -64,7 +64,7 @@ npx create-efforge add ai/effect-ai-byok extras/storage --dry-run
 
 Ids are `email`, `extras/email` or `ai/effect-ai-byok`, in any case. A slot name with one add-on (`ai`, `infra`) means that add-on; a typo or an ambiguous id (`auth`) gets a suggestion. With no ids, `add` says which add-ons the project can still add. Flags: `--overwrite`, `--dry-run`, `--json`, `--cwd <dir>`, `--no-install`.
 
-The single-choice slots depend on each other, so add them together: on a project without a database, `add database/d1 orm/effect-sql auth/better-auth` works where `add auth/better-auth` alone is refused (the error says which ids to add).
+The single-choice slots depend on each other, so add them together: on a project without a database, `add database/d1 orm/effect-sql auth/better-auth` works where `add auth/better-auth` alone is refused (the error lists each combination that works, as a command to run; which database and ORM is your choice).
 
 `add` prints the files it creates (`+`) and changes (`~`), warns when it removes a generated file (for example `wrangler.jsonc` when you add Alchemy) or replaces a package script, and ends with the env vars the new add-ons need. It warns, but doesn't stop, when the git tree has uncommitted changes. It runs `pnpm install` only when dependencies changed. On a project that was never installed (`--no-install`), it skips the route tree and tells you to run `pnpm install`. With `--json`, success lists the files created and changed, the new env vars, `nextSteps` (commands still to run, such as `pnpm install` or `pnpm db:migrate`), `packageManager` and `notes`; see [json.md](json.md).
 

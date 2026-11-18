@@ -17,7 +17,8 @@ This skill needs create-efforge 0.3.0 or later: the first version with the `--js
 
 - Always pass `--json`. stdout is then exactly one JSON document, success or failure, and nothing prompts.
 - Check the version first: `npx -y create-efforge@latest --version --json` prints `{"efforge": "...", "contract": 1, "ok": true}`. If it prints a line of text instead, or any document has no `contract` field, the CLI is older than 0.3.0 and this skill doesn't apply: tell the user, and don't guess at its output. If `contract` is greater than 1, read the contract below again before you rely on a field.
-- Check `ok`. When it is `false`, read `error.code` and `error.message`. `error.fix` is either a command that does what you were trying to do, or `null`; it never picks a different capability or creates something you didn't ask for. Run it when it isn't `null`, with the same `npx -y create-efforge@latest` prefix you used (a `fix` starts with `npx -y create-efforge`).
+- Check `ok`. When it is `false`, read `error.code` and `error.message`. `error.fix` is either a command that does what you were trying to do, or `null`; it never picks a different capability, never creates something you didn't ask for, and keeps your name and flags. Run it when it isn't `null`, with the same `npx -y create-efforge@latest` prefix you used (a `fix` starts with `npx -y create-efforge`).
+- When `fix` is `null` and the error has `alternatives`, there is more than one way out (which database, or which of two conflicting flags gives way). Each entry is `{ command, description }`, a complete command. Pick the one that matches what the user asked for, or ask them; don't take the first one blindly. A database or ORM can't be swapped after `add`, so ask when the user gave no preference (D1 is the usual choice: no Docker).
 - Run `npx -y create-efforge@latest ...`, not `npm create efforge` (npm adds lines to stdout).
 - The full contract, with every field and error code: https://raw.githubusercontent.com/amagdy46/efforge/main/docs/json.md
 
@@ -40,7 +41,7 @@ It writes `./my-app`, runs `pnpm install`, formats, and makes the first git comm
 
 Rules: `orm` is `none` exactly when `database` is `none`, and `auth` needs a database. A flag you leave out takes its default. Postgres needs Docker for local development; D1 doesn't, so prefer `--database=d1` unless the user asked for Postgres.
 
-Other flags: `--dry-run` (write nothing, list the files), `--no-install`, `--no-git`. The name is one word, a directory under the current one; it must be a valid npm package name and the directory must not exist or be empty. Always write `create` before it: a first word that looks like a command (`help`, `lst`) is refused.
+Other flags: `--dry-run` (write nothing, list the files), `--no-install`, `--no-git`. The name is one word, a directory under the current one; it must be a valid npm package name and the directory must not exist or be empty. Always write `create` before it: a first word that looks like a command (`help`, `lst`, `update`, `init`) is refused, and so is a create without `create` run inside an existing efforge project.
 
 To preview without writing:
 
@@ -72,18 +73,21 @@ npx -y create-efforge@latest add email --json --cwd my-app
 
 Ids: `email`, `storage`, `realtime`, `workflows`, `browser`, `ai`, `infra/alchemy`, `database/d1`, `database/postgres`, `orm/drizzle`, `orm/effect-sql`, `auth/better-auth`, `auth/better-auth-orgs`. Several at once is fine: `add email storage`. On a project without a database, add the database, an ORM and auth in one command: `add database/d1 orm/effect-sql auth/better-auth`.
 
-The result lists `created`, `changed` and `removed` files, the new `env` vars, and `nextSteps` (often `pnpm install --no-frozen-lockfile` or `pnpm db:migrate`). Run the `nextSteps`. `notes` is work `add` left for you, one line each (for example, a line to add to a dashboard the user edited): do each one, or tell the user why you didn't. Read `warnings` and pass them on to the user. `add` writes nothing unless every step succeeds. Commit before you run it, so `git diff` shows only its changes.
+The result lists `created`, `changed` and `removed` files, the new `env` vars, and `nextSteps` (often `pnpm install --no-frozen-lockfile` or `pnpm db:migrate`). Run the `nextSteps`. `notes` is work `add` left for you, one line each (for example, a line to add to a dashboard the user edited): do each one, or tell the user why you didn't. Read `warnings` and pass them on to the user. `add` checks everything before it writes: an error before the write (`UnknownAddon`, `IncompatibleStack`, `OverlayConflict`, ...) leaves the project as it was. A failed install afterwards (`CommandFailed`) leaves the files written. Commit before you run it, so `git diff` shows only its changes.
 
 ## Errors
 
 | `code` | What to do |
 |---|---|
-| `UnknownFlag`, `InvalidFlagValue`, `UnexpectedArgument`, `InvalidProjectName` | Run `fix` when it isn't `null`. When it is, the message says what's wrong; correct the command yourself. |
-| `UnknownCommand` | The first word isn't a command. Run `fix` (the corrected command) when it isn't `null`; otherwise use one of `commands`. To name a project like a command, write `create <name>`. |
+| `UnknownFlag`, `UnexpectedArgument` | Run `fix` when it isn't `null`. When it is, the message says what's wrong; correct the command yourself. |
+| `InvalidFlagValue` | No fix: choose from `allowed` (when present) and run the command again. |
+| `InvalidProjectName` | Run `fix` when it isn't `null` (only case and spaces changed). A path (`../app`) gets none: run efforge from the directory the project should go in, with just the name. |
+| `UnknownCommand` | The first word isn't a command. Run `fix` (the command it names) when it isn't `null`; otherwise use one of `commands`. To name a project like a command, write `create <name>`. |
+| `InsideProject` | You ran a create without the word `create` inside an efforge project (`project`). To change that project, use `add`. Only if the user wants a project inside it, run `create <name>`. |
 | `UnknownValue` | Run `fix` when it isn't `null` (a clear typo, corrected). Otherwise choose from `allowed`; if what the user wants isn't there, efforge doesn't offer it: tell them. |
-| `IncompatibleStack` | Run `fix`. For `add`, it adds the ids in `needs` to the same command. |
-| `TargetNotEmpty` | The directory exists. With `project: true` it holds an efforge project: run `fix` when it isn't `null` (it finishes the setup), then `nextSteps`. With `project: false`, ask the user for another name. Never delete the directory yourself. |
-| `Interrupted` | The run was stopped (exit code 130). Run `fix` when it isn't `null`, then the rest of `nextSteps`. |
+| `IncompatibleStack` | No fix: two choices conflict, or `add` needs another add-on with it. Pick from `alternatives` (see Rules) and run that command. For `add`, `needs` names the slots to fill and the ids that can fill each. |
+| `TargetNotEmpty` | The directory exists. With `project: true` it holds an efforge project: when `fix` isn't `null` it is the project this command started (same `stack` as `requested`): run `fix`, then `nextSteps`. When `fix` is `null` and `stack` differs from `requested`, it is a different project: ask the user for another name or whether to use it. With `project: false`, ask for another name. Never delete the directory yourself. |
+| `Interrupted` | The run was stopped (exit code 130). Run `fix` when it isn't `null`, then the rest of `nextSteps`. For `add` with `written: false`, run the same command again. |
 | `NotAnEfforgeProject` | Run `fix` when it isn't null (it points `--cwd` at the project). Otherwise the directory isn't an efforge project. |
 | `NoAddonIds` | Pick an id from `available`, or run `fix` (it lists them). |
 | `UnknownAddon` | Run `fix` when it isn't `null` (a clear typo, or the one id a fragment names). Otherwise pick from `suggestions`, or run `list --json` for the ids the project can add; if what the user wants isn't there, efforge doesn't offer it: tell them. |
@@ -97,7 +101,7 @@ The result lists `created`, `changed` and `removed` files, the new `env` vars, a
 
 A code not in this table is newer than this skill: treat it as a failure, run `fix` if it isn't `null`, and otherwise tell the user `message`.
 
-Exit codes: `0` success, `1` error, `130` stopped (with `--json`, `create` still prints its `Interrupted` document).
+Exit codes: `0` success, `1` error, `130` stopped (with `--json`, `create` and `add` still print an `Interrupted` document; stopped in the first moment, before anything was written, stdout can be empty: run the same command again).
 
 ## Verify
 
