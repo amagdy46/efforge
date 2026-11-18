@@ -2,6 +2,7 @@ import { Effect, FileSystem, Path, Schema } from "effect"
 import { parseDocument } from "yaml"
 import type { LoadedAddon, When } from "./addon.ts"
 import { addonIdsFor } from "./addon.ts"
+import { cardRegistration } from "./cards.ts"
 import { hash, renderManifest } from "./manifest.ts"
 import { applyProjectName } from "./projectName.ts"
 import { SlotId, type StackConfig, toCommand } from "./stack.ts"
@@ -39,10 +40,14 @@ export const matches = (when: When | undefined, config: StackConfig): boolean =>
   })
 }
 
-/** `packageManager` goes last, where the formatter (and sort-package-json) puts it. */
+/** `engines`, then `packageManager`, go last, where the formatter (sort-package-json) puts them. */
 const json = (value: unknown): string => {
-  const { packageManager, ...rest } = value as { packageManager?: string }
-  const ordered = packageManager === undefined ? value : { ...rest, packageManager }
+  const { engines, packageManager, ...rest } = value as Record<string, unknown>
+  const ordered = {
+    ...rest,
+    ...(engines === undefined ? {} : { engines }),
+    ...(packageManager === undefined ? {} : { packageManager }),
+  }
   return `${JSON.stringify(ordered, null, 2)}\n`
 }
 const sortKeys = (o: Record<string, string>): Record<string, string> =>
@@ -89,7 +94,7 @@ export const generate = (
 
     // 1. every overlay, in add-on order, so a later overlay can never clobber an earlier edit
     for (const { manifest, dir } of loaded) {
-      for (const f of manifest.files) {
+      for (const f of [...manifest.files, ...(manifest.card?.files ?? [])]) {
         if (!matches(f.when, config)) continue
         const content = yield* fs
           .readFileString(path.join(dir, f.path))
@@ -177,9 +182,9 @@ export const generate = (
       }
     }
 
-    // 3. every transform, in add-on order
+    // 3. every transform, in add-on order; an add-on's card is registered after its own transforms
     for (const { manifest } of loaded) {
-      for (const t of manifest.transforms) {
+      for (const t of [...manifest.transforms, ...cardRegistration(manifest)]) {
         if (!matches(t.when, config)) continue
         const before = tree
         tree = yield* runTransform(tree, t)

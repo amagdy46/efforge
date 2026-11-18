@@ -4,7 +4,8 @@ import type { ChildProcessSpawner } from "effect/process"
 import { type ParseError, parse } from "jsonc-parser"
 import pc from "picocolors"
 import { parseDocument } from "yaml"
-import { type AddonLoadError, addonIdsFor, loadAddons } from "../addon.ts"
+import { type AddonLoadError, type AddonManifest, addonIdsFor, loadAddons } from "../addon.ts"
+import { cardRegistration, REGISTRY_FILE } from "../cards.ts"
 import { unifiedDiff } from "../diff.ts"
 import { type CommandFailed, exec, has } from "../exec.ts"
 import { GenerateError, generate, isComputed, matches } from "../generate.ts"
@@ -77,6 +78,8 @@ export interface AddResult {
   readonly envVars: ReadonlyArray<{ readonly name: string; readonly description: string }>
   /** `<package.json>: <script>` entries whose existing command an add-on replaced. */
   readonly replacedScripts: string[]
+  /** Add-ons whose dashboard card was not added: the project has no card registry (made before efforge 0.3). */
+  readonly cardsSkipped: string[]
 }
 
 export type AddError =
@@ -332,10 +335,19 @@ export const addAddons = (
     const written = new Set<string>()
     const hashes: Record<string, string> = {}
 
+    // a project made before capability cards has no registry: its add-ons come without their card
+    const hasRegistry = (yield* read(REGISTRY_FILE)) !== undefined
+    const cardsSkipped: string[] = []
+    const cardFiles = (m: AddonManifest) => {
+      const files = (m.card?.files ?? []).filter((f) => switchedOn(m.id, f.when))
+      if (files.length > 0 && !hasRegistry) cardsSkipped.push(m.title)
+      return hasRegistry ? files : []
+    }
+
     // 2. overlays: write if absent, replace if still what efforge generated, else conflict
     const overlays = new Map<string, string>()
     for (const { manifest: m, dir: addonDir } of scope)
-      for (const f of m.files) {
+      for (const f of [...m.files, ...cardFiles(m)]) {
         if (!switchedOn(m.id, f.when)) continue
         // package.json files are merged, not replaced: only a new workspace package's is created
         if (isComputed(f.target) && !(isNewPackageJson(f.target) && !(yield* read(f.target))))
@@ -412,7 +424,9 @@ export const addAddons = (
 
     // 3. transforms, against the current disk content of the seam files
     const active = scope.flatMap(({ manifest: m }) =>
-      m.transforms.filter((t) => switchedOn(m.id, t.when)),
+      [...m.transforms, ...(hasRegistry ? cardRegistration(m) : [])].filter((t) =>
+        switchedOn(m.id, t.when),
+      ),
     )
     const wanted = new Set<string>()
     for (const t of active)
@@ -608,6 +622,7 @@ export const addAddons = (
       ),
       envVars,
       replacedScripts,
+      cardsSkipped,
     }
     if (opts.dryRun) return result
 
@@ -812,6 +827,10 @@ export const addHandler = (input: {
     if (result.replacedScripts.length > 0)
       yield* io.warn(
         `${input.dryRun ? "Would replace" : "Replaced"} existing package scripts:\n${result.replacedScripts.map((x) => `  ${x}`).join("\n")}`,
+      )
+    if (result.cardsSkipped.length > 0)
+      yield* io.warn(
+        `No dashboard card for ${result.cardsSkipped.join(", ")}: this project has no ${REGISTRY_FILE} (it came with efforge 0.3). Everything else ${input.dryRun ? "would be" : "was"} added.`,
       )
     if (input.dryRun) return yield* io.outro(pc.dim("dry run: nothing written"))
 

@@ -1,4 +1,5 @@
 import { Effect, FileSystem, Path, Schema } from "effect"
+import { CARDS_DIR } from "./cards.ts"
 import { slots } from "./slots.ts"
 import { SlotId, type StackConfig } from "./stack.ts"
 
@@ -22,6 +23,19 @@ export const AddonFile = Schema.Struct({
   target: Schema.String,
   when: Schema.optionalKey(When),
 })
+export type AddonFile = typeof AddonFile.Type
+
+/**
+ * The add-on's capability card on the dashboard (docs/capability-cards.md). `files[0]` is the card
+ * module, under apps/web/src/capabilities/, and exports `export` (a `Capability`); the other files
+ * are what only the card uses (its server functions). efforge writes them and registers the card
+ * in apps/web/src/capabilities/registry.ts. `add` skips them in a project that has no registry.
+ */
+export const AddonCard = Schema.Struct({
+  export: Schema.String.check(Schema.isPattern(/^[A-Za-z_$][\w$]*$/)),
+  files: Schema.Array(AddonFile).check(Schema.isMinLength(1)),
+})
+export type AddonCard = typeof AddonCard.Type
 
 /** workspace package dir (e.g. `apps/web`) -> package names; versions come from `versions.ts`. */
 const PackagesByDir = Schema.Record(Schema.String, Strings)
@@ -32,6 +46,7 @@ export const AddonManifest = Schema.Struct({
   description: Schema.String,
   docs: Schema.optionalKey(Schema.String),
   files: Schema.Array(AddonFile),
+  card: Schema.optionalKey(AddonCard),
   dependencies: PackagesByDir,
   devDependencies: PackagesByDir,
   /** workspace package dir (`.` for the root) -> script name -> command; an add-on's script replaces one of the same name */
@@ -72,6 +87,7 @@ export class AddonLoadError extends Schema.TaggedError<AddonLoadError>()("AddonL
     "missing-file",
     "unknown-reference",
     "no-base",
+    "invalid-card",
   ]),
   message: Schema.String,
 }) {}
@@ -130,7 +146,14 @@ export const loadAddons = (
       for (const ref of [...manifest.requires, ...manifest.conflicts])
         if (!addons.has(ref))
           return yield* fail(manifest.id, "unknown-reference", `references unknown add-on "${ref}"`)
-      for (const f of manifest.files)
+      const card = manifest.card
+      if (card !== undefined && !(card.files[0] as AddonFile).target.startsWith(CARDS_DIR))
+        return yield* fail(
+          manifest.id,
+          "invalid-card",
+          `the card module (card.files[0]) must be under ${CARDS_DIR}`,
+        )
+      for (const f of [...manifest.files, ...(card?.files ?? [])])
         if (!(yield* io(manifest.id, fs.exists(path.join(dir, f.path)))))
           return yield* fail(
             manifest.id,

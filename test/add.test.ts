@@ -256,6 +256,7 @@ it("a second add is a no-op: all skipped, no install", async () => {
     added: [],
     envVars: [],
     replacedScripts: [],
+    cardsSkipped: [],
   })
   expect(snapshot()).toEqual(first)
 })
