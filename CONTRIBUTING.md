@@ -6,7 +6,7 @@ Needs Node 24.11+ or 26+ (not 25) and pnpm 12.
 pnpm install
 pnpm typecheck && pnpm lint && pnpm test && pnpm build
 pnpm test:e2e                        # every stack in the matrix; slow
-pnpm test:e2e -t "stacks build minimal$"
+pnpm test:e2e -t "^stacks build > minimal$"
 node src/bin.ts my-app --dry-run     # run the CLI from source
 node scripts/bump.ts [--write]       # pins vs npm latest
 node scripts/smoke-pack.ts           # pack, install like npm create, create + build + add

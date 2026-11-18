@@ -82,8 +82,10 @@ jobs:
           # version that was unpublished or broken upstream
           cache: ${{ (github.event_name != 'schedule' && github.event_name != 'workflow_dispatch') && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
-      # anchored: `pg-drizzle` must not also select `pg-drizzle-orgs`
-      - run: pnpm test:e2e -t "stacks build ${{ matrix.case }}$"
+      # vitest joins names with " > "; anchored, so `pg-drizzle` doesn't also select `pg-drizzle-orgs`
+      - run: pnpm test:e2e -t "^stacks build > ${{ matrix.case }}$" --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/e2e.json"
+      # a filter that matches nothing skips everything and still passes
+      - run: node scripts/expect-tests-ran.ts "$RUNNER_TEMP/e2e.json" 1
 
   # Installs the packed tarball the way `npm create efforge` does (npm, its own cache, no
   # lockfile, outside the repo), creates the default stack, builds it, runs one `add` with the
@@ -168,4 +170,5 @@ jobs:
           cache: ${{ (github.event_name != 'schedule' && github.event_name != 'workflow_dispatch') && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:e2e -t "browser flow"
+      - run: pnpm test:e2e -t "^browser flow > " --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/e2e.json"
+      - run: node scripts/expect-tests-ran.ts "$RUNNER_TEMP/e2e.json" 1
