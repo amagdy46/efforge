@@ -2,10 +2,11 @@ import { Effect } from "effect"
 import { type CallExpression, Node } from "ts-morph"
 import { addImportText, missing, parseTs, req, type Transform, withFile } from "./util.ts"
 
-/** The outermost call of the chain `call` belongs to (`createServerFn(...).validator(...).handler(...)`). */
-const chainTop = (call: CallExpression): Node => {
-  let top: Node = call
+/** The calls of the chain `call` starts (`createServerFn(...).validator(...).handler(...)`), in order. */
+const chain = (call: CallExpression): Node[] => {
+  const calls: Node[] = [call]
   for (;;) {
+    const top = calls.at(-1) as Node
     const access = top.getParent()
     const outer = access?.getParent()
     if (
@@ -14,9 +15,36 @@ const chainTop = (call: CallExpression): Node => {
       Node.isCallExpression(outer) &&
       outer.getExpression() === access
     )
-      top = outer
-    else return top
+      calls.push(outer)
+    else return calls
   }
+}
+
+const PRINT_WIDTH = 100
+
+/**
+ * The rest of a one-line chain (`.handler(...)` and any other calls after `createServerFn(...)`)
+ * with `call` first, one call per line, laid out as the generated project's formatter does: a
+ * call's arguments go on one line when they fit, else its later lines move in by one indent.
+ */
+const oneCallPerLine = (text: string, calls: Node[], call: string, eol: string): string => {
+  const start = (calls[0] as Node).getEnd()
+  const lineStart = text.lastIndexOf("\n", start) + 1
+  const indent = `${/^[ \t]*/.exec(text.slice(lineStart))?.[0] ?? ""}  `
+  const rest = calls.slice(1).map((c, i) => text.slice((calls[i] as Node).getEnd(), c.getEnd()))
+  const lines = [call, ...rest].map((part) => {
+    const parts = part.split(/\r?\n/)
+    if (parts.length === 1) return part
+    // `.handler(() =>`, its body, `)`: one line when it fits and nothing in it depends on newlines
+    const [first, ...tail] = parts as [string, ...string[]]
+    const body = tail.slice(0, -1).map((l) => l.trim())
+    if (first.endsWith("=>") && tail.at(-1)?.trim() === ")" && !/`|\/\/|\/\*/.test(part)) {
+      const flat = `${first} ${body.join(" ").replace(/,$/, "")})`
+      if (indent.length + flat.length <= PRINT_WIDTH) return flat
+    }
+    return [first, ...tail.map((l) => (l === "" ? l : `  ${l}`))].join(eol)
+  })
+  return lines.map((l) => `${eol}${indent}${l}`).join("")
 }
 
 /**
@@ -42,9 +70,13 @@ export const addServerFnMiddleware: Transform = (tree, args) =>
       )
     if (calls.length === 0) return yield* missing(file, "createServerFn(...)", snippet)
 
-    const inserts: number[] = []
-    for (const call of calls) {
-      const top = chainTop(call)
+    // [start, end, replacement], applied from the end of the file
+    const edits: Array<[number, number, string]> = []
+    const call = `.middleware([${middleware}])`
+    const eol = text.includes("\r\n") ? "\r\n" : "\n"
+    for (const fn of calls) {
+      const links = chain(fn)
+      const top = links.at(-1) as Node
       const gated = top
         .getDescendants()
         .some(
@@ -53,18 +85,18 @@ export const addServerFnMiddleware: Transform = (tree, args) =>
             n.getName() === "middleware" &&
             n.getExpression().getText().startsWith("createServerFn"),
         )
-      if (!gated) inserts.push(call.getEnd())
+      if (gated) continue
+      const at = fn.getEnd()
+      // a chain the formatter already broke one call per line gets the new call on its own line
+      const broken = /^[ \t]*\r?\n([ \t]*)\./.exec(text.slice(at))
+      if (broken !== null) edits.push([at, at, `${eol}${broken[1]}${call}`])
+      else if (top === fn) edits.push([at, at, call])
+      // a one-line chain of two calls becomes three, which the formatter puts one per line
+      else edits.push([at, top.getEnd(), oneCallPerLine(text, links, call, eol)])
     }
     let next = text
-    for (const at of inserts.toSorted((a, b) => b - a)) {
-      // a chain the formatter already broke one call per line gets the new call on its own line
-      const broken = /^[ \t]*\r?\n([ \t]*)\./.exec(next.slice(at))
-      const call = `.middleware([${middleware}])`
-      next =
-        broken === null
-          ? `${next.slice(0, at)}${call}${next.slice(at)}`
-          : `${next.slice(0, at)}${next.includes("\r\n") ? "\r\n" : "\n"}${broken[1]}${call}${next.slice(at)}`
-    }
+    for (const [start, end, replacement] of edits.toSorted((a, b) => b[0] - a[0]))
+      next = `${next.slice(0, start)}${replacement}${next.slice(end)}`
     if (args.import !== undefined && args.from !== undefined)
       next = addImportText(file, next, args.import, args.from) ?? next
     return withFile(tree, file, next)

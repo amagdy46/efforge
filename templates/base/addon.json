@@ -136,10 +136,6 @@
       "target": "apps/web/src/routes/index.tsx"
     },
     {
-      "path": "files/web/src/server/greeting.ts",
-      "target": "apps/web/src/server/greeting.ts"
-    },
-    {
       "path": "files/web/src/server/layers.ts",
       "target": "apps/web/src/server/layers.ts"
     },
@@ -230,12 +226,21 @@
     {
       "path": "files/web/src/capabilities/registry.ts",
       "target": "apps/web/src/capabilities/registry.ts"
-    },
-    {
-      "path": "files/web/src/capabilities/runtime.tsx",
-      "target": "apps/web/src/capabilities/runtime.tsx"
     }
   ],
+  "card": {
+    "export": "runtime",
+    "files": [
+      {
+        "path": "files/web/src/capabilities/runtime.tsx",
+        "target": "apps/web/src/capabilities/runtime.tsx"
+      },
+      {
+        "path": "files/web/src/server/greeting.ts",
+        "target": "apps/web/src/server/greeting.ts"
+      }
+    ]
+  },
   "dependencies": {
     "apps/web": [
       "@tanstack/react-router",

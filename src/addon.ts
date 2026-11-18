@@ -1,5 +1,6 @@
 import { Effect, FileSystem, Path, Schema } from "effect"
-import { CARDS_DIR } from "./cards.ts"
+import { CARDS_DIR, SERVER_DIR } from "./cards.ts"
+import { transformTargets } from "./transforms/index.ts"
 import { slots } from "./slots.ts"
 import { SlotId, type StackConfig } from "./stack.ts"
 
@@ -25,15 +26,25 @@ export const AddonFile = Schema.Struct({
 })
 export type AddonFile = typeof AddonFile.Type
 
+export const AddonTransform = Schema.Struct({
+  name: Schema.String,
+  args: Schema.Record(Schema.String, Schema.String),
+  when: Schema.optionalKey(When),
+})
+export type AddonTransform = typeof AddonTransform.Type
+
 /**
  * The add-on's capability card on the dashboard (docs/capability-cards.md). `files[0]` is the card
  * module, under apps/web/src/capabilities/, and exports `export` (a `Capability`); the other files
- * are what only the card uses (its server functions). efforge writes them and registers the card
- * in apps/web/src/capabilities/registry.ts. `add` skips them in a project that has no registry.
+ * are what only the card uses (its server functions, under apps/web/src/server/). `transforms`
+ * edit only those files. The files, the transforms, the session guard efforge adds to the server
+ * functions on auth stacks and the registration in apps/web/src/capabilities/registry.ts are one
+ * unit: written together, or (in a project without a registry) skipped together.
  */
 export const AddonCard = Schema.Struct({
   export: Schema.String.check(Schema.isPattern(/^[A-Za-z_$][\w$]*$/)),
   files: Schema.Array(AddonFile).check(Schema.isMinLength(1)),
+  transforms: Schema.optionalKey(Schema.Array(AddonTransform)),
 })
 export type AddonCard = typeof AddonCard.Type
 
@@ -63,13 +74,7 @@ export const AddonManifest = Schema.Struct({
   ),
   requires: Strings,
   conflicts: Strings,
-  transforms: Schema.Array(
-    Schema.Struct({
-      name: Schema.String,
-      args: Schema.Record(Schema.String, Schema.String),
-      when: Schema.optionalKey(When),
-    }),
-  ),
+  transforms: Schema.Array(AddonTransform),
 })
 export type AddonManifest = typeof AddonManifest.Type
 
@@ -147,12 +152,6 @@ export const loadAddons = (
         if (!addons.has(ref))
           return yield* fail(manifest.id, "unknown-reference", `references unknown add-on "${ref}"`)
       const card = manifest.card
-      if (card !== undefined && !(card.files[0] as AddonFile).target.startsWith(CARDS_DIR))
-        return yield* fail(
-          manifest.id,
-          "invalid-card",
-          `the card module (card.files[0]) must be under ${CARDS_DIR}`,
-        )
       for (const f of [...manifest.files, ...(card?.files ?? [])])
         if (!(yield* io(manifest.id, fs.exists(path.join(dir, f.path)))))
           return yield* fail(
@@ -160,8 +159,44 @@ export const loadAddons = (
             "missing-file",
             `file "${f.path}" does not exist in ${dir}`,
           )
+      if (card !== undefined) {
+        const message = yield* cardProblem(card, (f) =>
+          io(manifest.id, fs.readFileString(path.join(dir, f.path))),
+        )
+        if (message !== undefined) return yield* fail(manifest.id, "invalid-card", message)
+      }
     }
     return addons
+  })
+
+/**
+ * Why `card` breaks the contract in docs/capability-cards.md, or undefined. The module comes first
+ * and lives under apps/web/src/capabilities/; server functions (`createServerFn`) live only in the
+ * card's files under apps/web/src/server/, so efforge can guard every one of them on auth stacks;
+ * and the card's transforms edit only the card's own files.
+ */
+const cardProblem = <E>(
+  card: AddonCard,
+  read: (file: AddonFile) => Effect.Effect<string, E>,
+): Effect.Effect<string | undefined, E> =>
+  Effect.gen(function* () {
+    const module = card.files[0] as AddonFile
+    if (!module.target.startsWith(CARDS_DIR))
+      return `the card module (card.files[0]) must be under ${CARDS_DIR}`
+    for (const f of card.files) {
+      const serverFns = /\bcreateServerFn\s*\(/.test(yield* read(f))
+      const inServer = f !== module && f.target.startsWith(SERVER_DIR)
+      if (serverFns && !inServer)
+        return `${f.target} calls createServerFn: a card's server functions go in its own files under ${SERVER_DIR}, so efforge can guard them on auth stacks`
+      if (inServer && !serverFns)
+        return `${f.target} is a card file under ${SERVER_DIR} without a createServerFn: put helpers elsewhere`
+    }
+    const own = new Set(card.files.map((f) => f.target))
+    for (const t of card.transforms ?? [])
+      for (const file of transformTargets(t))
+        if (!own.has(file))
+          return `card transform ${t.name} edits ${file}, which is not one of the card's files: put it under transforms`
+    return undefined
   })
 
 /** `base`, then one id per slot whose value isn't `none`, then the extras, all in slot order (later overlays win). */

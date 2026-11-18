@@ -130,7 +130,7 @@ it("adding realtime later adds its card to the dashboard", async () => {
     expectModules(tree, "after add")
     expect(existsSync(join(dir, "apps/web/src/server/realtime-demo.ts"))).toBe(true)
     expect(rendersRegistry(read(DASHBOARD))).toBe(true)
-    expect(result.cardsSkipped).toEqual([])
+    expect(result.notes).toEqual([])
   } finally {
     rmSync(tmp, { recursive: true, force: true })
   }
@@ -141,7 +141,7 @@ it("a project without a card registry (before efforge 0.3) gets the add-on witho
     rmSync(join(d, REGISTRY_FILE)),
   )
   try {
-    expect(result.cardsSkipped).toEqual(["Realtime"])
+    expect(result.notes).toEqual([expect.stringMatching(/^No dashboard card for Realtime: /)])
     // the service, its layer and its test are there; the card and what only the card uses are not
     expect(existsSync(join(dir, "packages/core/src/realtime.ts"))).toBe(true)
     expect(readFileSync(join(dir, "apps/web/src/server/layers.ts"), "utf8")).toContain(

@@ -545,3 +545,30 @@ it("addDevVar creates .dev.vars, appends, and never overwrites", async () => {
   const t3 = await run(t2, dv("A", "other"))
   expect(t3.get(".dev.vars")).toMatch(/A=1\nB=2\n$/)
 })
+
+it("addServerFnMiddleware puts a one-line chain one call per line, as the formatter would", async () => {
+  const source = `import { createServerFn } from "@tanstack/react-start"
+
+export const listNotes = createServerFn({ method: "GET" }).handler(() =>
+  runOutcome(Notes.use((notes) => notes.list)),
+)
+
+export const long = createServerFn({ method: "GET" }).handler(() =>
+  runOutcome(Notes.use((notes) => notes.list.filter((note) => note.title.startsWith("a")))),
+)
+`
+  const t = await once({ "f.ts": source }, gate)
+  expect(t.get("f.ts")).toBe(`import { createServerFn } from "@tanstack/react-start"
+import { requireSession } from "./rs"
+
+export const listNotes = createServerFn({ method: "GET" })
+  .middleware([requireSession])
+  .handler(() => runOutcome(Notes.use((notes) => notes.list)))
+
+export const long = createServerFn({ method: "GET" })
+  .middleware([requireSession])
+  .handler(() =>
+    runOutcome(Notes.use((notes) => notes.list.filter((note) => note.title.startsWith("a")))),
+  )
+`)
+})

@@ -2,7 +2,7 @@ import { Effect, FileSystem, Path, Schema } from "effect"
 import { parseDocument } from "yaml"
 import type { LoadedAddon, When } from "./addon.ts"
 import { addonIdsFor } from "./addon.ts"
-import { cardRegistration } from "./cards.ts"
+import { presentCardTransforms } from "./cards.ts"
 import { hash, renderManifest } from "./manifest.ts"
 import { applyProjectName } from "./projectName.ts"
 import { SlotId, type StackConfig, toCommand } from "./stack.ts"
@@ -182,9 +182,11 @@ export const generate = (
       }
     }
 
-    // 3. every transform, in add-on order; an add-on's card is registered after its own transforms
+    // 3. every transform, in add-on order; an add-on's card transforms (its own, the session guard,
+    // the registration) run after the add-on's, when the card was written
     for (const { manifest } of loaded) {
-      for (const t of [...manifest.transforms, ...cardRegistration(manifest)]) {
+      const card = presentCardTransforms(manifest, (file) => tree.has(file))
+      for (const t of [...manifest.transforms, ...card]) {
         if (!matches(t.when, config)) continue
         const before = tree
         tree = yield* runTransform(tree, t)
