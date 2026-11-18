@@ -1,11 +1,35 @@
 import { Auth, Unauthorized } from "@repo/core/Auth"
 import { getRequestHeaders } from "@tanstack/react-start/server"
-import { Config, Context, Effect, Layer, Option, Redacted } from "effect"
+import { waitUntil } from "cloudflare:workers"
+import { Config, Context, Data, Effect, Layer, Option, Redacted } from "effect"
 import { WorkerConfig } from "effect-cf"
 import { type AuthInstance, makeAuth } from "./auth"
 import { AuthDatabase, AuthDatabaseLayer } from "./auth-database"
 import { authBaseURL } from "./auth-url"
 import { WorkerEnvLive } from "./cloudflare"
+
+const ignore = () => undefined
+
+/** A Better Auth setting that is set but unusable; the runtime shows it as `NotConfigured`. */
+class AuthConfigError extends Data.TaggedError("AuthConfigError")<{
+  readonly setting: string
+  readonly message: string
+}> {}
+
+/** BETTER_AUTH_URL, when set, must be an origin such as https://app.example.com. */
+const checkURL = (value: Option.Option<string>) =>
+  Option.match(value, {
+    onNone: () => Effect.succeed(value),
+    onSome: (url) =>
+      URL.canParse(url) || url.trim() === ""
+        ? Effect.succeed(value)
+        : Effect.fail(
+            new AuthConfigError({
+              setting: "BETTER_AUTH_URL",
+              message: `BETTER_AUTH_URL is "${url}", which is not a URL (use an origin such as https://app.example.com, or leave it empty).`,
+            }),
+          ),
+  })
 
 /** The Better Auth instance; `/api/auth/*` is served from it (see auth-route.ts). */
 export class BetterAuth extends Context.Service<BetterAuth, AuthInstance>()("BetterAuth") {}
@@ -19,14 +43,21 @@ const BetterAuthLive = Layer.effect(
       secret: Config.Redacted("BETTER_AUTH_SECRET").parse(provider),
       baseURL: Config.option(Config.String("BETTER_AUTH_URL")).parse(provider),
     })
+    const url = yield* checkURL(baseURL)
     const auth = makeAuth({
       database,
       secret: Redacted.value(secret),
-      baseURL: authBaseURL(Option.getOrUndefined(baseURL), import.meta.env.DEV),
+      baseURL: authBaseURL(Option.getOrUndefined(url), import.meta.env.DEV),
     })
-    // Better Auth finishes starting in a promise. Settle it in the request that builds the layer:
-    // workerd refuses a promise from a request that has ended, which would fail later sign-ins
-    yield* Effect.promise(() => auth.$context)
+    // Better Auth finishes starting in a promise (`$context`), which under `pnpm dev` loads its
+    // database adapter with a dynamic import: I/O that belongs to the request that built this layer.
+    // workerd cancels a request's I/O when it ends, so if that request ends first (a WebSocket
+    // upgrade), the promise never settles and every later sign-in fails. `waitUntil` keeps that
+    // request alive until Better Auth has started. Do not await it here instead: the layer is built
+    // once per isolate, so every request that arrives meanwhile would wait on work owned by another
+    // request, and workerd fails it with "the Worker's code had hung". On Workers, never await a
+    // promise across requests; keep layer construction synchronous and hand slow work to waitUntil.
+    waitUntil(auth.$context.then(ignore, ignore))
     return auth
   }),
 ).pipe(Layer.provide(AuthDatabaseLayer), Layer.provide(WorkerEnvLive))
