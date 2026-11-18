@@ -20,11 +20,16 @@ export class NotConfigured extends Error {
   }
 }
 
-/** `error` as `NotConfigured` when it is a missing setting (an Effect `ConfigError`). */
+/**
+ * `error` as `NotConfigured` when it is a missing setting: an Effect `ConfigError`, or a layer's
+ * own `...ConfigError` that names it in a `setting` field (as `StorageConfigError` does).
+ */
 export const asNotConfigured = (error: unknown): NotConfigured | undefined => {
   if (error instanceof NotConfigured) return error
   if (typeof error !== "object" || error === null || !("_tag" in error)) return undefined
   if (!String(error._tag).endsWith("ConfigError")) return undefined
+  if ("setting" in error && typeof error.setting === "string")
+    return new NotConfigured(error.setting)
   const message = "message" in error ? String(error.message) : ""
   // a ConfigError names the key as `at ["NAME"]`
   return new NotConfigured(/\["([A-Za-z0-9_]+)"\]/.exec(message)?.[1] ?? "A setting")
