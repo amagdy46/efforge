@@ -272,6 +272,12 @@ it("env: no .dev.vars at all fails, and the fix writes efforge's local values", 
   expect(r.fix).toMatch(/^printf '%s\\n' '?BETTER_AUTH_SECRET=dev-only-[^' ]*'? >> \.dev\.vars$/)
 })
 
+it("env: with Alchemy and no .env, the fix is create's next step", async () => {
+  const dir = await project({ infra: "alchemy" })
+  const r = get(await doctor(dir), "env")
+  expect(r).toMatchObject({ status: "fail", fix: "cp .env.example .env" })
+})
+
 it("env: a production placeholder warns", async () => {
   const dir = await project()
   edit(dir, ".dev.vars", (t) =>

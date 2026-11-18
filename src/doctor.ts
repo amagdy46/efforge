@@ -594,10 +594,13 @@ const envCheck: Check = {
         return {
           status: "fail" as const,
           message: `${local === undefined ? `There is no ${file}, so the` : "The"} app reads ${bad.length === 1 ? "a setting" : "settings"} that ${file} doesn't set: ${describe(bad)}. ${bad.length === 1 ? "It fails" : "They fail"} at startup with a "not configured" page. See .env.example for what each is.${soft.length > 0 ? ` Also: ${describe(soft)}.` : ""}`,
+          // with Alchemy, create's next step is to copy the example; without, efforge's local values
           fix:
-            lines.length === bad.length
-              ? ctx.here(`printf '%s\\n' ${lines.map(quote).join(" ")} >> ${file}`)
-              : null,
+            local === undefined && file === ".env" && ctx.read(".env.example") !== undefined
+              ? ctx.here("cp .env.example .env")
+              : lines.length === bad.length
+                ? ctx.here(`printf '%s\\n' ${lines.map(quote).join(" ")} >> ${file}`)
+                : null,
           details,
         }
       }

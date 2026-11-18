@@ -184,6 +184,8 @@ const checkDoctor = (dir: string) =>
 const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
   Effect.gen(function* () {
     const dir = yield* generateStack(config)
+    // create's next step with Alchemy: the local values come from the example
+    if (config.infra === "alchemy") yield* Effect.try(() => sh(dir, "cp .env.example .env"))
     yield* checkDoctor(dir)
     yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
     // a minimal stack's card files may have nothing outside their regions; auth and database ones do
