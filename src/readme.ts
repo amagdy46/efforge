@@ -377,7 +377,7 @@ const deployWrangler = (input: ReadmeInput): string => {
     )
   if (secrets.length > 0)
     steps.push(
-      `Write the production values of ${and(secrets.map(code))} to \`.env.production\` (gitignored; \`.env.example\` says what each is), then upload them: \`pnpm exec wrangler secret bulk .env.production\`.${secrets.includes("BETTER_AUTH_URL") ? " \`BETTER_AUTH_URL\` can stay empty until the first deploy prints the URL." : ""}`,
+      `Write the production values of ${and(secrets.map(code))} to \`.env.production\` (gitignored; \`.env.example\` says what each is), then upload them: \`pnpm exec wrangler secret bulk .env.production\`.${secrets.includes("BETTER_AUTH_URL") ? " `BETTER_AUTH_URL` can stay empty until the first deploy prints the URL." : ""}`,
     )
   const notes = [
     ...(ids.includes("extras/storage") ? ["creates the R2 bucket"] : []),
@@ -406,7 +406,7 @@ const deployAlchemy = (input: ReadmeInput): string => {
     ...allEnv(input).filter((n) => n !== "CLOUDFLARE_ACCOUNT_ID"),
   ]
   const steps = [
-    `Write the production values of ${and(env.map(code))} to \`.env.production\` (gitignored; \`.env.example\` says what each is). Check that the Cloudflare credentials are set (not that they work) with \`pnpm exec alchemy provider check-env -c infra/alchemy.run.ts --env-file .env.production\`.${env.includes("BETTER_AUTH_URL") ? " \`BETTER_AUTH_URL\` can stay empty: Better Auth then takes the origin from each request." : ""}`,
+    `Write the production values of ${and(env.map(code))} to \`.env.production\` (gitignored; \`.env.example\` says what each is). Check that the Cloudflare credentials are set (not that they work) with \`pnpm exec alchemy provider check-env -c infra/alchemy.run.ts --env-file .env.production\`.${env.includes("BETTER_AUTH_URL") ? " `BETTER_AUTH_URL` can stay empty: Better Auth then takes the origin from each request." : ""}`,
   ]
   if (stack.database === "postgres")
     steps.push(
