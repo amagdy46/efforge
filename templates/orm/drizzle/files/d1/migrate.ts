@@ -20,6 +20,15 @@ readdirSync(source)
     )
   })
 
+const config = `${root}../../wrangler.jsonc`
+if (!existsSync(config)) {
+  console.error(
+    "No wrangler.jsonc: with Alchemy, `pnpm dev` migrates the local D1 and `pnpm run deploy` the deployed one.",
+  )
+  process.exit(1)
+}
+// wrangler refuses --local together with --remote
+const args = process.argv.slice(2)
 const result = spawnSync(
   "wrangler",
   [
@@ -27,10 +36,10 @@ const result = spawnSync(
     "migrations",
     "apply",
     "DB",
-    "--local",
+    ...(args.includes("--remote") ? [] : ["--local"]),
     "--config",
-    `${root}../../wrangler.jsonc`,
-    ...process.argv.slice(2),
+    config,
+    ...args,
   ],
   { stdio: "inherit" },
 )
