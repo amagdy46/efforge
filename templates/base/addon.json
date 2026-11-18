@@ -68,6 +68,10 @@
       "target": "apps/web/package.json"
     },
     {
+      "path": "files/web/public/favicon.svg",
+      "target": "apps/web/public/favicon.svg"
+    },
+    {
       "path": "files/web/src/components/theme-provider.tsx",
       "target": "apps/web/src/components/theme-provider.tsx"
     },

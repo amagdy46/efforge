@@ -11,7 +11,11 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "My app" },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      // public/favicon.svg is efforge's mark, a placeholder: replace it with your app's icon
+      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+    ],
     scripts: [{ children: themeScript }],
   }),
   component: RootComponent,
