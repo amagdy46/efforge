@@ -154,13 +154,13 @@ if (server === "preview") {
 
 const results: Record<string, { failed: number; problems: string[] }> = {}
 for (const scenario of scenarios) {
-  results[scenario] = { failed: 0, problems: [] }
+  const result: { failed: number; problems: string[] } = { failed: 0, problems: [] }
+  results[scenario] = result
   for (let round = 1; round <= rounds; round++) {
     await waitClosed()
     const child = await start()
     try {
       const problems = await run(scenario)
-      const result = results[scenario] as { failed: number; problems: string[] }
       if (problems.length > 0) {
         result.failed++
         result.problems.push(`round ${round}: ${problems.join(" | ")}`)
