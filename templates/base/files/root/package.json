@@ -7,9 +7,9 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "lint": "vp lint",
+    "lint": "effect-tsgo vp lint",
     "format": "vp fmt",
-    "check": "vp check",
+    "check": "effect-tsgo vp check",
     "prepare": "effect-tsgo patch --typescript --oxlint"
   },
   "packageManager": "pnpm@12.21.0"

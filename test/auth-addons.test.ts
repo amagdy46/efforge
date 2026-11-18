@@ -2,6 +2,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { expect, it } from "@effect/vitest"
 import { Effect, Path } from "effect"
 import { loadAddons } from "../src/addon.ts"
+import { versions } from "../src/versions.ts"
 import { generate } from "../src/generate.ts"
 import { type StackConfig, withDefaults } from "../src/stack.ts"
 
@@ -117,7 +118,7 @@ it("better-auth gets its database per stack", async () => {
 
 it("pins better-auth and the pg driver in the catalog", async () => {
   const tree = await gen({ database: "postgres", orm: "drizzle", auth: "better-auth-orgs" })
-  expect(text(tree, "pnpm-workspace.yaml")).toContain("better-auth: 1.7.10")
+  expect(text(tree, "pnpm-workspace.yaml")).toContain(`better-auth: ${versions["better-auth"]}`)
   expect(JSON.parse(text(tree, "apps/web/package.json")).dependencies["better-auth"]).toBe(
     "catalog:",
   )
