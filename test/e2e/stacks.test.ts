@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { NodeFileSystem, NodeServices } from "@effect/platform-node"
 import { describe, it } from "@effect/vitest"
 import { Effect, FileSystem, Path } from "effect"
@@ -9,6 +9,8 @@ import { generate } from "../../src/generate.ts"
 import { ROUTE_TREE_COMMAND } from "../../src/routeTree.ts"
 import { type StackConfig, withDefaults } from "../../src/stack.ts"
 import type { Tree } from "../../src/tree.ts"
+import { isEffectLockstep } from "../../src/versions.ts"
+import { parse } from "yaml"
 
 const templates = new URL("../../templates", import.meta.url).pathname
 // Under the repo (gitignored), not os.tmpdir(): /tmp is often a small tmpfs.
@@ -35,6 +37,24 @@ const sh = (cwd: string, command: string) => {
   if (r.status !== 0) throw new Error(`\`${command}\` exited ${r.status}\n${r.stdout}\n${r.stderr}`)
 }
 
+/**
+ * What the drift guard promises, checked against the real install: every package released with
+ * `effect` resolved to the catalog's `effect` version (not only the ones the project names), and
+ * pnpm reports no unmet peers.
+ */
+const checkEffectLockstep = (dir: string) => {
+  const read = (file: string) => parse(readFileSync(`${dir}/${file}`, "utf8"))
+  const effect = (read("pnpm-workspace.yaml") as { catalog: Record<string, string> }).catalog.effect
+  const lock = read("pnpm-lock.yaml") as { packages?: Record<string, unknown> }
+  const drifted = Object.keys(lock.packages ?? {}).filter((key) => {
+    const at = key.lastIndexOf("@")
+    return isEffectLockstep(key.slice(0, at)) && key.slice(at + 1) !== effect
+  })
+  if (drifted.length > 0)
+    throw new Error(`Effect packages not at effect ${effect}: ${drifted.join(", ")}`)
+  sh(dir, "pnpm peers check")
+}
+
 /** Generates `config` into a tmp dir and installs it, ready for the checks `create` runs next. */
 const generateStack = (config: StackConfig): Effect.Effect<string, unknown> =>
   Effect.gen(function* () {
@@ -44,6 +64,7 @@ const generateStack = (config: StackConfig): Effect.Effect<string, unknown> =>
     yield* writeTree(dir, tree)
     yield* Effect.try(() => {
       sh(dir, "pnpm install --no-frozen-lockfile")
+      checkEffectLockstep(dir)
       // what `create` runs after installing: git init (own repo root, so a parent's ignore rules
       // don't apply), generate the route tree, then format
       sh(dir, "git init -q")
@@ -285,6 +306,7 @@ describe("add on a real project", () => {
           dryRun: false,
           install: true,
         })
+        yield* Effect.try(() => checkEffectLockstep(dir))
         yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
         rmSync(dir, { recursive: true, force: true })
       }).pipe(Effect.provide(NodeServices.layer)),

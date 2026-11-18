@@ -12,5 +12,5 @@
     "check": "vp check",
     "prepare": "effect-tsgo patch --typescript --oxlint"
   },
-  "packageManager": "pnpm@12.4.2"
+  "packageManager": "pnpm@12.21.0"
 }

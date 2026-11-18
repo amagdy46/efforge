@@ -22,7 +22,13 @@ import {
   type UnknownTransform,
 } from "../transforms/index.ts"
 import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
-import { efforgeVersion, versions } from "../versions.ts"
+import {
+  effectOverrides,
+  effectVersion,
+  efforgeVersion,
+  isEffectLockstep,
+  versions,
+} from "../versions.ts"
 import { PnpmMissing, TemplatesDir } from "./create.ts"
 
 export class NotAnEfforgeProject extends Schema.TaggedError<NotAnEfforgeProject>()(
@@ -524,18 +530,25 @@ export const addAddons = (
       written.add(target)
     }
 
-    // 5. pnpm catalog
-    if (used.size > 0) {
+    // 5. pnpm catalog, and the overrides that hold every Effect package at the project's `effect`
+    // version (added to projects made before efforge wrote them)
+    {
       const text = (yield* read("pnpm-workspace.yaml")) ?? "packages:\n  - apps/*\n  - packages/*\n"
       const doc = parseDocument(text)
       const catalog = {
         ...(doc.getIn(["catalog"]) as { toJSON(): Record<string, string> } | null)?.toJSON(),
       }
-      for (const name of used) catalog[name] ??= versions[name] as string
-      doc.setIn(
-        ["catalog"],
-        Object.fromEntries(Object.entries(catalog).toSorted(([a], [b]) => byName(a, b))),
-      )
+      const effect = catalog.effect ?? effectVersion
+      // a new Effect package joins at the project's `effect` version, not at efforge's newest pin
+      for (const name of used)
+        catalog[name] ??= isEffectLockstep(name) ? effect : (versions[name] as string)
+      if (used.size > 0)
+        doc.setIn(
+          ["catalog"],
+          Object.fromEntries(Object.entries(catalog).toSorted(([a], [b]) => byName(a, b))),
+        )
+      for (const [name, version] of Object.entries(effectOverrides(effect)))
+        if (!doc.hasIn(["overrides", name])) doc.setIn(["overrides", name], version)
       const next = doc.toString()
       if (next !== text) {
         out.set("pnpm-workspace.yaml", next)

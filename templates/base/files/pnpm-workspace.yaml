@@ -4,8 +4,13 @@ packages:
 allowBuilds:
   esbuild: true
   workerd: true
-# alchemy's runtime depends on `vite` aliased to @voidzero-dev/vite-plus-core while apps/web uses real
-# vite. vitest peers on vite, so that mix installs two vitest copies and @effect/vitest fails with
-# "vitest is imported directly without running vitest". Pin every `vite` to the catalog one.
+# `vite`: alchemy's runtime depends on `vite` aliased to @voidzero-dev/vite-plus-core while apps/web
+# uses real vite. vitest peers on vite, so that mix installs two vitest copies and @effect/vitest
+# fails with "vitest is imported directly without running vitest". Pin every `vite` to the catalog one.
+# `effect` and `@effect/*`: Effect's packages are released together and only work at one shared
+# version. Libraries ask for them with open ranges (drizzle-orm and effect-cf peer on
+# `@effect/sql-*: >=4.0.0`), which would install the newest release next to an older `effect`.
+# The entries below pin every one of them to the catalog's `effect` version; when you upgrade
+# `effect`, change them with it.
 overrides:
   vite: "catalog:"

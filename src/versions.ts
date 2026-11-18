@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 
-const effect4 = "4.0.5"
+/** `effect` and every package released with it (see `effectLockstep`). */
+export const effectVersion = "4.0.5"
+const effect4 = effectVersion
 
 /** Exact pins for every package templates may depend on. The only place versions live. */
 export const versions: Record<string, string> = {
@@ -56,6 +58,37 @@ export const versions: Record<string, string> = {
   vitest: "5.0.5",
   wrangler: "4.151.1",
 }
+
+/**
+ * Packages released in lockstep with `effect` (Effect-TS/effect-smol `packages/`): any two must be
+ * the same version. `@effect/tsgo` and `@effect/language-service` are versioned on their own.
+ * Patterns use pnpm's override wildcard (`*`).
+ */
+export const effectLockstep: ReadonlyArray<string> = [
+  "effect",
+  "@effect/ai-*",
+  "@effect/atom-*",
+  "@effect/openapi-generator",
+  "@effect/opentelemetry",
+  "@effect/platform-*",
+  "@effect/sql-*",
+  "@effect/vitest",
+]
+
+const matchesPattern = (name: string, pattern: string): boolean =>
+  pattern.endsWith("*") ? name.startsWith(pattern.slice(0, -1)) : name === pattern
+
+/** True for a package that must carry the same version as `effect`. */
+export const isEffectLockstep = (name: string): boolean =>
+  effectLockstep.some((p) => matchesPattern(name, p))
+
+/**
+ * The generated `pnpm-workspace.yaml` overrides that hold every lockstep package at `version`,
+ * including ones nothing in the project names directly and that only arrive as another
+ * package's dependency or auto-installed peer (drizzle-orm and effect-cf peer on `@effect/sql-*`).
+ */
+export const effectOverrides = (version: string): Record<string, string> =>
+  Object.fromEntries(effectLockstep.map((p) => [p, version]))
 
 /**
  * efforge's own package root: the nearest directory above this module whose package.json is
