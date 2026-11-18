@@ -82,7 +82,7 @@ export const nextSteps = (
   if (!o.installed) steps.push(["pnpm install"])
   if (stack.infra === "alchemy") {
     steps.push(["cp .env.example .env", "local values for Alchemy"])
-    // D1 migrations still need wrangler.jsonc under Alchemy (a known v0.1 gap, docs/limits.md)
+    // D1 migrations still need wrangler.jsonc under Alchemy (a known gap, docs/limits.md)
     if (stack.database === "postgres") {
       steps.push(["docker compose up -d --wait", "local Postgres"])
       steps.push(["pnpm db:migrate"])
@@ -129,8 +129,8 @@ export const create = (opts: CreateOptions) =>
         yield* io.warn(
           `Node ${process.version} isn't supported by the generated project (Vite+ needs Node 24.11+ or 26+).`,
         )
-      if (opts.install && !(yield* has("pnpm", process.cwd()))) return yield* new PnpmMissing()
-      if (git && !(yield* has("git", process.cwd()))) {
+      if (opts.install && !(yield* has("pnpm"))) return yield* new PnpmMissing()
+      if (git && !(yield* has("git"))) {
         yield* io.warn("git isn't installed: skipping git init and the initial commit.")
         git = false
       }
