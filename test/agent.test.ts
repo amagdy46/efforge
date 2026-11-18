@@ -380,11 +380,12 @@ describe("an agent drives efforge without a terminal", { timeout: 120_000 }, () 
       "--auth=none",
       "--no-git",
     ])
-    const dashboard = join(work, "edited", "apps/web/src/routes/app/index.tsx")
+    // the /app layout: base writes it, auth replaces it
+    const dashboard = join(work, "edited", "apps/web/src/routes/app.tsx")
     writeFileSync(dashboard, `${readFileSync(dashboard, "utf8")}// mine\n`)
     const e = failure(["add", "auth/better-auth", "--json", "--cwd", "edited"])
     expect(e.code).toBe("OverlayConflict")
-    expect(e.files).toEqual(["apps/web/src/routes/app/index.tsx"])
+    expect(e.files).toEqual(["apps/web/src/routes/app.tsx"])
     expect(manifest(join(work, "edited")).stack.auth).toBe("none")
     expect(runFix(AddOutput, e.fix).stack.auth).toBe("better-auth")
     expect(readFileSync(dashboard, "utf8")).not.toContain("// mine")

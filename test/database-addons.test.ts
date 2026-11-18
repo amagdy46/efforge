@@ -40,7 +40,9 @@ it("postgres + drizzle: Hyperdrive binding, compose file, drizzle layer", async 
   expect(text(tree, "packages/core/src/Database.ts")).toContain("Context.Service")
   expect(tree.has("packages/db/drizzle.config.ts")).toBe(true)
   expect(text(tree, ".env.example")).toContain("DATABASE_URL=postgres://")
-  expect(text(tree, "apps/web/src/server/runtime.ts")).toContain("Effect.provide(effect, AppLayer)")
+  expect(text(tree, "apps/web/src/server/runtime.ts")).toContain(
+    "Effect.provide(effect, checkSettings(AppLayer))",
+  )
 })
 
 it("registers the database layer in AppLayer, providing the Worker env", async () => {
@@ -82,7 +84,7 @@ it("every combination wires db:migrate at the root and in @repo/db, and lists no
       )
       expect(json(tree, "apps/web/package.json").dependencies["@repo/db"]).toBe("workspace:*")
       expect(text(tree, "apps/web/src/server/notes.ts")).toContain("listNotes")
-      expect(text(tree, "apps/web/src/routes/app/index.tsx")).toContain("listNotes()")
+      expect(text(tree, "apps/web/src/capabilities/registry.ts")).toContain("database")
     }
 })
 

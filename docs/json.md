@@ -100,9 +100,9 @@ npx -y create-efforge create my-app --json --database=d1 --auth=better-auth
     },
     {
       "name": "BETTER_AUTH_URL",
-      "description": "Public origin of the app, used for redirects and trusted origins (a Worker var in production)",
+      "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port).",
       "file": ".dev.vars",
-      "set": true
+      "set": false
     }
   ],
   "nextSteps": [
@@ -170,9 +170,9 @@ npx -y create-efforge create my-app --json --dry-run
     },
     {
       "name": "BETTER_AUTH_URL",
-      "description": "Public origin of the app, used for redirects and trusted origins (a Worker var in production)",
+      "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port).",
       "file": ".dev.vars",
-      "set": true
+      "set": false
     }
   ],
   "nextSteps": [
@@ -971,9 +971,9 @@ npx -y create-efforge create my-app --json
       },
       {
         "name": "BETTER_AUTH_URL",
-        "description": "Public origin of the app, used for redirects and trusted origins (a Worker var in production)",
+        "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port).",
         "file": ".dev.vars",
-        "set": true
+        "set": false
       }
     ],
     "nextSteps": [
@@ -1073,9 +1073,9 @@ npx -y create-efforge create my-app --json
       },
       {
         "name": "BETTER_AUTH_URL",
-        "description": "Public origin of the app, used for redirects and trusted origins (a Worker var in production)",
+        "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port).",
         "file": ".dev.vars",
-        "set": true
+        "set": false
       }
     ],
     "nextSteps": [
@@ -1306,7 +1306,7 @@ npx -y create-efforge add auth/none --json --cwd my-app
 
 Fields: `files`, `diff` (unified diff: yours, then efforge's). `fix`: The command with `--overwrite`. That replaces `files` and loses your changes to them; look at `diff` first, or commit and merge by hand afterwards.
 
-Here, `my-app` has D1 and Effect SQL, no auth, and its dashboard (`apps/web/src/routes/app/index.tsx`) was edited.
+Here, `my-app` has D1 and Effect SQL, no auth, and its `/app` layout (`apps/web/src/routes/app.tsx`), which auth replaces, was edited.
 
 <!-- example: OverlayConflict -->
 
@@ -1321,12 +1321,12 @@ npx -y create-efforge add auth/better-auth --json --cwd my-app
   "ok": false,
   "error": {
     "code": "OverlayConflict",
-    "message": "You've edited apps/web/src/routes/app/index.tsx since it was generated. Nothing was written. Re-run with --overwrite to replace it (your edits are lost), or commit first and merge by hand.",
+    "message": "You've edited apps/web/src/routes/app.tsx since it was generated. Nothing was written. Re-run with --overwrite to replace it (your edits are lost), or commit first and merge by hand.",
     "fix": "npx -y create-efforge add auth/better-auth --json --cwd my-app --overwrite",
     "files": [
-      "apps/web/src/routes/app/index.tsx"
+      "apps/web/src/routes/app.tsx"
     ],
-    "diff": "--- apps/web/src/routes/app/index.tsx (on disk)\n+++ apps/web/src/routes/app/index.tsx (efforge)\n@@ -2,23 +2,27 @@\n import { Card, CardContent, CardDescription, CardHeader, CardTitle } from \"@/components/ui/card\"\n import { widgets } from \"@/components/widgets\"\n import { getGreeting } from \"@/server/greeting\"\n-import { listMy notes } from \"@/server/notes\"\n+import { listNotes } from \"@/server/notes\"\n \n export const Route = createFileRoute(\"/app/\")({\n-  loader: async () => ({ greeting: await getGreeting(), notes: await listMy notes() }),\n+  loader: async () => ({ greeting: await getGreeting(), notes: await listNotes() }),\n   component: Dashboard,\n })\n \n function Dashboard() {\n+  const { session } = Route.useRouteContext()\n   const { greeting, notes } = Route.useLoaderData()\n   return (\n     <div className=\"space-y-6\">\n       <h1 className=\"text-2xl font-semibold\">Dashboard</h1>\n       <Card>\n         <CardHeader>\n-          <CardTitle>{greeting}</CardTitle>\n+          <CardTitle>\n+            {greeting}, {session.name}\n+          </CardTitle>\n           <CardDescription>\n-            This text came from a server function running an Effect on the app runtime.\n+            This text came from a server function running an Effect on the app runtime. You are\n+            signed in as {session.email}.\n           </CardDescription>\n         </CardHeader>\n       </Card>\n"
+    "diff": "--- apps/web/src/routes/app.tsx (on disk)\n+++ apps/web/src/routes/app.tsx (efforge)\n@@ -1,13 +1,22 @@\n-import { createFileRoute, Outlet } from \"@tanstack/react-router\"\n+import { createFileRoute, Outlet, redirect } from \"@tanstack/react-router\"\n import { AppShell } from \"@/components/app-shell\"\n+import { UserMenu } from \"@/components/user-menu\"\n+import { getSession } from \"@/server/session\"\n \n-export const Route = createFileRoute(\"/app\")({ component: AppLayout })\n+export const Route = createFileRoute(\"/app\")({\n+  beforeLoad: async () => {\n+    const session = await getSession()\n+    if (session === null) throw redirect({ to: \"/sign-in\" })\n+    return { session }\n+  },\n+  component: AppLayout,\n+})\n \n function AppLayout() {\n+  const { session } = Route.useRouteContext()\n   return (\n-    <AppShell>\n+    <AppShell account={<UserMenu name={session.name} email={session.email} />}>\n       <Outlet />\n     </AppShell>\n   )\n }\n-// signed-in pages share this layout\n"
   }
 }
 ```

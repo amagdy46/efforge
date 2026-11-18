@@ -25,6 +25,7 @@ export function useRoom(roomId: string) {
     let retry: ReturnType<typeof setTimeout> | undefined
     let ping: ReturnType<typeof setInterval> | undefined
 
+    // #region card
     const connect = () => {
       setStatus("connecting")
       const scheme = location.protocol === "https:" ? "wss" : "ws"
@@ -39,8 +40,8 @@ export function useRoom(roomId: string) {
       })
       ws.addEventListener("message", ({ data }: MessageEvent) => {
         if (typeof data === "string" && data !== PONG) {
-          const id = nextId.current++
-          setMessages((all) => [...all, { id, text: data }].slice(-MAX_KEPT_MESSAGES))
+          const message = { id: nextId.current++, text: data }
+          setMessages((all) => [...all, message].slice(-MAX_KEPT_MESSAGES))
         }
       })
       ws.addEventListener("close", () => {
@@ -49,6 +50,7 @@ export function useRoom(roomId: string) {
         if (!closed) retry = setTimeout(connect, reconnectDelay(attempt++))
       })
     }
+    // #endregion
     connect()
 
     return () => {

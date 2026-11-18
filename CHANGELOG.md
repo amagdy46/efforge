@@ -21,6 +21,15 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - An interrupted `create --json` or `add --json` (Ctrl-C, SIGTERM, a tool's timeout) prints an `Interrupted` document with what was written and the steps that finish it, and exits 130.
 - `list --json` outside a project's root, but inside one or beside one, names it in `nearby`, and the text output says so.
 - `efforge add ai` (or `infra`) means the slot's one add-on.
+- Generated apps open on a landing page that names the project and shows the stack it was created with, read from `efforge.jsonc`, so it stays true after `efforge add`. It links to the dashboard, points to `AGENTS.md`, and gives the `add` command for a capability the project does not have.
+- The dashboard (`/app`) shows one card per capability: a working demo next to the Effect code behind it, read from the files as they are, and the files, test and `AGENTS.md` section to read next. Runtime, database, auth and realtime have cards, and a layer graph shows what `AppLayer` merges.
+- An add-on contributes its card with a `card` entry in `addon.json`; `create` and `add` register it. `docs/capability-cards.md` describes the contract. A card's files and the transforms on them are one unit: in a project made before cards, `add` adds the add-on without any of it and says so in a note.
+- On auth stacks every server function a card calls requires a session, reads included. efforge adds the guard, also to cards that were there before auth was added.
+- A card shows only the marked region of a file: a Vite plugin in the generated app cuts it out at build time, so the rest of the file never reaches the browser, and a file without the region fails the build.
+- A missing setting, from any add-on, shows as a page that names the setting and the file to put it in (`.dev.vars`, or `.env` with Alchemy), and as "not configured" on a card, instead of a raw 500.
+- An add-on file can be `ifAbsent`: written only where the project has no such file. Auth uses it for the app shell and the project name, so adding auth to a renamed app keeps the name.
+- Each capability with a card ships a test that swaps in a test layer and checks a tagged error, replacing the placeholder test. The generated `AGENTS.md` shows the pattern.
+- Generated projects have `engines` in their root `package.json` and an `.nvmrc`.
 
 ### Changed
 
@@ -51,6 +60,12 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - One install command everywhere: `create` and `add` run `pnpm install --no-frozen-lockfile`, and every next step and fix says the same.
 - `list` in a pipe prints only the list, without the intro line.
 - A directory that isn't empty is no longer answered with a renamed project (`my-app-2`): when it holds an efforge project, the error says so and gives the steps that finish or use it; otherwise `fix` is `null`.
+- The generated app uses efforge's palette as its default theme, in light and dark.
+- The page title and headers show the project's name instead of "My app".
+- Server functions behind the cards return tagged errors as data (`runOutcome` in `server/outcome.ts`); a call the server rejects keeps its tag in the browser (`Unauthorized`, `InvalidInput`, `Unreachable`), and only a bug shows as `Defect`.
+- `RealtimeError` has a message.
+- `add --json` reports a skipped card in `notes`.
+- `efforge add realtime` no longer rewrites a 0.2.x project's dashboard to show the widgets: the widgets are gone, and such a project has no card registry, so an add-on comes without its card and a note says so.
 
 ### Fixed
 
@@ -66,6 +81,9 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - After a failed install, the `SetupIncomplete` and `CommandFailed` documents carry what success would have: the files, `env` and `nextSteps`. Running the same `add` again runs the install it still owes instead of reporting nothing to do.
 - Output without a terminal no longer starts with a section header (`◇ Data`) before an error.
 - When `add` leaves the install to you after changing dependencies, its next step is `pnpm install --no-frozen-lockfile`, which works with `CI` set, like the install `add` runs itself.
+- Sign-up no longer fails with `INVALID_ORIGIN` when Vite picks a port other than 5173: under `pnpm dev`, Better Auth takes the origin from each request on a local host while `BETTER_AUTH_URL` is unset. A set `BETTER_AUTH_URL` always wins, and sign-in from a host that is not allowed gets a 403 that says what to set, not a 500.
+- `efforge.jsonc` with a comment no longer breaks the landing page.
+- On Alchemy stacks the landing page no longer says the app is configured in `wrangler.jsonc`.
 
 ## 0.2.1 (2026-11-18)
 

@@ -5,7 +5,8 @@ import type { ChildProcessSpawner } from "effect/process"
 import { type ParseError, parse } from "jsonc-parser"
 import pc from "picocolors"
 import { parseDocument } from "yaml"
-import { type AddonLoadError, addonIdsFor, loadAddons } from "../addon.ts"
+import { type AddonLoadError, type AddonManifest, addonIdsFor, loadAddons } from "../addon.ts"
+import { cardTransforms, presentCardTransforms, REGISTRY_FILE } from "../cards.ts"
 import { type Failure, internal, Invocation, printSuccess, report } from "../contract.ts"
 import { unifiedDiff } from "../diff.ts"
 import { type CommandFailed, exec, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
@@ -120,9 +121,6 @@ export interface AddResult {
   /** Things left for you to do by hand, one line each. */
   readonly notes: string[]
 }
-
-const DASHBOARD = "apps/web/src/routes/app/index.tsx"
-const WIDGETS = "apps/web/src/components/widgets.tsx"
 
 export type AddError =
   | NotAnEfforgeProject
@@ -388,13 +386,30 @@ export const addAddons = (
     const written = new Set<string>()
     const hashes: Record<string, string> = {}
 
+    // a project made before capability cards (or whose dashboard was deleted) has no registry: its
+    // add-ons come without their card, and the card's transforms are skipped with it
+    const hasRegistry = (yield* read(REGISTRY_FILE)) !== undefined
+    const notes: string[] = []
+    const cardsSkipped: string[] = []
+    const cardFiles = (m: AddonManifest) => {
+      const files = (m.card?.files ?? []).filter((f) => switchedOn(m.id, f.when))
+      if (files.length > 0 && !hasRegistry) cardsSkipped.push(m.title)
+      return hasRegistry ? files : []
+    }
+
     // 2. overlays: write if absent, replace if still what efforge generated, else conflict
     const overlays = new Map<string, string>()
     for (const { manifest: m, dir: addonDir } of scope)
-      for (const f of m.files) {
+      for (const f of [...m.files, ...cardFiles(m)]) {
         if (!switchedOn(m.id, f.when)) continue
         // package.json files are merged, not replaced: only a new workspace package's is created
         if (isComputed(f.target) && !(isNewPackageJson(f.target) && !(yield* read(f.target))))
+          continue
+        // a base file the add-on brings only to a project without it (one made before efforge had it)
+        if (
+          f.ifAbsent === true &&
+          (overlays.has(f.target) || (yield* read(f.target)) !== undefined)
+        )
           continue
         overlays.set(
           f.target,
@@ -438,6 +453,10 @@ export const addAddons = (
       if (!isComputed(target)) hashes[target] = hash(content)
       tree.set(target, content)
     }
+    if (cardsSkipped.length > 0)
+      notes.push(
+        `No dashboard card for ${cardsSkipped.join(", ")}: this project has no ${REGISTRY_FILE} (made before efforge 0.3, or its dashboard was removed). The add-on works without it; there is nothing to do.`,
+      )
     if (conflicts.length > 0)
       return yield* new OverlayConflict({
         file: conflicts.map((c) => c.file).join(", "),
@@ -468,9 +487,19 @@ export const addAddons = (
         })
     }
 
-    // 3. transforms, against the current disk content of the seam files
+    // 3. transforms, against the current disk content of the seam files. A card's transforms
+    // apply where its files are: written by this run, or already on disk
+    const present = new Set<string>(tree.keys())
+    for (const { manifest: m } of scope)
+      for (const file of [
+        ...(m.card?.files ?? []).map((f) => f.target),
+        ...cardTransforms(m).flatMap(transformTargets),
+      ])
+        if (!present.has(file) && safe(file) && (yield* read(file)) !== undefined) present.add(file)
     const active = scope.flatMap(({ manifest: m }) =>
-      m.transforms.filter((t) => switchedOn(m.id, t.when)),
+      [...m.transforms, ...presentCardTransforms(m, (file) => present.has(file))].filter((t) =>
+        switchedOn(m.id, t.when),
+      ),
     )
     const wanted = new Set<string>()
     for (const t of active)
@@ -499,26 +528,6 @@ export const addAddons = (
           else out.delete(file)
         }
     }
-    // 3b. dashboards from efforge 0.2.0 with a database or auth don't render the add-on widgets:
-    // replace one that is still what efforge generated, else say what to add
-    const notes: string[] = []
-    if (seams.has(WIDGETS)) {
-      const existing = yield* read(DASHBOARD)
-      if (existing !== undefined && !existing.includes("widgets") && !out.has(DASHBOARD)) {
-        const generated = (yield* generate(stack, addons)).get(DASHBOARD)
-        if (generated?.includes("{widgets}")) {
-          if (opts.overwrite || manifest.files[DASHBOARD] === hash(existing)) {
-            out.set(DASHBOARD, generated)
-            written.add(DASHBOARD)
-            hashes[DASHBOARD] = hash(generated)
-          } else
-            notes.push(
-              `${DASHBOARD} doesn't render the add-on widgets, so their demo won't show on /app. Add \`import { widgets } from "@/components/widgets"\` and put {widgets} in the page.`,
-            )
-        }
-      }
-    }
-
     const transformed = new Set<string>()
     for (const file of seams) {
       // seam files are re-edited by transforms on every add, never hash-checked

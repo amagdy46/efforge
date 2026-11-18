@@ -1,8 +1,16 @@
-import { Context, Data, type Effect } from "effect"
+import { Context, Data, Effect } from "effect"
+import { isMessageTooLarge, MAX_MESSAGE_BYTES } from "./realtime-limits"
 
+/** The room could not be reached; `message` says what failed, `cause` is the underlying error. */
 export class RealtimeError extends Data.TaggedError("RealtimeError")<{
-  readonly operation: string
+  readonly operation: "connect" | "broadcast" | "connections"
+  readonly message: string
   readonly cause: unknown
+}> {}
+
+/** A message is larger than a room accepts (`MAX_MESSAGE_BYTES`). */
+export class MessageTooLarge extends Data.TaggedError("MessageTooLarge")<{
+  readonly message: string
 }> {}
 
 /** Rooms of WebSocket clients. The Cloudflare layer keeps each room in a Durable Object. */
@@ -17,3 +25,20 @@ export class Realtime extends Context.Service<
     readonly connections: (roomId: string) => Effect.Effect<number, RealtimeError>
   }
 >()("@repo/core/Realtime") {}
+
+// #region card
+/** Sends `text` to everyone in the room; returns how many are in it. */
+export const announce = (
+  roomId: string,
+  text: string,
+): Effect.Effect<number, MessageTooLarge | RealtimeError, Realtime> =>
+  Effect.gen(function* () {
+    if (isMessageTooLarge(text))
+      return yield* new MessageTooLarge({
+        message: `Messages are at most ${MAX_MESSAGE_BYTES} bytes.`,
+      })
+    const realtime = yield* Realtime
+    yield* realtime.broadcast(roomId, text)
+    return yield* realtime.connections(roomId)
+  })
+// #endregion

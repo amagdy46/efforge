@@ -41,7 +41,7 @@ it("each extra re-exports its Worker classes from the entry, idempotently regard
   ).toBe(false)
 })
 
-it("registers layers, routes, widgets and core exports", async () => {
+it("registers layers, routes, the realtime card and core exports", async () => {
   const tree = await gen(all)
   const layers = tree.get("apps/web/src/server/layers.ts") as string
   for (const l of ["JobsLive", "RealtimeLive", "BrowserLive", "StorageLive"])
@@ -49,7 +49,7 @@ it("registers layers, routes, widgets and core exports", async () => {
   const routes = tree.get("apps/web/src/server/routes.ts") as string
   expect(routes).toContain("realtimeRoute")
   expect(routes).toContain("storageRoute")
-  expect(tree.get("apps/web/src/components/widgets.tsx")).toContain("<RealtimeDemo")
+  expect(tree.get("apps/web/src/capabilities/registry.ts")).toMatch(/\brealtime\b/)
   const core = tree.get("packages/core/src/index.ts") as string
   for (const m of ["jobs", "realtime", "browser", "storage"])
     expect(core).toContain(`export * from "./${m}"`)

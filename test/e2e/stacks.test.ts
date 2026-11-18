@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
+import { dirname, join, resolve as resolvePath } from "node:path"
 import { NodeFileSystem, NodeServices } from "@effect/platform-node"
 import { describe, it } from "@effect/vitest"
 import { Effect, FileSystem, Path } from "effect"
@@ -110,11 +111,56 @@ const generateStack = (config: StackConfig): Effect.Effect<string, unknown> =>
     return dir
   }).pipe(Effect.provide(NodeFileSystem.layer), Effect.provide(Path.layer))
 
+const filesUnder = (root: string): string[] =>
+  readdirSync(root, { withFileTypes: true, recursive: true })
+    .filter((e) => e.isFile())
+    .map((e) => join(e.parentPath, e.name))
+
+/**
+ * Only the marked region of a file a card shows may reach the browser (apps/web/regions.ts). Every
+ * comment line outside a region of such a file must be missing from the built client assets: a
+ * comment survives there only inside a whole file shipped as a string. Returns how many it checked.
+ */
+const checkRegionsOnly = (dir: string): number => {
+  const web = join(dir, "apps/web")
+  const client = filesUnder(join(web, "dist/client"))
+    .filter((f) => f.endsWith(".js"))
+    .map((f) => readFileSync(f, "utf8"))
+    .join("\n")
+  const shown = new Set<string>()
+  for (const file of filesUnder(join(web, "src")).filter((f) => /\.tsx?$/.test(f)))
+    for (const m of readFileSync(file, "utf8").matchAll(/from "([^"]+)\?region=card"/g))
+      shown.add(resolvePath(dirname(file), m[1] as string))
+  let checked = 0
+  for (const file of shown) {
+    let inside = false
+    for (const line of readFileSync(file, "utf8").split("\n")) {
+      if (/\/\/ #region card/.test(line)) inside = true
+      else if (/\/\/ #endregion/.test(line)) inside = false
+      else if (!inside) {
+        const comment = /^\s*(?:\/\/|\/?\*+)\s*(.{20,})$/
+          .exec(line)?.[1]
+          ?.replace(/\*\/$/, "")
+          .trim()
+        if (comment === undefined || /["'`\\]/.test(comment)) continue
+        if (client.includes(comment))
+          throw new Error(
+            `${file}: "${comment}" is outside its card region but in the client bundle`,
+          )
+        checked++
+      }
+    }
+  }
+  return checked
+}
+
 /** Generates `config` into a tmp dir, installs, then runs the generated project's full gate: typecheck, check, test, build. */
 const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
   Effect.gen(function* () {
     const dir = yield* generateStack(config)
     yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
+    // a minimal stack's card files may have nothing outside their regions; auth and database ones do
+    yield* Effect.try(() => checkRegionsOnly(dir))
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -142,7 +188,6 @@ const browserFlow = (config: StackConfig): Effect.Effect<void, unknown> =>
     const baseURL = `http://localhost:${port}`
     const dev = yield* Effect.try(() => {
       sh(dir, `DATABASE_URL=${databaseUrl} pnpm db:migrate`)
-      sh(dir, `sed -i 's|http://localhost:5173|${baseURL}|' .dev.vars`)
       return spawn(
         "pnpm",
         ["--filter", "web", "exec", "vite", "dev", "--port", port, "--strictPort"],

@@ -7,7 +7,8 @@
     { "path": "files/tsconfig.json", "target": "infra/tsconfig.json" },
     { "path": "files/README.md", "target": "infra/README.md" },
     { "path": "files/github/deploy.yml", "target": ".github/workflows/deploy.yml" },
-    { "path": "files/vite.config.ts", "target": "apps/web/vite.config.ts" }
+    { "path": "files/vite.config.ts", "target": "apps/web/vite.config.ts" },
+    { "path": "../../base/files/web/regions.ts", "target": "apps/web/regions.ts", "ifAbsent": true }
   ],
   "dependencies": {},
   "devDependencies": {

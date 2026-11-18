@@ -8,12 +8,16 @@
       "target": "packages/db/src/index.ts"
     },
     {
-      "path": "files/shared/notes.ts",
-      "target": "apps/web/src/server/notes.ts"
+      "path": "files/core/notes.ts",
+      "target": "packages/core/src/notes.ts"
     },
     {
-      "path": "files/shared/page.tsx",
-      "target": "apps/web/src/routes/app/index.tsx"
+      "path": "files/core/notes.test.ts",
+      "target": "packages/core/test/notes.test.ts"
+    },
+    {
+      "path": "files/shared/db-notes.ts",
+      "target": "packages/db/src/notes.ts"
     },
     {
       "path": "files/pg/layer.ts",
@@ -142,6 +146,19 @@
       }
     }
   ],
+  "card": {
+    "export": "database",
+    "files": [
+      {
+        "path": "files/card/database.tsx",
+        "target": "apps/web/src/capabilities/database.tsx"
+      },
+      {
+        "path": "files/card/notes.ts",
+        "target": "apps/web/src/server/notes.ts"
+      }
+    ]
+  },
   "dependencies": {
     "apps/web": [
       "drizzle-orm"

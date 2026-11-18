@@ -138,11 +138,8 @@ const scenarios: Record<string, Scenario> = {
   OverlayConflict: {
     setup: async (work) => {
       await project("my-app", "--database=d1", "--orm=effect-sql", "--auth=none")(work)
-      const dashboard = join(work, "my-app/apps/web/src/routes/app/index.tsx")
-      writeFileSync(
-        dashboard,
-        readFileSync(dashboard, "utf8").replace("Notes", "My notes").replace("Notes", "My notes"),
-      )
+      const layout = join(work, "my-app/apps/web/src/routes/app.tsx")
+      writeFileSync(layout, `${readFileSync(layout, "utf8")}// signed-in pages share this layout\n`)
     },
   },
   TransformAnchorMissing: {

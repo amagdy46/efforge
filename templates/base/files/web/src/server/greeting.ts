@@ -1,12 +1,15 @@
+import { greet as greetProgram } from "@repo/core/greeting"
 import { createServerFn } from "@tanstack/react-start"
-import { Effect } from "effect"
-import { runtime } from "./runtime"
+import { Schema } from "effect"
+import { runOutcome } from "./outcome"
 
-export const getGreeting = createServerFn({ method: "GET" }).handler(() =>
-  runtime.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.log("greeting requested")
-      return "Hello from Effect"
-    }),
-  ),
-)
+// #region card
+const GreetInput = Schema.Struct({
+  name: Schema.String.check(Schema.isMaxLength(200)),
+})
+
+/** Runs `greet` on the server; `InvalidName` comes back as data. */
+export const greet = createServerFn({ method: "POST" })
+  .validator(Schema.toStandardSchemaV1(GreetInput))
+  .handler(({ data }) => runOutcome(greetProgram(data.name)))
+// #endregion
