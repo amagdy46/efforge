@@ -86,12 +86,25 @@ export const isEffectLockstep = (name: string): boolean =>
   effectLockstep.some((p) => matchesPattern(name, p))
 
 /**
+ * The override key for each lockstep pattern. `effect` is scoped to Effect 4, so a library that
+ * depends on Effect 3 (uploadthing, @prisma/config) keeps its own copy instead of getting Effect 4.
+ */
+export const overrideKey = (pattern: string): string =>
+  pattern === "effect" ? "effect@>=4.0.0-0" : pattern
+
+/**
  * The generated `pnpm-workspace.yaml` overrides that hold every lockstep package at `version`,
  * including ones nothing in the project names directly and that only arrive as another
  * package's dependency or auto-installed peer (drizzle-orm and effect-cf peer on `@effect/sql-*`).
  */
 export const effectOverrides = (version: string): Record<string, string> =>
-  Object.fromEntries(effectLockstep.map((p) => [p, version]))
+  Object.fromEntries(effectLockstep.map((p) => [overrideKey(p), version]))
+
+/** The pnpm generated projects pin in `packageManager` (templates/base/files/root/package.json). */
+export const pnpmVersion = "12.21.0"
+
+/** pnpm accepts wildcard override keys before this version and ignores them (ADR 0005). */
+export const pnpmWildcardOverrides = "12.17.0"
 
 /**
  * efforge's own package root: the nearest directory above this module whose package.json is

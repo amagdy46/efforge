@@ -10,6 +10,7 @@ const ignorePatterns = [
   "spike/**",
   "templates/**",
   "test/fixtures/templates/**",
+  "test/fixtures/v0.2.0/**",
   "pnpm-lock.yaml",
   "docs/**",
   "**/*.md",
