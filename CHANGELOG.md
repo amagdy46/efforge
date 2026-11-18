@@ -8,6 +8,22 @@
 - Generated apps get a placeholder favicon (`apps/web/public/favicon.svg`) and a "made with efforge" badge in their README.
 - `create`, `add` and `list` start with one line: an `ef` cell and the version. It is plain text under `NO_COLOR`, in a pipe and in CI. `--json` prints none of it.
 - `pnpm brand` regenerates every brand asset, the README header and the generated README's badge line from `scripts/brand/source.ts`, and a test fails when any of them is stale.
+- Generated apps open on a landing page that names the project and shows the stack it was created with, read from `efforge.jsonc`, so it stays true after `efforge add`. It links to the dashboard, points to `AGENTS.md`, and gives the `add` command for a capability the project does not have.
+- The dashboard (`/app`) shows one card per capability: a working demo next to the Effect code behind it, read from the files as they are, and the files, test and `AGENTS.md` section to read next. Runtime, database, auth and realtime have cards, and a layer graph shows what `AppLayer` merges.
+- An add-on contributes its card with a `card` entry in `addon.json`; `create` and `add` register it. `docs/capability-cards.md` describes the contract. In a project made before cards, `add` adds the add-on without its card and says so.
+- Each capability with a card ships a test that swaps in a test layer and checks a tagged error, replacing the placeholder test. The generated `AGENTS.md` shows the pattern.
+- Generated projects have `engines` in their root `package.json` and an `.nvmrc`.
+
+### Changed
+
+- The generated app uses efforge's palette as its default theme, in light and dark.
+- The page title and headers show the project's name instead of "My app".
+- Server functions behind the cards return tagged errors as data (`runOutcome` in `server/outcome.ts`), and a missing setting shows as "not configured" on the card instead of an error page.
+
+### Fixed
+
+- Sign-up no longer fails with `INVALID_ORIGIN` when Vite picks a port other than 5173: under `pnpm dev`, Better Auth takes the origin from each request on a local host. `.dev.vars` no longer sets `BETTER_AUTH_URL`.
+- On Alchemy stacks the landing page no longer says the app is configured in `wrangler.jsonc`.
 
 ## 0.2.1 (2026-11-18)
 
