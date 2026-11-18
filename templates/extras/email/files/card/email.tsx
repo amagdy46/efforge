@@ -11,6 +11,14 @@ import serverFn from "../server/email-demo.ts?region=card"
 import layer from "../server/mailer.ts?region=card"
 import type { Capability } from "./types"
 
+// pnpm dev emulates the EMAIL binding: it writes each message to a local file instead
+const devBinding = import.meta.env.DEV
+  ? " In pnpm dev the binding is emulated: the dev server log says where it wrote the message."
+  : ""
+const cloudflareNote = import.meta.env.DEV
+  ? "In pnpm dev the EMAIL binding is emulated, so nothing is delivered; deployed, messages go out through Cloudflare Email Service."
+  : "Messages go out through Cloudflare Email Service, to real inboxes."
+
 /** Send a test email; with the console transport, the card shows what would have gone out. */
 function EmailDemo() {
   const settings = useServerCall(mailSettings)
@@ -52,7 +60,7 @@ function EmailDemo() {
                 Email Sending in <code className="font-mono">{file}</code>.
               </>
             ) : (
-              "Messages go out through Cloudflare Email Service, to real inboxes."
+              cloudflareNote
             )}
           </p>
         ) : null}
@@ -100,7 +108,7 @@ function EmailDemo() {
             <p className="text-xs text-muted-foreground">
               {sending.state.value.transport === "console"
                 ? "Printed to the dev server log by the console transport, through the Mailer service."
-                : "Handed to Cloudflare Email Service by the Mailer service."}
+                : `Handed to the EMAIL binding by the Mailer service.${devBinding}`}
             </p>
           </div>
         ) : null}
