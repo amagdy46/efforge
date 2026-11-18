@@ -1,9 +1,11 @@
+<!-- generated: header (pnpm brand) -->
 <h1 align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/amagdy46/efforge/main/.github/assets/lockup-dark.svg">
     <img src="https://raw.githubusercontent.com/amagdy46/efforge/main/.github/assets/lockup-light.svg" width="300" height="72" alt="efforge logo: a maker's punch with ef struck through it, beside the word efforge">
   </picture>
 </h1>
+<!-- /generated -->
 
 <p align="center">
   Start a Cloudflare app where every server capability is an <a href="https://effect.website">Effect</a> service.<br>

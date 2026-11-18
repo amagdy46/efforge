@@ -3,7 +3,7 @@ import { join } from "node:path"
 import { expect, it } from "vitest"
 import { assets } from "../scripts/brand/assets.ts"
 import { decodePng } from "../scripts/brand/raster.ts"
-import { copy, mark } from "../scripts/brand/source.ts"
+import { copy, mark, repo } from "../scripts/brand/source.ts"
 import { text } from "../scripts/brand/text.ts"
 import { colorLevel, introLine } from "../src/intro.ts"
 
@@ -34,6 +34,18 @@ it("the outlined text matches the copy in source.ts (run pnpm brand:outline)", (
   expect(text.sentence.map((l) => l.text)).toEqual(copy.sentence)
   expect(text.command.text).toBe(copy.command)
   expect(text.badge.text).toBe(copy.badge)
+})
+
+it("every brand URL in the READMEs names a committed file", () => {
+  const prefix = `${repo.raw}/`
+  for (const readme of ["README.md", "templates/base/files/README.md"]) {
+    const urls = read(readme).match(/https:\/\/raw\.githubusercontent\.com\/[^\s")]+/g) ?? []
+    expect(urls.length, readme).toBeGreaterThan(0)
+    for (const url of urls) {
+      expect(url.startsWith(prefix), url).toBe(true)
+      expect(existsSync(join(root, url.slice(prefix.length))), url).toBe(true)
+    }
+  }
 })
 
 it("the mark sits on its 4-unit grid", () => {

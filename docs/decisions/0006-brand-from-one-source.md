@@ -7,7 +7,10 @@ Date: 2026-11-18. Status: accepted.
 efforge's identity (the punch-and-ef mark, the palette, the outlined wordmark) lives in
 `scripts/brand/source.ts`. `pnpm brand` (`node scripts/brand/build.ts`) writes every asset from
 it: the repo's SVGs and PNGs, the generated app's favicon, the "made with efforge" badge,
-`src/brand.ts` for the terminal intro, and the palette table in `docs/brand.md`.
+`src/brand.ts` for the terminal intro, the palette table in `docs/brand.md`, and the asset URLs
+in the README header and the generated app's badge line. The lockup's canvas and the
+ligature's box are measured from the paths, so swapping the mark or the wordmark is an edit to
+`source.ts` and a run of `pnpm brand`.
 `test/brand.test.ts` fails when any of them is stale.
 
 The PNGs are drawn by a small rasterizer and PNG encoder in `scripts/brand/raster.ts`, with no
@@ -29,4 +32,7 @@ dependencies (`opentype.js`, `@fontsource/saira-semi-condensed`, `@fontsource/je
 
 About 850 lines of build code for a handful of images, and three dev dependencies that only
 `pnpm brand:outline` uses. The rasterizer supports only what the brand needs: solid fills,
-the path commands M L H V Q C A Z, nonzero and even-odd rules.
+the path commands M L H V Q C A Z, nonzero and even-odd rules. It throws on path data it
+cannot draw (other commands, arc flags written without separators, a subpath that continues
+after Z without M) rather than draw it wrong, because the staleness test compares the generator
+with itself and would not notice.
