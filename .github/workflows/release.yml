@@ -38,12 +38,30 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      - run: pnpm format --check
       - run: pnpm test
-      # the tarball must install with npm alone, with no lockfile, and run (docs/decisions/0004)
-      - run: pnpm smoke:pack
+      # Pack once. The smoke test and npm publish use this same file, so the bytes that passed
+      # are the bytes that ship. Publishing a tarball skips lifecycle scripts; dist/ is built here.
+      - name: Build and pack
+        id: pack
+        run: |
+          pnpm build
+          mkdir -p "$RUNNER_TEMP/pack"
+          pnpm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/pack"
+          echo "tarball=$(ls "$RUNNER_TEMP"/pack/*.tgz)" >> "$GITHUB_OUTPUT"
+      # the tarball must install with npm alone, with no lockfile, create, build and add (docs/decisions/0004)
+      - name: Smoke-test the tarball
+        env:
+          # so create's initial commit and add's clean-tree check behave as on a user's machine
+          GIT_AUTHOR_NAME: efforge-ci
+          GIT_AUTHOR_EMAIL: efforge-ci@users.noreply.github.com
+          GIT_COMMITTER_NAME: efforge-ci
+          GIT_COMMITTER_EMAIL: efforge-ci@users.noreply.github.com
+        run: pnpm smoke:pack --tarball "${{ steps.pack.outputs.tarball }}" --dir "$RUNNER_TEMP"
       # trusted publishing needs npm 11.5.1+
       - run: npm install -g npm@latest
-      - run: npm publish --access public
+      # trusted publishing and provenance work the same for a tarball as for a directory
+      - run: npm publish "${{ steps.pack.outputs.tarball }}" --access public
       - name: GitHub release from the CHANGELOG
         env:
           GH_TOKEN: ${{ github.token }}

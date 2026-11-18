@@ -87,9 +87,29 @@ jobs:
       # a filter that matches nothing skips everything and still passes
       - run: node scripts/expect-tests-ran.ts "$RUNNER_TEMP/e2e.json" 1
 
-  # Installs the packed tarball the way `npm create efforge` does (npm, its own cache, no
-  # lockfile, outside the repo), creates the default stack, builds it, runs one `add` with the
-  # packed CLI and builds again. Catches what the repo's own lockfile hides.
+  # `efforge add` on a generated pg-drizzle-orgs project (email, then ai/effect-ai-byok), then the
+  # full gate. Not in the stacks matrix, so it gets its own job.
+  e2e-add:
+    name: e2e (add on a real project)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          # scheduled and manual runs fetch every package fresh: a cached store could hide a
+          # version that was unpublished or broken upstream
+          cache: ${{ (github.event_name != 'schedule' && github.event_name != 'workflow_dispatch') && 'pnpm' || '' }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:e2e -t "^add on a real project > " --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/e2e.json"
+      - run: node scripts/expect-tests-ran.ts "$RUNNER_TEMP/e2e.json" 1
+
+  # `pnpm smoke:pack`: checks the packed manifest has no dependencies, installs the tarball with
+  # npm (its own cache, no lockfile, outside the repo), runs it through npm, npx and pnpm dlx,
+  # creates the default stack, builds it, runs one `add` with the packed CLI and builds again.
+  # Catches what the repo's own lockfile hides. release.yml runs it on the tarball it publishes.
   smoke-pack:
     name: packed tarball (create, build, add)
     runs-on: ubuntu-latest
@@ -108,7 +128,7 @@ jobs:
           node-version: 24
       # only to build dist/ for the tarball; the smoke install never sees these node_modules
       - run: pnpm install --frozen-lockfile
-      - run: node scripts/smoke-pack.ts --dir "$RUNNER_TEMP"
+      - run: pnpm smoke:pack --dir "$RUNNER_TEMP"
 
   # The Browser extra ships a container image (apps/browser); make sure it builds.
   # Skipped until the `house` e2e case exists on the branch.

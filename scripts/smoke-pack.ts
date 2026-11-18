@@ -1,50 +1,96 @@
-// `pnpm smoke:pack`: proves the published package works on a machine that has nothing but npm.
-// Packs the tarball, checks its manifest declares no dependencies, installs it with npm into an
-// empty directory (no lockfile), and runs the CLI from there: --version, --help, a --dry-run
-// create, a real create and an `add` that goes through the ts-morph transforms. Also runs the
-// tarball through `npx` and `pnpm dlx`, the way the README tells people to start.
 import { execFileSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { join, resolve } from "node:path"
+import { parseArgs } from "node:util"
 
-const root = join(import.meta.dirname, "..")
-const work = mkdtempSync(join(tmpdir(), "efforge-smoke-"))
-const keep = process.argv.includes("--keep")
+/**
+ * `pnpm smoke:pack`: proves the published package works on a machine that has nothing but npm
+ * and pnpm. The repo's lockfile and node_modules play no part: everything runs outside the repo,
+ * with its own npm cache.
+ *
+ *   pnpm smoke:pack [--tarball create-efforge-x.y.z.tgz] [--dir <work dir>] [--keep]
+ *
+ * Without --tarball it builds dist/ and packs. Then:
+ *   1. the packed package.json declares no dependencies, so nothing is resolved at install time;
+ *   2. `npm install` of the tarball into an empty directory (no lockfile), then --version, --help,
+ *      a --dry-run create, a create with no install and an `add email` (the ts-morph transforms);
+ *   3. the README's entry points with the tarball: `npx --package` and `pnpm dlx`, as dry runs;
+ *   4. what `npm create efforge` does: `npm exec` the tarball, create the default stack with
+ *      install and git, `pnpm build` it, `efforge add email` with the packed bin, build again.
+ */
 
-const run = (cmd: string, args: ReadonlyArray<string>, cwd: string): string => {
-  console.log(`$ ${[cmd, ...args].join(" ")}   (in ${cwd})`)
+const { values } = parseArgs({
+  options: {
+    tarball: { type: "string" },
+    dir: { type: "string" },
+    keep: { type: "boolean", default: false },
+  },
+})
+
+const repo = join(import.meta.dirname, "..")
+const base = resolve(values.dir ?? tmpdir())
+mkdirSync(base, { recursive: true })
+const work = mkdtempSync(join(base, "efforge-smoke-"))
+// its own npm cache, so nothing installed earlier answers for this run
+const env = {
+  ...process.env,
+  npm_config_cache: join(work, "npm-cache"),
+  npm_config_yes: "true",
+  CI: "1",
+}
+
+class StepFailed extends Error {}
+
+/** Runs a command and returns its stdout; prints both streams if it fails. */
+const run = (title: string, cmd: string, args: ReadonlyArray<string>, cwd: string): string => {
+  console.log(`\n=== ${title}\n$ ${[cmd, ...args].join(" ")}  (in ${cwd})`)
   try {
     return execFileSync(cmd, args, {
       cwd,
+      env,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
-      // the generated project must not inherit this repo's pnpm/npm settings
-      env: { ...process.env, npm_config_yes: "true", CI: "1" },
     })
   } catch (e) {
     const err = e as { stdout?: string; stderr?: string }
     console.error(err.stdout ?? "", err.stderr ?? "")
-    throw new Error(`failed: ${[cmd, ...args].join(" ")}`, { cause: e })
+    throw new StepFailed(title)
+  }
+}
+
+/** Runs a long command with its output streamed. */
+const step = (title: string, cmd: string, args: ReadonlyArray<string>, cwd: string) => {
+  console.log(`\n=== ${title}\n$ ${[cmd, ...args].join(" ")}  (in ${cwd})`)
+  try {
+    execFileSync(cmd, args, { cwd, env, stdio: "inherit" })
+  } catch {
+    throw new StepFailed(title)
   }
 }
 
 const check = (ok: boolean, what: string) => {
-  if (!ok) throw new Error(`smoke:pack: ${what}`)
+  if (!ok) throw new StepFailed(what)
   console.log(`  ok: ${what}`)
 }
 
+let ok = false
 try {
-  // 1. build, then pack (the build's log would otherwise land in pack's JSON output)
-  run("pnpm", ["build"], root)
-  const packed = JSON.parse(
-    run("pnpm", ["pack", "--ignore-scripts", "--pack-destination", work, "--json"], root),
-  ) as { filename: string }
-  const tarball = packed.filename.startsWith("/") ? packed.filename : join(work, packed.filename)
+  // 1. the tarball: given, or built and packed (the build's log would otherwise land in pack's output)
+  let tarball = values.tarball === undefined ? undefined : resolve(values.tarball)
+  if (tarball === undefined) {
+    const packs = join(work, "pack")
+    mkdirSync(packs)
+    step("build", "pnpm", ["build"], repo)
+    step("pack", "pnpm", ["pack", "--ignore-scripts", "--pack-destination", packs], repo)
+    const file = readdirSync(packs).find((f) => f.endsWith(".tgz"))
+    if (file === undefined) throw new Error(`pnpm pack wrote no .tgz into ${packs}`)
+    tarball = join(packs, file)
+  }
+  console.log(`tarball: ${tarball}`)
 
-  // 2. the packed manifest resolves nothing at install time
   const manifest = JSON.parse(
-    run("tar", ["-xOf", tarball, "package/package.json"], work),
+    run("read the packed manifest", "tar", ["-xOf", tarball, "package/package.json"], work),
   ) as Record<string, unknown>
   for (const field of [
     "dependencies",
@@ -57,51 +103,84 @@ try {
       manifest[field] === undefined || Object.keys(manifest[field] as object).length === 0,
       `packed package.json has no ${field}`,
     )
+  const version = String(manifest.version)
 
-  // 3. npm install into an empty directory, no lockfile
-  const app = join(work, "consumer")
-  mkdirSync(app)
-  writeFileSync(join(app, "package.json"), '{ "name": "consumer", "private": true }\n')
-  run("npm", ["install", "--no-package-lock", "--no-audit", "--no-fund", tarball], app)
-  const bin = join(app, "node_modules", ".bin", "create-efforge")
-  const version = run(bin, ["--version"], app).trim()
-  check(version.includes(String(manifest.version)), `--version prints ${String(manifest.version)}`)
-  check(run(bin, ["--help"], app).includes("create-efforge"), "--help prints usage")
+  // 2. npm install into an empty directory, no lockfile
+  const consumer = join(work, "consumer")
+  mkdirSync(consumer)
+  writeFileSync(join(consumer, "package.json"), '{ "name": "consumer", "private": true }\n')
+  step(
+    "npm install the tarball",
+    "npm",
+    ["install", "--no-package-lock", "--no-audit", "--no-fund", tarball],
+    consumer,
+  )
+  const bin = join(consumer, "node_modules", ".bin", "create-efforge")
   check(
-    run(bin, ["dry", "--yes", "--dry-run"], app).includes("dry run: nothing written"),
+    run("--version", bin, ["--version"], consumer).includes(version),
+    `--version prints ${version}`,
+  )
+  check(run("--help", bin, ["--help"], consumer).includes("create-efforge"), "--help prints usage")
+  check(
+    run("dry run", bin, ["dry", "--yes", "--dry-run"], consumer).includes(
+      "dry run: nothing written",
+    ),
     "a --dry-run create works",
   )
-
-  // 4. a real create (no install: this checks the CLI, not the stack) and an add that runs the
-  // AST transforms (ts-morph) from the bundle
-  run(bin, ["my-app", "--yes", "--no-install", "--no-git"], app)
-  const project = join(app, "my-app")
+  run("create, no install", bin, ["my-app", "--yes", "--no-install", "--no-git"], consumer)
+  const project = join(consumer, "my-app")
   const layersFile = join(project, "apps/web/src/server/layers.ts")
   check(!readFileSync(layersFile, "utf8").includes("MailerLive"), "fresh project has no mailer")
-  run(bin, ["add", "email", "--no-install"], project)
+  run("add email, no install", bin, ["add", "email", "--no-install"], project)
   check(readFileSync(layersFile, "utf8").includes("MailerLive"), "add email wired MailerLive")
   check(
     readFileSync(join(project, "packages/core/src/index.ts"), "utf8").includes("./mailer"),
     "add email exported the mailer",
   )
 
-  // 5. the README's entry points, straight from the tarball
-  const npx = join(work, "npx")
-  mkdirSync(npx)
+  // 3. the README's entry points, straight from the tarball
+  const entry = join(work, "entry")
+  mkdirSync(entry)
   check(
     run(
+      "npx --package",
       "npx",
       ["--yes", "--package", tarball, "create-efforge", "x", "--yes", "--dry-run"],
-      npx,
+      entry,
     ).includes("dry run"),
     "npx --package <tarball> create-efforge --dry-run works",
   )
   check(
-    run("pnpm", ["dlx", tarball, "x", "--yes", "--dry-run"], npx).includes("dry run"),
+    run("pnpm dlx", "pnpm", ["dlx", tarball, "x", "--yes", "--dry-run"], entry).includes("dry run"),
     "pnpm dlx <tarball> --dry-run works",
   )
-  console.log("\nsmoke:pack passed")
+
+  // 4. what `npm create efforge` does, through a real install and build
+  const cli = (name: string, ...args: string[]) => [
+    "exec",
+    "--yes",
+    `--package=${tarball}`,
+    "--",
+    name,
+    ...args,
+  ]
+  step("create the default stack", "npm", cli("create-efforge", "smoke-app", "--yes"), work)
+  const app = join(work, "smoke-app")
+  step("build the new project", "pnpm", ["build"], app)
+  step("add an add-on with the packed CLI", "npm", cli("efforge", "add", "email"), app)
+  check(
+    readFileSync(join(app, "apps/web/src/server/layers.ts"), "utf8").includes("MailerLive"),
+    "add email wired MailerLive in the installed project",
+  )
+  step("build after add", "pnpm", ["build"], app)
+
+  ok = true
+  console.log(`\nsmoke:pack passed (create-efforge ${version})`)
+} catch (e) {
+  if (!(e instanceof StepFailed)) throw e
+  console.error(`\nsmoke:pack failed at "${e.message}". Work dir: ${work}`)
+  process.exitCode = 1
 } finally {
-  if (keep) console.log(`kept ${work}`)
-  else rmSync(work, { recursive: true, force: true })
+  if (ok && !values.keep) rmSync(work, { recursive: true, force: true })
+  else if (ok) console.log(`kept ${work}`)
 }
