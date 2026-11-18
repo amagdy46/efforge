@@ -31,6 +31,7 @@ import { type StackConfig, toCommand } from "../stack.ts"
 import { WRANGLER_FILE } from "../transforms/addWranglerBinding.ts"
 import {
   runTransform,
+  unguardedServerFns,
   transformTargets,
   type TransformAnchorMissing,
   type UnknownTransform,
@@ -527,6 +528,18 @@ export const addAddons = (
           if (content !== disk.get(file)) out.set(file, content)
           else out.delete(file)
         }
+    }
+    // a server function the guard could not reach (its `.middleware(...)` is not a written-out
+    // list) is named, with the fix; the project's own lint rule fails on it until then
+    for (const t of active) {
+      if (t.name !== "addServerFnMiddleware" || t.args.file === undefined) continue
+      const text = current.get(t.args.file)
+      if (text === undefined) continue
+      const middleware = t.args.middleware ?? "requireSession"
+      for (const fn of unguardedServerFns(t.args.file, text, middleware))
+        notes.push(
+          `${fn} in ${t.args.file} is not guarded: its .middleware(...) is not a list efforge can add to. Put ${middleware} first in it, as .middleware([${middleware}, ...]), and import it from "${t.args.from ?? "./require-session"}". Until then it answers signed-out requests, and pnpm check fails (efforge/server-fn-session).`,
+        )
     }
     const transformed = new Set<string>()
     for (const file of seams) {

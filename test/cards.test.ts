@@ -156,6 +156,34 @@ const d1 = (auth: string, extras: string[] = []) =>
     extras,
   } as never)
 
+it("auth added later adds the guard to an existing middleware list, and names one it cannot edit", async () => {
+  const notes = "apps/web/src/server/notes.ts"
+  const { dir, result } = await addLater(d1("none"), ["auth/better-auth"], (d) => {
+    const file = join(d, notes)
+    writeFileSync(
+      file,
+      readFileSync(file, "utf8")
+        .replace(
+          'createServerFn({ method: "GET" }).handler(',
+          'createServerFn({ method: "GET" }).middleware([timing]).handler(',
+        )
+        .replace(
+          'createServerFn({ method: "POST" })\n',
+          'createServerFn({ method: "POST" })\n  .middleware(shared)\n',
+        ),
+    )
+  })
+  const text = readFileSync(join(dir, notes), "utf8")
+  // a list efforge can edit gets requireSession first; nothing passes silently
+  expect(text).toContain(".middleware([requireSession, timing])")
+  expect(text).toContain(".middleware(shared)")
+  expect(result.notes).toEqual([
+    expect.stringMatching(
+      /^addNote in apps\/web\/src\/server\/notes\.ts is not guarded: .*\.middleware\(\[requireSession, \.\.\.\]\).*pnpm check fails/,
+    ),
+  ])
+})
+
 it("auth added after the cards guards their server functions too", async () => {
   const { dir, result } = await addLater(d1("none", ["realtime"]), ["auth/better-auth"])
   const addons = await run(loadAddons(templates))
