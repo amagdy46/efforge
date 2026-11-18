@@ -678,7 +678,7 @@ npx -y create-efforge upgrade --check --json --cwd my-app
   "steps": [
     {
       "id": "patch",
-      "description": "Make every change below except installing and the files you edited in one go: a patch of 2 files, which git apply refuses if any of them changed since. Or do the steps by hand.",
+      "description": "Steps 2–4 at once, leaving files you edited alone: a patch of 2 files (git apply refuses it if one changed since). Or do them by hand.",
       "command": "npx -y create-efforge upgrade --check --patch | git apply",
       "cwd": "/home/me/projects/my-app"
     },

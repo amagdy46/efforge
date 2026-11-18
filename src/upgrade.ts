@@ -637,7 +637,7 @@ export const checkUpgrade = (
     if (changes.size > 0)
       steps.push({
         id: "patch",
-        description: `Make every change below except installing and the files you edited in one go: a patch of ${changes.size === 1 ? "1 file" : `${changes.size} files`}, which git apply refuses if any of them changed since. Or do the steps by hand.`,
+        description: `The next steps at once, leaving files you edited alone: a patch of ${changes.size === 1 ? "1 file" : `${changes.size} files`} (git apply refuses it if one changed since). Or do them by hand.`,
         command: `${BIN} upgrade --check --patch | git apply`,
         cwd: dir,
       })
@@ -689,25 +689,25 @@ export const checkUpgrade = (
     if (refresh.length > 0)
       steps.push({
         id: "refresh",
-        description: `Replace ${refresh.length === 1 ? "1 file" : `${refresh.length} files`} with efforge's current version. You haven't changed ${refresh.length === 1 ? "it" : "them"} since efforge wrote ${refresh.length === 1 ? "it" : "them"}, so nothing of yours is lost; --diff shows each change.`,
+        description: `Replace ${refresh.length === 1 ? "1 file" : `${refresh.length} files`} you haven't changed with efforge's current version; --diff shows each change.`,
         files: refresh.map((f) => f.path),
       })
     if (added.length > 0)
       steps.push({
         id: "new",
-        description: `Add ${added.length === 1 ? "1 file" : `${added.length} files`} efforge generates today for this stack (the refreshed files may import them); --diff --verbose shows them.`,
+        description: `Add ${added.length === 1 ? "1 file" : `${added.length} files`} efforge generates today for this stack; the refreshed files may import them.`,
         files: added.map((f) => f.path),
       })
     if (rehashed.length > 0)
       steps.push({
         id: "manifest",
-        description: `Record the new files' hashes in efforge.jsonc, so a later efforge add knows they are still efforge's (the patch does this; by hand, skip it and add treats them as yours).`,
+        description: `Record their hashes in efforge.jsonc, so a later efforge add knows they are efforge's (by hand, skip it: add then treats them as yours).`,
         file: "efforge.jsonc",
       })
     for (const file of new Set(scripts.map((x) => x.file)))
       steps.push({
         id: "scripts",
-        description: `${file}: these scripts differ from what efforge generates today, and efforge can't tell whether you changed them or its template did. If they are still efforge's, set them; the refreshed files may need the new ones.`,
+        description: `${file}: these scripts differ from efforge's today, and it can't tell whose change that is. If they are still efforge's, set them; the refreshed files may need them.`,
         file,
         lines: scripts
           .filter((x) => x.file === file)
@@ -725,13 +725,33 @@ export const checkUpgrade = (
     if (review.length > 0)
       steps.push({
         id: "review",
-        description: `Look at ${review.length === 1 ? "1 file" : `${review.length} files`} that differ from efforge's template where efforge can't tell whose change it is: you edited ${review.length === 1 ? "it" : "them"}, or efforge's template changed, or both. efforge keeps only a hash of what it wrote (and none for files it edits in place), so it shows today's template against your file, not a merge. Take what you want from the diff; to take efforge's version of one file whole: ${BIN} upgrade --check --diff | git apply --include=<file>`,
+        description: `Look at ${review.length === 1 ? "1 file" : `${review.length} files`} that differ from efforge's template where it can't tell whose change it is (efforge keeps a hash of what it wrote, not the content, and none for files it edits in place). Take what you want from the diff; to take efforge's version of a file whole, pipe it to git apply --include=<file>.`,
         command: `${BIN} upgrade --check --diff`,
         cwd: dir,
         files: review.map((f) => f.path),
       }) // drifted exactly when the patch has something in it: a file you edited, deleted or keep
     // differently from the template never counts, so there is always a way back to exit code 0
     const drifted = changes.size > 0 || guards.some((g) => !g.ok)
+    // name the steps the patch makes, now that they are numbered
+    const patched = new Set([
+      "effect-overrides",
+      "package-manager",
+      "pins",
+      "seam",
+      "refresh",
+      "new",
+      "manifest",
+    ])
+    const at = steps.findIndex((x) => x.id === "patch")
+    const last = steps.findLastIndex((x) => patched.has(x.id))
+    if (at >= 0 && last > at)
+      steps[at] = {
+        ...(steps[at] as UpgradeStep),
+        description: (steps[at] as UpgradeStep).description.replace(
+          "The next steps",
+          last === at + 1 ? `Step ${at + 2}` : `Steps ${at + 2}–${last + 1}`,
+        ),
+      }
     if (steps.length > 0)
       steps.push({
         id: "gate",

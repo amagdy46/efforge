@@ -119,7 +119,7 @@ export const renderUpgrade = (r: UpgradeReport, verbose: boolean, diff: boolean)
   )
   if (shown.length > 0 || count("new") > 0 || verbose) {
     out.push("", `${pc.bold("Generated files")} ${pc.dim(`(${fileLine})`)}`)
-    const cut = verbose ? shown : shown.slice(0, 8)
+    const cut = verbose ? shown : shown.slice(0, 5)
     for (const f of cut) out.push(`  ${f.status.padEnd(7)}  ${f.path}`)
     if (cut.length < shown.length)
       out.push(pc.dim(`  … ${shown.length - cut.length} more (--verbose)`))
@@ -156,11 +156,12 @@ export const renderUpgrade = (r: UpgradeReport, verbose: boolean, diff: boolean)
         out.push(`     ${pc.dim(verbose ? s.files.join(", ") : some(s.files, 4))}`)
       if (s.lines !== undefined) {
         const lines = s.lines.trimEnd().split("\n")
-        const cut = verbose || lines.length <= 12 ? lines : lines.slice(0, 10)
-        out.push(...cut.map((l) => `       ${pc.dim(l)}`))
-        if (cut.length < lines.length)
+        if (verbose || lines.length <= 3) out.push(...lines.map((l) => `       ${pc.dim(l)}`))
+        else
           out.push(
-            pc.dim(`       … ${lines.length - cut.length} more lines (--verbose, or --json)`),
+            pc.dim(
+              `       ${lines.length} lines in ${s.file ?? "the file"} (--verbose prints them)`,
+            ),
           )
       }
     })
