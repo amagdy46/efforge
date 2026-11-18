@@ -27,11 +27,25 @@ the CLI; the CLI itself is already the interface.
 - Errors are `{ code, message, fix, ...details }`. `code` comes from a list in
   `src/contract.ts` (`errorCodes`) that efforge owns, not from library error
   tags, so upgrading Effect can't rename one. `fix` is the caller's own
-  command with the smallest change that gets past the error (the closest
-  flag, a free directory name, `--cwd` pointed at the nearby project, the ids
-  `add` needs with it), or `null` when no command fixes it. A fix only picks
-  a value when there is one obvious candidate; otherwise it points at `list`.
-  The text output gets the same fix as a `Try:` line.
+  command with the smallest change that gets past the error (a corrected
+  flag, `--cwd` pointed at the nearby project, the ids `add` needs with it,
+  the setup steps a stopped create still owes), or `null`. The text output
+  gets the same fix as a `Try:` line.
+- `fix` is a promise: it does what the caller was trying to do, or it is
+  `null` and the error carries the facts to decide with (`allowed`, `addons`,
+  `commands`, paths). It never substitutes a different capability, never
+  creates something the caller didn't ask for (no renamed project, no words
+  joined into a name), and never needs a prompt (it starts with
+  `npx -y create-efforge`, and a create gets `--yes`).
+- One typo rule decides when a value counts as meant (`isTypo` in
+  `src/contract.ts`): options of one or two characters only match exactly;
+  otherwise one edit (a swap of neighbours counts as one) for options up to
+  six characters, two for longer ones; and exactly one option may match.
+  `postgress` is `postgres`; `mysql`, `d2`, `r2` and `stripe` are nothing.
+- An interrupted `create --json` still prints one document (`Interrupted`,
+  exit 130) with what was written and the steps that finish it. A failed
+  install's document carries what success would have (`env`, `nextSteps`),
+  and `add` remembers an install it owes until one succeeds.
 - Success documents carry what the next step needs without parsing prose: the
   project directory, the stack, the files, the env vars with where their local
   value lives, and the next commands, each with the directory to run it in.
@@ -46,9 +60,11 @@ the CLI; the CLI itself is already the interface.
 - Discovery is one file: `skills/efforge/SKILL.md` (installable with
   `npx skills add amagdy46/efforge`), plus `llms.txt` and a README section.
   The commands they teach are run by `test/doc-commands.test.ts`.
-- A first argument one deletion or one swap away from `create`, `add` or
-  `list` is refused with `UnknownCommand`. `create <name>` still allows any
-  valid name.
+- The root form takes exactly one word, checked before anything else
+  parses: a reserved word (`help`, `version`, and `upgrade`, `doctor`,
+  `info`, `graph` for commands to come), a typo of a command, more than one
+  word, or one word with a flag only `add` or `list` take is
+  `UnknownCommand`. `create <name>` still allows any valid name.
 
 ## Consequences
 
@@ -61,7 +77,10 @@ the CLI; the CLI itself is already the interface.
   contract 1; changes from here are versioned.
 - Every new error needs a code in `errorCodes`, a section and an example in
   `docs/json.md`; the docs test fails until it has both.
-- A `fix` is a suggestion, not a promise of intent: `OverlayConflict`'s fix
-  adds `--overwrite`, which discards the user's edits. The docs and the skill
-  say to show the diff first.
-- Projects named `lst`, `ad` or `craete` need `create` spelled out.
+- `OverlayConflict`'s fix does what was asked, and also discards the user's
+  edits to the files it lists. The docs and the skill say to show the diff
+  first.
+- Projects named `lst`, `ad`, `help` or `graph` need `create` spelled out,
+  and a new command must be added to the reserved words before it ships.
+- Fewer errors have a fix (`--database=mysql`, `add stripe`, a taken
+  directory). An agent then has to choose, which is the point.

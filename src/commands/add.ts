@@ -958,7 +958,9 @@ export const addConfig = {
     Flag.withDefault(false),
   ),
   json: Flag.Boolean("json").pipe(
-    Flag.withDescription("Print one JSON document on stdout, nothing else (docs/json.md)"),
+    Flag.withDescription(
+      "Print one JSON document on stdout, nothing else (https://github.com/amagdy46/efforge/blob/main/docs/json.md)",
+    ),
     Flag.withDefault(false),
   ),
   cwd: Flag.String("cwd").pipe(

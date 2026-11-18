@@ -5,6 +5,7 @@ import { NodeServices } from "@effect/platform-node"
 import { Effect, Layer } from "effect"
 import { expect, it, vi } from "vitest"
 import { runWith } from "../src/cli.ts"
+import { errorCodes } from "../src/contract.ts"
 import { scriptedPromptIO } from "../src/prompts/navigable.ts"
 import { recordingSpawner } from "./recordingSpawner.ts"
 
@@ -75,4 +76,22 @@ it.each(Object.keys(sources))("every command in %s runs", { timeout: 120_000 }, 
     process.exitCode = undefined
     rmSync(work, { recursive: true, force: true })
   }
+})
+
+it("the skill's error table names every error code, and only real ones", () => {
+  const skill = readFileSync(join(root, "skills/efforge/SKILL.md"), "utf8")
+  const start = skill.indexOf("## Errors")
+  const table = skill.slice(start, skill.indexOf("\n## ", start + 1))
+  const named = new Set(
+    [...table.matchAll(/^\| (.+?) \|/gm)].flatMap((m) =>
+      [...(m[1] as string).matchAll(/`(\w+)`/g)].map((c) => c[1] as string),
+    ),
+  )
+  named.delete("code")
+  expect([...named].toSorted()).toEqual(
+    Object.keys(errorCodes)
+      // never returned under --json, which the skill always uses
+      .filter((c) => c !== "NeedsInput")
+      .toSorted(),
+  )
 })

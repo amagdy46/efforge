@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-Coding agents can drive efforge from start to finish: every choice has a flag, nothing waits for a terminal, and `--json` is a documented contract in which every error says what to run instead.
+Coding agents can drive efforge from start to finish: every choice has a flag, nothing waits for a terminal, and `--json` is a documented contract in which every error says what to run instead. The contract ships in 0.3.0; the skill, `llms.txt` and the README section say so, and tell an agent how to spot an older CLI.
 
 ### Added
 
@@ -10,24 +10,51 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - Generated apps get a placeholder favicon (`apps/web/public/favicon.svg`) and a "made with efforge" badge in their README.
 - `create`, `add` and `list` start with one line: an `ef` cell and the version. It is plain text under `NO_COLOR`, in a pipe and in CI. `--json` prints none of it.
 - `pnpm brand` regenerates every brand asset, the README header and the generated README's badge line from `scripts/brand/source.ts`, and a test fails when any of them is stale.
-- `--json` is a versioned contract ([docs/json.md](docs/json.md)). `create`, `add` and `list` print one JSON document on stdout, on success and on failure, carrying `efforge` (the CLI version), `contract` (1) and `ok`. Success documents include the project directory, the stack, the files, the env vars with where their local values go, and the next commands with the directory to run each in. Errors have a stable `code`, a `message` and a `fix`: the command to run instead.
+- `--json` is a versioned contract ([docs/json.md](docs/json.md)). `create`, `add` and `list` print one JSON document on stdout, on success and on failure, carrying `efforge` (the CLI version), `contract` (1) and `ok`. Success documents include the project directory, the stack, the files, the env vars with where their local values go, and the next commands with the directory to run each in. Errors have a stable `code`, a `message` and a `fix`: a command that does what was asked, or `null` with the values to choose from. A `fix` never picks a different capability, never creates a project you didn't ask for, and never prompts.
 - Errors without `--json` end with `Try: <command>` when a command fixes them.
 - JSON Schemas for `efforge.jsonc` and the `--json` documents ship in the package under `schemas/`. New projects' `efforge.jsonc` points at its schema with `$schema`.
 - An agent skill, `skills/efforge/SKILL.md` (`npx skills add amagdy46/efforge`), an `llms.txt`, and a "For coding agents" section in the README.
 - The generated `AGENTS.md` says to add capabilities with `npx -y create-efforge@latest add <id> --json`.
 - `--completions` covers both bin names, `create-efforge` and `efforge`.
+- `--version --json` prints the contract envelope, `{ efforge, contract, ok }`.
+- An interrupted `create --json` (Ctrl-C, SIGTERM, a tool's timeout) prints an `Interrupted` document with what was written and the steps that finish it, and exits 130.
 - `efforge add ai` (or `infra`) means the slot's one add-on.
 
 ### Changed
 
-- The `--json` output changed shape (see [ADR 0007](docs/decisions/0007-json-contract.md)): `list --json` is an object with `addons`, `add --json` reports `created` and `changed`, `nextSteps` entries are objects, and some error codes were renamed or split (`UnrecognizedOption` is now `UnknownFlag`).
+- The `--json` output changed shape (see [ADR 0007](docs/decisions/0007-json-contract.md)). Against 0.2.1:
+
+  | Was (0.2.1) | Now (0.3.0) |
+  |---|---|
+  | `create`: `{ stack, command, files }` | adds `efforge`, `contract`, `ok`, `dryRun`, `directory`, `installed`, `git`, `env`, `nextSteps`, `warnings`; `command` is `npx -y create-efforge create <name> --yes ...` |
+  | `list`: a bare array | an object: `{ efforge, contract, ok, project, directory?, stack?, addons }` |
+  | `add`: `written` | removed: `created` (new files) and `changed` (existing files) |
+  | `add`: `transformed` | removed: in `changed` |
+  | `add`: `envVars` (`name`, `description`) | `env` (`name`, `description`, `file`, `set`) |
+  | `add`: `nextSteps` as strings | `nextSteps` as `{ command, cwd, note?, longRunning? }`; also new: `directory`, `installed`, `warnings` |
+  | error: `{ error: { code, message } }` | `{ efforge, contract, ok: false, error: { code, message, fix, ... } }` |
+  | `UnrecognizedOption` | `UnknownFlag` |
+  | `InvalidValue` | `InvalidFlagValue` |
+  | `MissingArgument` (`add` with no ids) | `NoAddonIds` |
+  | `IncompatibleStack` for a value that isn't an option | `UnknownValue` |
+  | `IncompatibleStack` when `add` would swap a choice | `SlotAlreadySet` |
+  | `UnknownAddon` for `<slot>/none` | `RemoveNotSupported` |
+  | `GenerateError`, `AddonLoadError`, `UnknownTransform` | `InternalError` |
+  | none | new: `UnknownCommand`, `Interrupted` |
+
+  A script reading `envVars` or `written` gets `undefined` with no error, so check `contract`: documents from 0.3.0 on have it. From here, a rename or removal bumps `contract`; new fields and codes don't, and `schemas/error.schema.json` leaves `code` open.
 - `efforge add` with no ids prints a short error listing the add-ons the project can still add, not the help.
 - `CI` set to any value other than `0` or `false` counts as no terminal: a needed prompt fails at once and names the flag.
-- Hints and errors say `npx create-efforge`, never `efforge` alone, so every printed command works when copied.
+- Hints, errors and `command` say `npx -y create-efforge`, never `efforge` alone or `npm create efforge`, so every printed command works when copied and npx doesn't ask before downloading. `efforge.jsonc`'s `command` uses the same form.
+- One install command everywhere: `create` and `add` run `pnpm install --no-frozen-lockfile`, and every next step and fix says the same.
+- `list` in a pipe prints only the list, without the intro line.
+- A directory that isn't empty is no longer answered with a renamed project (`my-app-2`): when it holds an efforge project, the error says so and gives the steps that finish or use it; otherwise `fix` is `null`.
 
 ### Fixed
 
-- `npx create-efforge lst` no longer creates a project called "lst". A first argument one typo away from `list`, `add` or `create` is refused, with the corrected command.
+- `npx create-efforge lst` no longer creates a project called "lst", and following the fixes for `ad email --cwd my-app` no longer ends in a project called `ad-email-my-app`. The root form takes exactly one name: a typo of a command, a reserved word (`help`, `version`, `upgrade`, `doctor`, `info`, `graph`), more words, or a flag only `add` and `list` take is refused with `UnknownCommand`, before anything else parses, with the corrected command or no fix. `create my app` is no longer turned into `my-app`.
+- A `fix` no longer swaps in a different capability: `add r2` used to suggest `database/d1`, `add stripe` `extras/storage`, and `--database=mysql` `--database=postgres`. Only a clear typo is corrected (one edit for options up to six characters, two above, never for one- or two-character options like `d1`); otherwise `fix` is `null` and the error lists `allowed` or `addons`. An unknown flag that isn't a typo is no longer dropped silently.
+- After a failed install, the `SetupIncomplete` and `CommandFailed` documents carry what success would have: the files, `env` and `nextSteps`. Running the same `add` again runs the install it still owes instead of reporting nothing to do.
 - Output without a terminal no longer starts with a section header (`◇ Data`) before an error.
 - When `add` leaves the install to you after changing dependencies, its next step is `pnpm install --no-frozen-lockfile`, which works with `CI` set, like the install `add` runs itself.
 

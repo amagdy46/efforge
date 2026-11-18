@@ -2,7 +2,7 @@
 name: efforge
 description: Create a full-stack Effect app on Cloudflare Workers (TanStack Start, D1 or Postgres, Better Auth, email, storage, AI) with the efforge CLI, or add one of those capabilities to an existing efforge project. Use when asked to start a new Effect or Cloudflare Workers web app, or when a project has an efforge.jsonc file and needs a database, auth, email, storage, AI, realtime, workflows or browser rendering.
 license: MIT
-compatibility: Needs Node 24.11+ or 26+, pnpm, git, and network access to the npm registry.
+compatibility: Needs create-efforge 0.3.0 or later, Node 24.11+ or 26+, pnpm, git, and network access to the npm registry.
 ---
 
 # efforge
@@ -11,10 +11,13 @@ efforge creates a TypeScript monorepo: a TanStack Start app on Cloudflare Worker
 
 Don't use it for Next.js, for a runtime other than Cloudflare, or for code without Effect.
 
+This skill needs create-efforge 0.3.0 or later: the first version with the `--json` contract it describes.
+
 ## Rules
 
 - Always pass `--json`. stdout is then exactly one JSON document, success or failure, and nothing prompts.
-- Check `ok`. When it is `false`, read `error.code` and `error.message`, then run `error.fix` if it is not `null`. `fix` is your own command with the smallest change that works.
+- Check the version first: `npx -y create-efforge@latest --version --json` prints `{"efforge": "...", "contract": 1, "ok": true}`. If it prints a line of text instead, or any document has no `contract` field, the CLI is older than 0.3.0 and this skill doesn't apply: tell the user, and don't guess at its output. If `contract` is greater than 1, read the contract below again before you rely on a field.
+- Check `ok`. When it is `false`, read `error.code` and `error.message`. `error.fix` is either a command that does what you were trying to do, or `null`; it never picks a different capability or creates something you didn't ask for. Run it when it isn't `null`, with the same `npx -y create-efforge@latest` prefix you used (a `fix` starts with `npx -y create-efforge`).
 - Run `npx -y create-efforge@latest ...`, not `npm create efforge` (npm adds lines to stdout).
 - The full contract, with every field and error code: https://raw.githubusercontent.com/amagdy46/efforge/main/docs/json.md
 
@@ -24,20 +27,20 @@ Don't use it for Next.js, for a runtime other than Cloudflare, or for code witho
 npx -y create-efforge@latest create my-app --json --database=d1 --auth=better-auth
 ```
 
-It writes `./my-app`, runs `pnpm install`, formats, and makes the first git commit. It takes about a minute, most of it the install.
+It writes `./my-app`, runs `pnpm install`, formats, and makes the first git commit. It takes a minute or two, most of it the install; allow it at least five minutes before a timeout. If it is stopped anyway, it still prints one document (`Interrupted`) with the steps that finish the job. If stdout is empty (killed outright), run the same command again: it answers `TargetNotEmpty` with the steps that finish the project it started.
 
 | Flag | Values | Default |
 |---|---|---|
 | `--database` | `postgres` (via Hyperdrive), `d1`, `none` | `postgres` |
 | `--orm` | `drizzle`, `effect-sql`, `none` | `drizzle` |
-| `--auth` | `better-auth-orgs`, `better-auth`, `none` | `better-auth-orgs` |
+| `--auth` | `better-auth-orgs` (users plus organizations, members and invitations), `better-auth` (users and sessions only), `none` | `better-auth-orgs` |
 | `--infra` | `none` (`wrangler.jsonc`), `alchemy` | `none` |
 | `--ai` | `none`, `effect-ai-byok` | `none` |
 | `--extras` | comma-separated: `workflows`, `realtime`, `browser`, `storage`, `email` | none |
 
 Rules: `orm` is `none` exactly when `database` is `none`, and `auth` needs a database. A flag you leave out takes its default. Postgres needs Docker for local development; D1 doesn't, so prefer `--database=d1` unless the user asked for Postgres.
 
-Other flags: `--dry-run` (write nothing, list the files), `--no-install`, `--no-git`. The name is a directory under the current one; it must be a valid npm package name and the directory must not exist or be empty.
+Other flags: `--dry-run` (write nothing, list the files), `--no-install`, `--no-git`. The name is one word, a directory under the current one; it must be a valid npm package name and the directory must not exist or be empty. Always write `create` before it: a first word that looks like a command (`help`, `lst`) is refused.
 
 To preview without writing:
 
@@ -50,7 +53,8 @@ npx -y create-efforge@latest create my-app --json --dry-run --database=d1 --auth
 - `directory`: the project, absolute.
 - `nextSteps`: commands still to run, in order, each with its `cwd`. Run them. A step with `longRunning: true` is the dev server (`pnpm dev`): start it in the background or leave it to the user.
 - `env`: env vars the project reads. `set: false` means efforge wrote no local value: read `description` to see whether it has a default or must be filled in (in `file`, usually `.dev.vars`).
-- `warnings`: things that didn't stop the run but you should tell the user (git commit skipped, unsupported Node).
+- `command`: a command that creates the same stack again without prompts.
+- `warnings`: things that didn't stop the run but the user should know (git commit skipped, unsupported Node, an install a previous run left undone). Read them and tell the user.
 
 ## Add a capability
 
@@ -60,7 +64,7 @@ See what the project can add:
 npx -y create-efforge@latest list --json --cwd my-app
 ```
 
-Each entry of `addons` has the `id` to pass and `installed`. Then:
+Each entry of `addons` has the `id` to pass and `installed`. `add` takes the full id (`extras/email`) or the part after the slash when it names one add-on (`email`). Then:
 
 ```sh
 npx -y create-efforge@latest add email --json --cwd my-app
@@ -68,26 +72,32 @@ npx -y create-efforge@latest add email --json --cwd my-app
 
 Ids: `email`, `storage`, `realtime`, `workflows`, `browser`, `ai`, `infra/alchemy`, `database/d1`, `database/postgres`, `orm/drizzle`, `orm/effect-sql`, `auth/better-auth`, `auth/better-auth-orgs`. Several at once is fine: `add email storage`. On a project without a database, add the database, an ORM and auth in one command: `add database/d1 orm/effect-sql auth/better-auth`.
 
-The result lists `created`, `changed` and `removed` files, the new `env` vars, and `nextSteps` (often `pnpm install` or `pnpm db:migrate`). `add` writes nothing unless every step succeeds. Commit before you run it, so `git diff` shows only its changes.
+The result lists `created`, `changed` and `removed` files, the new `env` vars, and `nextSteps` (often `pnpm install --no-frozen-lockfile` or `pnpm db:migrate`). Run the `nextSteps`. `notes` is work `add` left for you, one line each (for example, a line to add to a dashboard the user edited): do each one, or tell the user why you didn't. Read `warnings` and pass them on to the user. `add` writes nothing unless every step succeeds. Commit before you run it, so `git diff` shows only its changes.
 
 ## Errors
 
 | `code` | What to do |
 |---|---|
-| `UnknownFlag`, `InvalidFlagValue`, `UnexpectedArgument`, `UnknownCommand`, `UnknownValue`, `InvalidProjectName` | Run `fix`. |
+| `UnknownFlag`, `InvalidFlagValue`, `UnexpectedArgument`, `InvalidProjectName` | Run `fix` when it isn't `null`. When it is, the message says what's wrong; correct the command yourself. |
+| `UnknownCommand` | The first word isn't a command. Run `fix` (the corrected command) when it isn't `null`; otherwise use one of `commands`. To name a project like a command, write `create <name>`. |
+| `UnknownValue` | Run `fix` when it isn't `null` (a clear typo, corrected). Otherwise choose from `allowed`; if what the user wants isn't there, efforge doesn't offer it: tell them. |
 | `IncompatibleStack` | Run `fix`. For `add`, it adds the ids in `needs` to the same command. |
-| `TargetNotEmpty` | The directory exists. Run `fix` (a free name), or ask the user. Never delete the directory yourself. |
+| `TargetNotEmpty` | The directory exists. With `project: true` it holds an efforge project: run `fix` when it isn't `null` (it finishes the setup), then `nextSteps`. With `project: false`, ask the user for another name. Never delete the directory yourself. |
+| `Interrupted` | The run was stopped (exit code 130). Run `fix` when it isn't `null`, then the rest of `nextSteps`. |
 | `NotAnEfforgeProject` | Run `fix` when it isn't null (it points `--cwd` at the project). Otherwise the directory isn't an efforge project. |
-| `NoAddonIds`, `UnknownAddon` | Pick an id from `available` or `suggestions`, or run `fix` (the one suggestion, or `list`). |
+| `NoAddonIds` | Pick an id from `available`, or run `fix` (it lists them). |
+| `UnknownAddon` | Run `fix` when it isn't `null` (a clear typo, or the one id a fragment names). Otherwise pick from `suggestions`, or run `list --json` for the ids the project can add; if what the user wants isn't there, efforge doesn't offer it: tell them. |
 | `SlotAlreadySet` | The project already has another choice for that slot, and swapping isn't supported. Tell the user; a different choice needs a new project. |
 | `RemoveNotSupported` | Removing an add-on isn't supported. Tell the user. |
 | `OverlayConflict` | `add` would replace files the user edited (`files`, `diff`). Nothing was written. Show the diff and ask before running `fix`, which adds `--overwrite` and discards those edits. |
 | `TransformAnchorMissing` | Nothing was written. Apply `snippet` to `file` by hand, then run the same command again. |
 | `PnpmMissing` | Install pnpm (`npm install --global pnpm`) and run the command again, or ask the user. |
-| `SetupIncomplete`, `CommandFailed` | The files are written; a command failed (`output` says why, often the network). Run `fix` to finish. |
+| `SetupIncomplete`, `CommandFailed` | The files are written; a command failed (`output` says why, often the network). Run `fix`, then the rest of `nextSteps`; the error also carries `env`. Running the same `add` again also finishes the install it owes. |
 | `WriteFailed`, `InternalError` | Stop and tell the user, with `message`. |
 
-Exit codes: `0` success, `1` error, `130` cancelled.
+A code not in this table is newer than this skill: treat it as a failure, run `fix` if it isn't `null`, and otherwise tell the user `message`.
+
+Exit codes: `0` success, `1` error, `130` stopped (with `--json`, `create` still prints its `Interrupted` document).
 
 ## Verify
 
