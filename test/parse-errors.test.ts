@@ -42,20 +42,20 @@ it.each([
   [
     ["zz", "--yes", "--databse=d1", "--json"],
     "--database",
-    "npx create-efforge --help",
-    "npx create-efforge zz --yes --database=d1 --json",
+    "npx -y create-efforge --help",
+    "npx -y create-efforge zz --yes --database=d1 --json",
   ],
   [
     ["add", "email", "--jsn", "--json"],
     "--json",
-    "npx create-efforge add --help",
-    "npx create-efforge add email --json",
+    "npx -y create-efforge add --help",
+    "npx -y create-efforge add email --json",
   ],
   [
     ["list", "--jsonn", "--json"],
     "--json",
-    "npx create-efforge list --help",
-    "npx create-efforge list --json",
+    "npx -y create-efforge list --help",
+    "npx -y create-efforge list --json",
   ],
 ])("--json: %j prints one JSON error naming the closest flag", async (args, flag, help, fix) => {
   await cli(args)
@@ -82,7 +82,7 @@ it.each([
   const err = stripVTControlCharacters(stderr.join("\n"))
   expect(err).toContain(message)
   expect(err).toContain("--help to see every flag")
-  expect(err).toContain("Try: npx create-efforge ")
+  expect(err).toContain("Try: npx -y create-efforge ")
   expect(err).not.toContain("USAGE")
   expect(err.split("\n").length).toBeLessThanOrEqual(3)
 })
@@ -93,7 +93,7 @@ it("--json: an invalid value for a global flag is one JSON error too, not a log 
   expect(stderr).toEqual([])
   const out = JSON.parse(stdout.join("\n"))
   expect(out.error.code).toBe("InvalidFlagValue")
-  expect(out.error.fix).toBe("npx create-efforge zz --yes --dry-run --json")
+  expect(out.error.fix).toBe("npx -y create-efforge zz --yes --dry-run --json")
   expect(out.error.message).toContain("--log-level")
 })
 

@@ -1,11 +1,12 @@
-import { readdirSync } from "node:fs"
-import { basename, relative, resolve } from "node:path"
+import { execFileSync } from "node:child_process"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
+import { join, relative } from "node:path"
 import { Context, Effect, Option, Path, Schema } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
+import { parse as parseJsonc } from "jsonc-parser"
 import pc from "picocolors"
 import { addonIdsFor, type LoadedAddon, loadAddons } from "../addon.ts"
 import {
-  closest,
   commandLine,
   dropFlag,
   type Failure,
@@ -18,8 +19,9 @@ import {
   replaceAt,
   report,
   setFlag,
+  typoOf,
 } from "../contract.ts"
-import { exec, has } from "../exec.ts"
+import { exec, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
 import { generate, matches } from "../generate.ts"
 import { askStack, DEFAULT_NAME, type StackFlags } from "../prompts/flow.ts"
 import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
@@ -27,7 +29,7 @@ import { projectDirName } from "../projectName.ts"
 import { introLine } from "../intro.ts"
 import { generateRouteTree } from "../routeTree.ts"
 import { slots } from "../slots.ts"
-import { type StackConfig, toCommand } from "../stack.ts"
+import { StackConfig, toCommand } from "../stack.ts"
 import { templatesDir as packageTemplatesDir } from "../versions.ts"
 import { TargetNotEmpty, writeTree } from "../write.ts"
 
@@ -82,7 +84,31 @@ export class SetupIncomplete extends Schema.TaggedError<SetupIncomplete>()("Setu
   command: Schema.String,
   output: Schema.String,
   remaining: Schema.Array(Schema.String),
+  /** What a success would have reported: directory, stack, files, env, nextSteps. */
+  partial: Schema.Unknown,
 }) {}
+
+/** What a create left behind when it stopped early, as the documents report it. */
+export const leftBehind = (o: {
+  readonly dir: string
+  readonly stack: StackConfig
+  readonly command: string
+  readonly files: ReadonlyArray<string>
+  readonly env: ReadonlyArray<EnvVar>
+  readonly remaining: ReadonlyArray<string>
+  readonly installRequested: boolean
+}) => ({
+  directory: o.dir,
+  stack: o.stack,
+  command: o.command,
+  files: o.files,
+  env: o.env,
+  // the setup still owed, then what a finished create would have said
+  nextSteps: [
+    ...o.remaining.map((command) => ({ command })),
+    ...planSteps(o.stack, { installed: o.installRequested }),
+  ].map((s) => Object.assign({}, s, { cwd: o.dir })),
+})
 
 /** Node versions Vite+ supports; mirrors `engines` in package.json. */
 const nodeSupported = (version: string): boolean => {
@@ -101,7 +127,7 @@ export interface Step {
 /** What to run after `create`, for this stack, inside the project directory. */
 export const planSteps = (stack: StackConfig, o: { readonly installed: boolean }): Step[] => {
   const steps: Step[] = []
-  if (!o.installed) steps.push({ command: "pnpm install" })
+  if (!o.installed) steps.push({ command: INSTALL })
   if (stack.infra === "alchemy") {
     steps.push({ command: "cp .env.example .env", note: "local values for Alchemy" })
     // D1 migrations still need wrangler.jsonc under Alchemy (a known gap, docs/limits.md)
@@ -236,13 +262,18 @@ export const create = (opts: CreateOptions) =>
     const dirName = projectDirName(stack.name)
     const dir = targetFor(stack.name)
     // Fail before generating (and before the confirm prompt) rather than after the user answered everything.
-    if (!opts.dryRun && isOccupied(dir)) return yield* new TargetNotEmpty({ dir })
+    if (!opts.dryRun && isOccupied(dir)) {
+      const project = existingProject(dir)
+      return yield* new TargetNotEmpty(project === undefined ? { dir } : { dir, project })
+    }
     const addons = yield* loadAddons(templatesDir)
     const tree = yield* generate(stack, addons)
     const files = [...tree.keys()].toSorted()
     const env = envFor(stack, addons, tree)
 
-    const shownCommand = inPlace ? command.replace(` ${stack.name} --`, " . --") : command
+    const shownCommand = inPlace
+      ? command.replace(` create ${stack.name} --yes`, " create . --yes")
+      : command
     if (opts.dryRun) {
       if (isOccupied(dir))
         yield* io.warn(
@@ -312,11 +343,11 @@ export const create = (opts: CreateOptions) =>
           )
         : false
       if (gitReady) gitState = "initialized"
-      if (opts.install) remaining.push("pnpm install", "pnpm format")
-      if (gitReady) remaining.push("git add -A && git commit -m 'Initial commit'")
+      if (opts.install) remaining.push(INSTALL, FORMAT)
+      if (gitReady) remaining.push(COMMIT)
       if (opts.install) {
         yield* io.task("Installing dependencies (pnpm install)", (log) =>
-          exec("pnpm", ["install"], dir, log),
+          exec("pnpm", [...INSTALL_ARGS], dir, log),
         )
         remaining.shift()
         // routeTree.gen.ts isn't committed to templates: write it now, so typecheck and format see it.
@@ -359,6 +390,16 @@ export const create = (opts: CreateOptions) =>
         remaining.length = 0
       }
     })
+    const partial = () =>
+      leftBehind({
+        dir,
+        stack,
+        command,
+        files,
+        env,
+        remaining,
+        installRequested: opts.install,
+      })
     yield* setup.pipe(
       Effect.catchTag("CommandFailed", (e) =>
         Effect.fail(
@@ -367,17 +408,20 @@ export const create = (opts: CreateOptions) =>
             command: e.command,
             output: e.output,
             remaining: [...remaining],
+            partial: partial(),
           }),
         ),
       ),
       Effect.onInterrupt(() =>
-        io.warn(
-          !written
-            ? `Stopped while writing files. Delete ${inPlace ? "what was written here" : `./${dirName}`} and run the same command again.`
-            : remaining.length === 0
-              ? `Stopped. ./${dirName} is set up; only the last step was skipped.`
-              : `Stopped. ./${dirName} is only partly set up: delete it, or finish with:\n  ${remaining.join("\n  ")}`,
-        ),
+        opts.json
+          ? interrupted({ written, dir, remaining, partial: partial() })
+          : io.warn(
+              !written
+                ? `Stopped while writing files. Delete ${inPlace ? "what was written here" : `./${dirName}`} and run the same command again.`
+                : remaining.length === 0
+                  ? `Stopped. ./${dirName} is set up; only the last step was skipped.`
+                  : `Stopped. ./${dirName} is only partly set up: delete it, or finish with:\n  ${remaining.join("\n  ")}`,
+            ),
       ),
     )
 
@@ -401,6 +445,75 @@ export const create = (opts: CreateOptions) =>
       `${pc.green("Done.")} ${pc.dim("Add more later:")} npx create-efforge list\n   ${pc.dim("Same stack again:")} ${command}`,
     )
   })
+
+/**
+ * Under --json, an interrupted create (Ctrl-C, SIGTERM, a tool's timeout) still prints its one
+ * document: what was written and the steps that finish the job. The exit code stays 130.
+ */
+const interrupted = (o: {
+  readonly written: boolean
+  readonly dir: string
+  readonly remaining: ReadonlyArray<string>
+  readonly partial: ReturnType<typeof leftBehind>
+}) =>
+  Effect.gen(function* () {
+    const rel = relative(process.cwd(), o.dir) || "."
+    const failure: Failure = !o.written
+      ? {
+          code: "Interrupted",
+          message: `Stopped while writing files. Delete ${rel} and run the same command again.`,
+          fix: null,
+          details: { directory: o.dir, written: false, remaining: [] },
+        }
+      : {
+          code: "Interrupted",
+          message:
+            o.remaining.length === 0
+              ? `Stopped after the setup; ${rel} is ready.`
+              : `Stopped. ${rel} is only partly set up; to finish, run there: ${o.remaining.join(", then ")}`,
+          fix: o.remaining.length === 0 ? null : inDir(relative(process.cwd(), o.dir), o.remaining),
+          details: { written: true, remaining: o.remaining, ...o.partial },
+        }
+    yield* report(true, failure)
+    yield* Effect.sync(() => {
+      process.exitCode = 130
+    })
+  })
+
+/** The steps that finish a create, as `create` runs them. */
+const FORMAT = "pnpm format"
+const COMMIT = "git add -A && git commit -m 'Initial commit'"
+
+/**
+ * `dir` holds an efforge project (an earlier, maybe interrupted, create): its stack, and which
+ * setup steps never ran. Undefined when there is no readable efforge.jsonc.
+ */
+export const existingProject = (
+  dir: string,
+): { stack: StackConfig; remaining: string[] } | undefined => {
+  let text: string
+  try {
+    text = readFileSync(join(dir, "efforge.jsonc"), "utf8")
+  } catch {
+    return undefined
+  }
+  const stack = Schema.decodeUnknownOption(StackConfig)(
+    (parseJsonc(text) as { stack?: unknown } | undefined)?.stack,
+  )
+  if (Option.isNone(stack)) return undefined
+  const installed = existsSync(join(dir, "node_modules", ".modules.yaml"))
+  let uncommitted = false
+  if (existsSync(join(dir, ".git")))
+    try {
+      execFileSync("git", ["rev-parse", "--verify", "-q", "HEAD"], { cwd: dir, stdio: "ignore" })
+    } catch {
+      uncommitted = true
+    }
+  return {
+    stack: stack.value,
+    remaining: [...(installed ? [] : [INSTALL, FORMAT]), ...(uncommitted ? [COMMIT] : [])],
+  }
+}
 
 /** Exists and has something in it besides `.git` and OS clutter. */
 export const isOccupied = (dir: string): boolean => {
@@ -534,14 +647,6 @@ export const slugName = (raw: string): string => {
     : slug.slice(0, 214)
 }
 
-/** `name-2`, `name-3`, ...: the first one whose directory is free. */
-const freeName = (name: string): string => {
-  for (let n = 2; ; n++) {
-    const candidate = `${name}-${n}`
-    if (!isOccupied(resolve(projectDirName(candidate)))) return candidate
-  }
-}
-
 /** The value of `slot` that fixes a conflict: the slot default when allowed, else the first allowed. */
 const fixValue = (slot: string, allowed: ReadonlyArray<string>): string | undefined => {
   const def = slots.find((s) => s.id === slot)?.default
@@ -562,16 +667,20 @@ export const createFailure = (
       const allowed = e.allowed as string[]
       const def = slots.find((x) => x.id === slot)
       const known = def?.options.some((o) => o.id === value) ?? false
+      // an unknown value gets a fix only when it is a clear typo of one allowed value (the typo
+      // rule in contract.ts); never a different choice. A known value that conflicts is replaced
+      // by the slot default or dropped from extras, as before.
+      const near = known ? undefined : typoOf(value, allowed)
       let fix: string | null = null
       if (slot === "extras") {
-        // one item of a comma-separated list: swap in the closest option, or drop it
-        const near = known ? undefined : closest(value, allowed)
-        const list = (flags.extras ?? []).flatMap((x) =>
-          x === value ? (near === undefined ? [] : [near]) : [x],
-        )
-        fix = run(setFlag(args, "extras", [...new Set(list)].join(",")))
+        if (known || near !== undefined) {
+          const list = (flags.extras ?? []).flatMap((x) =>
+            x === value ? (near === undefined ? [] : [near]) : [x],
+          )
+          fix = run(setFlag(args, "extras", [...new Set(list)].join(",")))
+        }
       } else {
-        const to = (known ? undefined : closest(value, allowed)) ?? fixValue(slot, allowed)
+        const to = known ? fixValue(slot, allowed) : near
         if (to !== undefined) fix = run(setFlag(args, slot, to))
       }
       return known
@@ -588,7 +697,7 @@ export const createFailure = (
           }
         : {
             code: "UnknownValue",
-            message: `Unknown --${slot}=${value}. Options: ${allowed.join(", ")}.`,
+            message: `Unknown --${slot}=${value}. Options: ${allowed.join(", ")}.${fix === null ? " It isn't a clear typo of any of them, so there is no fix; efforge offers nothing else here." : ""}`,
             fix,
             details: { flag: `--${slot}`, value, allowed },
           }
@@ -603,18 +712,35 @@ export const createFailure = (
       }
     }
     case "TargetNotEmpty": {
+      // never a renamed project: a retry after a timeout would leave two
       const dir = String(e.dir)
-      const taken =
-        nameIndex(args) === undefined
-          ? DEFAULT_NAME
-          : flags.name === "."
-            ? basename(dir)
-            : (flags.name ?? DEFAULT_NAME)
+      const project = e.project as { stack: StackConfig; remaining: string[] } | undefined
+      if (project === undefined)
+        return {
+          code: "TargetNotEmpty",
+          message: `${dir} already exists and isn't empty. Pick another name or remove it.`,
+          fix: null,
+          details: { directory: dir, project: false },
+        }
+      const rest = project.remaining
+      const steps = [
+        ...rest.map((command) => ({ command })),
+        ...planSteps(project.stack, { installed: true }),
+      ].map((x) => Object.assign({}, x, { cwd: dir }))
       return {
         code: "TargetNotEmpty",
-        message: `${dir} already exists and isn't empty. Pick another name or remove it.`,
-        fix: run(withName(args, freeName(slugName(taken)))),
-        details: { directory: dir },
+        message:
+          rest.length > 0
+            ? `${dir} already holds an efforge project (${project.stack.name}) whose setup didn't finish. To finish it, run there: ${rest.join(", then ")}. Or pick another name.`
+            : `${dir} already holds an efforge project (${project.stack.name}). Use it (see nextSteps), or pick another name.`,
+        fix: rest.length > 0 ? inDir(relative(process.cwd(), dir), rest) : null,
+        details: {
+          directory: dir,
+          project: true,
+          stack: project.stack,
+          remaining: rest,
+          nextSteps: steps,
+        },
       }
     }
     case "NeedsInput": {
@@ -643,7 +769,12 @@ export const createFailure = (
         code: "SetupIncomplete",
         message: `\`${String(e.command)}\` failed. The files are in ${dir}${rest.length > 0 ? `; to finish, run there: ${rest.join(", then ")}` : "."}`,
         fix: rest.length > 0 ? inDir(relative(process.cwd(), dir), rest) : null,
-        details: { directory: dir, failed: String(e.command), remaining: rest, output },
+        details: {
+          failed: String(e.command),
+          remaining: rest,
+          output,
+          ...(e.partial as object),
+        },
         more: output,
       }
     }

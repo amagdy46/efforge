@@ -83,7 +83,7 @@ it("--json reports errors as JSON on stdout", async () => {
     code: "UnknownValue",
     flag: "--database",
     value: "nope",
-    fix: "npx create-efforge app --json --dry-run --database=none",
+    fix: "npx -y create-efforge app --json --dry-run --database=none",
   })
   expect(process.exitCode).toBe(1)
 })

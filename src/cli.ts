@@ -6,11 +6,14 @@ import {
   dropAt,
   dropFlag,
   type ErrorCode,
+  type Failure,
   Invocation,
   positionals,
+  printSuccess,
   replaceAt,
   report,
   setFlag,
+  typoOf,
 } from "./contract.ts"
 import { addCommand } from "./commands/add.ts"
 import { createCommand, createConfig, createHandler } from "./commands/create.ts"
@@ -100,35 +103,32 @@ const parseFix = (args: ReadonlyArray<string>, e: CliError.NonShowHelpErrors): s
       const value = token.includes("=") ? token.slice(token.indexOf("=") + 1) : undefined
       // `--name=foo`: the name is positional
       if (e.option === "--name" && value !== undefined) return [value, ...dropAt(args, i)]
-      const [suggestion] = e.suggestions
-      // no close flag, or the close flag is already there (`--jsn --json`): drop the typo
-      if (
-        suggestion === undefined ||
-        args.some((t, j) => j !== i && (t === suggestion || t.startsWith(`${suggestion}=`)))
+      const typed = e.option.replace(/^-+/, "")
+      const near = typoOf(
+        typed,
+        e.suggestions.map((x) => x.replace(/^-+/, "")),
       )
+      // a clear typo (the rule in contract.ts) is corrected; any other unknown flag asked for
+      // something efforge doesn't have, and dropping it would do something else: no fix
+      if (near === undefined) return null
+      // a typo of a flag that is already there (`--jsn --json`): drop it
+      if (args.some((t, j) => j !== i && (t === `--${near}` || t.startsWith(`--${near}=`))))
         return dropAt(args, i)
-      return replaceAt(args, i, value === undefined ? suggestion : `${suggestion}=${value}`)
+      return replaceAt(args, i, value === undefined ? `--${near}` : `--${near}=${value}`)
     }
     case "InvalidValue": {
       if (e.kind !== "flag") return null
-      if (slotIds.has(e.option)) {
-        const def = slots.find((s) => s.id === e.option)?.default
-        return setFlag(args, e.option, typeof def === "string" ? def : "")
-      }
+      // a stack flag with no value: which value is the caller's choice (`allowed` lists them)
+      if (slotIds.has(e.option)) return null
       if (booleanFlags.has(e.option)) return setFlag(args, e.option)
+      // `--log-level=nope`: the rest of the command is unchanged without it
       return dropFlag(args, e.option)
     }
     case "UnexpectedArgument": {
-      // `create my app`: the words were meant as one name
-      const pos = positionals(args)
-      const words = pos[0]?.[1] === "create" ? pos.slice(1) : pos
-      const [name] = words
-      if (name !== undefined && !commands.includes(name[1])) {
-        const rest = new Set(words.slice(1).map(([i]) => i))
-        return args.flatMap((t, i) =>
-          i === name[0] ? [words.map(([, w]) => w).join("-")] : rest.has(i) ? [] : [t],
-        )
-      }
+      // `create my app`: a project name is one word, and which one is the caller's choice
+      const [first] = positionals(args)
+      if (first === undefined || first[1] === "create") return null
+      // `list foo`: list takes no arguments, so dropping them runs the same list
       let out = [...args]
       for (const extra of e.arguments) {
         const at = out.lastIndexOf(extra)
@@ -162,39 +162,78 @@ const reportParseError = (args: ReadonlyArray<string>, error: CliError.ShowHelp)
       first?._tag === "UnrecognizedOption"
         ? { flag: first.option, suggestions: first.suggestions }
         : first?._tag === "InvalidValue"
-          ? { flag: `--${first.option}`, value: first.value, expected: first.expected }
+          ? {
+              flag: `--${first.option}`,
+              value: first.value,
+              expected: first.expected,
+              ...(slotIds.has(first.option)
+                ? { allowed: slots.find((x) => x.id === first.option)?.options.map((o) => o.id) }
+                : {}),
+            }
           : first?._tag === "UnexpectedArgument"
             ? { arguments: first.arguments }
             : {},
   })
 }
 
-// --- Mistyped commands -------------------------------------------------------------
-// The root command takes a project name, so `create-efforge lst --json` would create a project
-// called "lst". A first argument one deletion or one swap away from a command is refused instead.
+// --- Commands or a project name ------------------------------------------------------
+// The root command is `create` with the project name first, so anything that isn't a command is
+// a name. That made `lst --json`, `ad email --cwd app` and `help` create projects. So the root
+// form takes exactly one word, and it must not look like a command: a reserved word, or a typo
+// of one (the rule in contract.ts), is refused. `create <name>` always creates.
 
-const nearMiss = (typed: string, command: string): boolean => {
-  if (typed === command || typed.length < 2) return false
-  // one character dropped
-  if (typed.length === command.length - 1)
-    for (let i = 0; i < command.length; i++)
-      if (command.slice(0, i) + command.slice(i + 1) === typed) return true
-  // two neighbours swapped
-  if (typed.length === command.length)
-    for (let i = 0; i < command.length - 1; i++)
-      if (
-        command.slice(0, i) + (command[i + 1] ?? "") + (command[i] ?? "") + command.slice(i + 2) ===
-        typed
-      )
-        return true
-  return false
+/** Words that are, or will be, commands. Only `commands` exist today. */
+const reserved = [...commands, "help", "version", "upgrade", "doctor", "info", "graph"]
+
+/** Flags only `add` or `list` take: with them, the root form was never meant as a create. */
+const notCreateFlags = new Set(["cwd", "overwrite"])
+
+const flagNames = (args: ReadonlyArray<string>): string[] => {
+  const end = args.indexOf("--")
+  return (end === -1 ? args : args.slice(0, end))
+    .filter((t) => t.startsWith("--"))
+    .map((t) => t.slice(2).split("=")[0] as string)
 }
 
-const mistypedCommand = (args: ReadonlyArray<string>) => {
-  const [first] = positionals(args)
-  if (first === undefined) return undefined
-  const command = commands.find((c) => nearMiss(first[1], c))
-  return command === undefined ? undefined : { at: first[0], typed: first[1], command }
+/** Why the root form's arguments aren't a create, as the contract reports it; or undefined. */
+export const notACreate = (args: ReadonlyArray<string>): Failure | undefined => {
+  const pos = positionals(args)
+  const [first] = pos
+  if (first === undefined || commands.includes(first[1])) return undefined
+  const typed = first[1]
+  const exact = reserved.includes(typed) ? typed : undefined
+  const near = exact ?? typoOf(typed, reserved)
+  const list = `The commands are ${commands.join(", ")}.`
+  if (near !== undefined) {
+    const real = commands.includes(near)
+    const same = near === typed
+    return {
+      code: "UnknownCommand",
+      message: `${same ? `${typed} isn't a command.` : `Unknown command ${typed}.${real ? ` Did you mean ${near}?` : ""}`}${near === "help" ? ` For help, run ${BIN} --help.` : near === "version" ? ` For the version, run ${BIN} --version.` : ""} ${list} To name a project ${typed}, run ${BIN} create ${typed}.`,
+      fix: real ? commandLine(replaceAt(args, first[0], near)) : null,
+      details: {
+        command: typed,
+        ...(real ? { suggestion: near } : {}),
+        commands,
+      },
+    }
+  }
+  if (pos.length > 1)
+    return {
+      code: "UnknownCommand",
+      message: `${typed} isn't a command, and a project name is one word. ${list} To create a project, run ${BIN} create <name>.`,
+      fix: null,
+      details: { command: typed, arguments: pos.slice(1).map(([, w]) => w), commands },
+    }
+  const other = flagNames(args).find((f) => notCreateFlags.has(f))
+  if (other !== undefined)
+    return {
+      code: "UnknownCommand",
+      message: `--${other} belongs to add and list, so ${typed} isn't a project name here, and it isn't a command. ${list}`,
+      fix: null,
+      details: { command: typed, flag: `--${other}`, commands },
+    }
+  return undefined
 }
 
 // --- Completions -------------------------------------------------------------------
@@ -233,6 +272,13 @@ export const runWith = (args: ReadonlyArray<string>) =>
     const shell = completionShell(args)
     if (shell === "bash" || shell === "zsh" || shell === "fish" || shell === "powershell")
       return yield* Console.log(completionScript(shell))
+    // `--version --json`: the envelope alone says which CLI and contract this is
+    if (wantsJson(args) && args.includes("--version") && positionals(args).length === 0)
+      return yield* printSuccess({})
+    // before parsing: a mistyped `add` rarely parses as a create, and its parse error's fix
+    // would turn it into one
+    const command = notACreate(args)
+    if (command !== undefined) return yield* report(wantsJson(args), command)
     // the wizard prompts, so it can't be dry-parsed; it reports its own errors
     if (!args.some((a) => a === "--wizard" || a.startsWith("--wizard="))) {
       const invalid = yield* runProbe(args).pipe(
@@ -243,14 +289,6 @@ export const runWith = (args: ReadonlyArray<string>) =>
         ),
       )
       if (invalid !== undefined) return yield* reportParseError(args, invalid)
-      const mistyped = mistypedCommand(args)
-      if (mistyped !== undefined)
-        return yield* report(wantsJson(args), {
-          code: "UnknownCommand",
-          message: `Unknown command ${mistyped.typed}. Did you mean ${mistyped.command}? To name a project ${mistyped.typed}, run ${BIN} create ${mistyped.typed}.`,
-          fix: commandLine(replaceAt(args, mistyped.at, mistyped.command)),
-          details: { command: mistyped.typed, suggestion: mistyped.command },
-        })
     }
     return yield* runRoot(args)
   }).pipe(Effect.provideService(Invocation, args))

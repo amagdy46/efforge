@@ -9,7 +9,7 @@ import { parseDocument } from "yaml"
 import { type AddonLoadError, addonIdsFor, loadAddons } from "../addon.ts"
 import {
   commandLine,
-  distance,
+  isTypo,
   type Failure,
   inDir,
   insertAt,
@@ -22,7 +22,7 @@ import {
   setFlag,
 } from "../contract.ts"
 import { unifiedDiff } from "../diff.ts"
-import { type CommandFailed, exec, has } from "../exec.ts"
+import { type CommandFailed, exec, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
 import { GenerateError, generate, isComputed, matches } from "../generate.ts"
 import { introLine } from "../intro.ts"
 import { EfforgeManifest, hash, renderManifest } from "../manifest.ts"
@@ -125,12 +125,6 @@ export interface AddResult {
   readonly notes: string[]
 }
 
-/**
- * `add` has just changed dependencies, so the lockfile must be rewritten. With `CI` set (CI, and many
- * agent sandboxes) pnpm installs with a frozen lockfile by default and fails with OUTDATED_LOCKFILE.
- */
-const INSTALL_ARGS = ["install", "--no-frozen-lockfile"]
-
 const DASHBOARD = "apps/web/src/routes/app/index.tsx"
 const WIDGETS = "apps/web/src/components/widgets.tsx"
 
@@ -159,21 +153,21 @@ const allIds = slots.flatMap((s) =>
   s.options.filter((o) => o.id !== "none").map((o) => `${s.id}/${o.id}`),
 )
 
-/** Full ids close to `id`: a slot name or fragment ("ai", "auth", "better") first, then a typo. */
+/**
+ * Full ids `id` could mean. A fragment of at least three letters that starts a slot or an option
+ * name ("auth", "better", "stor") names every id it starts; else the one id `id` is a typo of
+ * (the typo rule in contract.ts); else nothing. Only a single suggestion becomes a `fix`.
+ */
 const suggest = (id: string): string[] => {
-  const partial = allIds.filter((full) => full.split("/").some((part) => part.startsWith(id)))
+  const partial =
+    id.length >= 3
+      ? allIds.filter((full) => full.split("/").some((part) => part.startsWith(id)))
+      : []
   if (partial.length > 0) return partial
-  const best = allIds
-    .flatMap(
-      (full) =>
-        [
-          [full, full],
-          [full, full.split("/")[1] as string],
-        ] as const,
-    )
-    .map(([full, c]) => [full, distance(id, c)] as const)
-    .toSorted((a, b) => a[1] - b[1])[0]
-  return best !== undefined && best[1] <= 3 ? [best[0]] : []
+  const near = allIds.filter((full) =>
+    [full, full.split("/")[1] as string].some((c) => isTypo(id, c)),
+  )
+  return near.length === 1 ? near : []
 }
 
 /** Same JSONC data and comments, ignoring formatting, key order and array order (earlier `add`s reorder bindings). */
@@ -236,7 +230,7 @@ const parseId = (
       new UnknownAddon({
         id: raw,
         suggestions,
-        message: `"${raw}" is not an add-on.${suggestions.length === 0 ? "" : ` Did you mean ${suggestions.join(" or ")}?`} See them all with npx create-efforge list.`,
+        message: `"${raw}" is not an add-on.${suggestions.length === 0 ? "" : ` Did you mean ${suggestions.join(" or ")}?`} See which ones this project can add with npx create-efforge list --json.`,
       }),
     )
   }
@@ -246,7 +240,7 @@ const parseId = (
       new UnknownAddon({
         id: raw,
         suggestions,
-        message: `"${raw}" is ambiguous; write it as ${suggestions.join(" or ")}.`,
+        message: `"${raw}" is ambiguous; write it as ${suggestions.join(" or ")}. See which ones this project can add with npx create-efforge list --json.`,
       }),
     )
   }
@@ -744,7 +738,7 @@ export const addAddons = (
       yield* fs.writeFileString(abs, content).pipe(io(rel))
     }
     if ((out.size > 0 || removed.size > 0) && opts.install !== false) {
-      yield* exec("pnpm", INSTALL_ARGS, dir)
+      yield* exec("pnpm", [...INSTALL_ARGS], dir)
       // add-ons may add or replace routes
       yield* generateRouteTree(dir)
     }
@@ -752,6 +746,23 @@ export const addAddons = (
   })
 
 // --- CLI -----------------------------------------------------------------------
+
+/** `add` wrote its files, then the install (or route tree) failed: `partial` is what it did. */
+export class AddIncomplete extends Schema.TaggedError<AddIncomplete>()("AddIncomplete", {
+  command: Schema.String,
+  output: Schema.String,
+  partial: Schema.Unknown,
+}) {}
+
+/**
+ * Left in node_modules while dependencies `add` changed aren't installed yet; removed when the
+ * install succeeds. pnpm keeps unknown files there, and a skipped "Already up to date" install
+ * doesn't touch its own files, so neither mtimes nor pnpm's state can tell.
+ */
+export const INSTALL_PENDING = "node_modules/.efforge-install-pending"
+
+/** An earlier `add` changed dependencies and the install never finished (failed, stopped, skipped). */
+export const installOwed = (dir: string): boolean => existsSync(join(dir, INSTALL_PENDING))
 
 /** `add` was given no ids: `available` are the add-ons the project doesn't have yet. */
 export class NoAddonIds extends Schema.TaggedError<NoAddonIds>()("NoAddonIds", {
@@ -826,11 +837,12 @@ export const addFailure = (
       return {
         code: "UnknownAddon",
         message: String(e.message),
+        // only a clear typo becomes a command; anything else is the caller's choice to make
         fix:
           suggestions.length === 1 && at !== undefined
             ? run(replaceAt(args, at[0], suggestions[0] as string))
-            : run(["list", ...jsonOf(args), ...cwdOf(args)]),
-        details: { id: String(e.id), suggestions },
+            : null,
+        details: { id: String(e.id), suggestions, addons: allIds },
       }
     }
     case "RemoveNotSupported":
@@ -882,6 +894,20 @@ export const addFailure = (
         details: { file: String(e.file), anchor: String(e.anchor), snippet: String(e.snippet) },
         more: String(e.snippet),
       }
+    case "AddIncomplete": {
+      const output = String(e.output).trim()
+      return {
+        code: "CommandFailed",
+        message: `\`${String(e.command)}\` failed. The files were written; run it yourself, then the rest of nextSteps.`,
+        fix: inDir(relative(process.cwd(), projectDir), [String(e.command)]),
+        details: {
+          failed: String(e.command),
+          output: output.split("\n").slice(-15).join("\n"),
+          ...(e.partial as object),
+        },
+        more: output,
+      }
+    }
     case "CommandFailed": {
       const output = String(e.output).trim()
       const dir = projectDir
@@ -1008,6 +1034,12 @@ export const addHandler = (input: {
       yield* io.warn(
         `This project was made with efforge ${manifest.efforgeVersion}, newer than this CLI (${efforgeVersion}). Use npx create-efforge@latest add.`,
       )
+    // an earlier install that never finished (it failed, or was stopped): this run owes it
+    const owed = installOwed(dir)
+    if (owed)
+      yield* io.warn(
+        `An earlier efforge add changed dependencies and the install didn't finish. ${input.install && !input.dryRun ? "Running it now." : `Run ${INSTALL}.`}`,
+      )
     const opts = { overwrite: input.overwrite, install: false }
     // checked before anything is written: install and the route tree both need pnpm
     if (input.install && !input.dryRun && !(yield* has("pnpm"))) return yield* new PnpmMissing()
@@ -1032,27 +1064,23 @@ export const addHandler = (input: {
     )
     // a project created with --no-install has no node_modules yet, so no route-tree generator
     const installed = yield* fs
-      .exists(path.join(dir, "node_modules"))
+      .exists(path.join(dir, "node_modules", ".modules.yaml"))
       .pipe(Effect.orElseSucceed(() => false))
-    const installs = input.install && !input.dryRun && changes && depsChanged
-    const finish = Effect.gen(function* () {
-      if (!input.install || input.dryRun || !changes) return
-      if (installs)
-        yield* io.task("Installing dependencies (pnpm install)", (log) =>
-          exec("pnpm", INSTALL_ARGS, dir, log),
+    // remember the owed install until one succeeds, so a re-run after a failure says so
+    if (!input.dryRun && changes && depsChanged)
+      yield* fs
+        .makeDirectory(path.join(dir, "node_modules"), { recursive: true })
+        .pipe(
+          Effect.andThen(fs.writeFileString(path.join(dir, INSTALL_PENDING), `${INSTALL}\n`)),
+          Effect.ignore,
         )
-      // add-ons may add or replace routes; without an install, `pnpm typecheck` regenerates it later
-      if (installs || installed) yield* io.step("Generating the route tree", generateRouteTree(dir))
-    })
-    // a new database needs its tables before the app (or sign-up) can use it
-    const database = result.added.find((a) => a.id.startsWith("database/"))?.id.split("/")[1]
-    const alchemy =
-      manifest.stack.infra === "alchemy" || result.added.some((a) => a.id === "infra/alchemy")
-    const steps: Step[] = [
-      // changed dependencies need the lockfile rewritten, which pnpm refuses by default when CI is set
-      ...(changes && !installs && (depsChanged || !installed)
-        ? [{ command: depsChanged ? `pnpm ${INSTALL_ARGS.join(" ")}` : "pnpm install" }]
-        : []),
+    const installs = input.install && !input.dryRun && ((changes && depsChanged) || owed)
+    // a new database needs its tables before the app (or sign-up) can use it; when the last
+    // install never finished, neither did the steps after it, so count the ids already there too
+    const touched = [...result.added.map((a) => a.id), ...(owed ? result.skipped : [])]
+    const database = touched.find((id) => id.startsWith("database/"))?.split("/")[1]
+    const alchemy = manifest.stack.infra === "alchemy" || touched.includes("infra/alchemy")
+    const afterInstall: Step[] = [
       ...(database === "postgres"
         ? [
             { command: "docker compose up -d --wait", note: "local Postgres" },
@@ -1061,6 +1089,50 @@ export const addHandler = (input: {
         : []),
       ...(database === "d1" && !alchemy ? [{ command: "pnpm db:migrate", note: "local D1" }] : []),
     ]
+    const steps: Step[] = [
+      ...(!installs && (owed || !installed || (changes && depsChanged))
+        ? [{ command: INSTALL }]
+        : []),
+      ...afterInstall,
+    ]
+    const changedFiles = [
+      ...result.written.filter((f) => !result.created.includes(f)),
+      ...result.transformed,
+    ].toSorted()
+    const finish = Effect.gen(function* () {
+      if (!input.install || input.dryRun || (!changes && !installs)) return
+      if (installs) {
+        yield* io.task("Installing dependencies (pnpm install)", (log) =>
+          exec("pnpm", [...INSTALL_ARGS], dir, log),
+        )
+        yield* fs.remove(path.join(dir, INSTALL_PENDING), { force: true }).pipe(Effect.ignore)
+      }
+      // add-ons may add or replace routes; without an install, `pnpm typecheck` regenerates it later
+      if (installs || installed) yield* io.step("Generating the route tree", generateRouteTree(dir))
+    }).pipe(
+      // the files are written: say everything a success would have, starting with the failed command
+      Effect.catchTag("CommandFailed", (e) =>
+        Effect.fail(
+          new AddIncomplete({
+            command: e.command,
+            output: e.output,
+            partial: {
+              directory: dir,
+              stack: result.stack,
+              added: result.added,
+              created: result.created,
+              changed: changedFiles,
+              removed: result.removed,
+              notes: result.notes,
+              env: result.envVars,
+              nextSteps: [{ command: e.command }, ...afterInstall].map((x) =>
+                Object.assign({}, x, { cwd: dir }),
+              ),
+            },
+          }),
+        ),
+      ),
+    )
     const replacementWarnings = Effect.gen(function* () {
       if (result.removed.length > 0)
         yield* io.warn(
@@ -1081,10 +1153,7 @@ export const addHandler = (input: {
         added: result.added,
         skipped: result.skipped,
         created: result.created,
-        changed: [
-          ...result.written.filter((f) => !result.created.includes(f)),
-          ...result.transformed,
-        ].toSorted(),
+        changed: changedFiles,
         removed: result.removed,
         replacedScripts: result.replacedScripts,
         packageManager: result.packageManager,
@@ -1099,22 +1168,16 @@ export const addHandler = (input: {
     const changed = result.written.length + result.transformed.length + result.removed.length > 0
     if (!changed) {
       yield* io.info(`Already there: ${result.skipped.join(", ")}`)
-      return yield* io.outro("Nothing to do.")
-    }
-    yield* io.note(
-      [
-        ...list(result.created, pc.green("+")),
-        ...list(
-          [
-            ...result.written.filter((f) => !result.created.includes(f)),
-            ...result.transformed,
-          ].toSorted(),
-          pc.yellow("~"),
-        ),
-        ...list(result.removed, pc.red("-")),
-      ].join("\n"),
-      `${input.dryRun ? "Would change" : "Changed"}: ${result.added.map((a) => a.title).join(", ") || "stack"}`,
-    )
+      if (!owed) return yield* io.outro("Nothing to do.")
+    } else
+      yield* io.note(
+        [
+          ...list(result.created, pc.green("+")),
+          ...list(changedFiles, pc.yellow("~")),
+          ...list(result.removed, pc.red("-")),
+        ].join("\n"),
+        `${input.dryRun ? "Would change" : "Changed"}: ${result.added.map((a) => a.title).join(", ") || "stack"}`,
+      )
     yield* replacementWarnings
     if (result.packageManager !== null)
       yield* io.info(

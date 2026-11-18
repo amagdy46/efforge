@@ -4,12 +4,14 @@ import { ChildProcessSpawner } from "effect/process"
 /**
  * A spawner that records `cmd args` and succeeds, so create's step order can be asserted.
  * `cwds`, when given, gets each call's working directory at the same index. `fail`, when given,
- * makes a command exit 1 with the output it returns (undefined: succeed).
+ * makes a command exit 1 with the output it returns (undefined: succeed). `hang`, when given,
+ * makes a command never exit, so a test can interrupt the run there.
  */
 export const recordingSpawner = (
   calls: string[],
   cwds?: Array<string | undefined>,
   fail?: (command: string) => string | undefined,
+  hang?: (command: string) => boolean,
 ) =>
   Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
@@ -28,7 +30,10 @@ export const recordingSpawner = (
       return Effect.succeed(
         ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(1),
-          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(output === undefined ? 0 : 1)),
+          exitCode:
+            hang?.(line) === true
+              ? Effect.never
+              : Effect.succeed(ChildProcessSpawner.ExitCode(output === undefined ? 0 : 1)),
           isRunning: Effect.succeed(false),
           kill: () => Effect.void,
           stdin: Sink.drain,

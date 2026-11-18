@@ -109,7 +109,7 @@ it("add email writes the overlays, edits the seam, merges deps, env and manifest
   expect(file(".env.example").match(/DATABASE_URL/g)).toHaveLength(1)
   const m = manifestOf()
   expect(m.stack.extras).toEqual(["email"])
-  expect(m.command).toBe("npm create efforge app -- --yes --auth=none --extras=email")
+  expect(m.command).toBe("npx -y create-efforge create app --yes --auth=none --extras=email")
   expect(m.files["apps/web/src/mailer.ts"]).toBe(hash(file("apps/web/src/mailer.ts")))
   expect(m.files["apps/web/src/layers.ts"]).toBeUndefined()
   expect(result.transformed).toEqual(["apps/web/src/layers.ts"])
@@ -408,11 +408,12 @@ it("on a never-installed project, add skips the route tree and says to run pnpm 
   expect(out.created.length).toBeGreaterThan(0)
   expect(calls).toEqual(["pnpm --version", "git status --porcelain"])
   expect(out.installed).toBe(false)
-  expect(out.nextSteps).toEqual([{ command: "pnpm install", cwd: dir }])
+  expect(out.nextSteps).toEqual([{ command: "pnpm install --no-frozen-lockfile", cwd: dir }])
 })
 
 it("on an installed project, add regenerates the route tree and needs no install", async () => {
   mkdirSync(join(dir, "node_modules"))
+  writeFileSync(join(dir, "node_modules", ".modules.yaml"), "")
   const { calls, out } = await addRecorded(["ai/effect-ai-byok"])
   expect(calls).toEqual(["pnpm --version", "git status --porcelain", ROUTE_TREE_COMMAND])
   expect(out.nextSteps).toEqual([])

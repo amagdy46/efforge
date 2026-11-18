@@ -8,8 +8,11 @@ import { efforgeVersion } from "./versions.ts"
 
 export const CONTRACT = 1
 
-/** How every runnable hint starts: works today when copied, with or without a global install. */
-export const BIN = "npx create-efforge"
+/**
+ * How every runnable hint, `fix` and `command` starts: works when copied, with or without a
+ * global install, and `-y` keeps npx from asking before it downloads the package.
+ */
+export const BIN = "npx -y create-efforge"
 
 /** Where to report a failure that is efforge's fault, not the caller's. */
 export const ISSUES = "https://github.com/amagdy46/efforge/issues"
@@ -39,9 +42,11 @@ export const errorCodes = {
   PnpmMissing: "pnpm isn't on PATH. `fix` installs it and runs the command again.",
   SetupIncomplete:
     "The files were written but a setup step (install, git) failed. `fix` finishes the setup.",
+  Interrupted:
+    "--json only: the run was stopped (Ctrl-C, SIGTERM, a timeout). Exit code 130. `fix` finishes the setup when files were written.",
   WriteFailed: "efforge couldn't write the project files (permissions, disk). No fix.",
   NotAnEfforgeProject:
-    "`add` or `list --cwd` was pointed at a directory without efforge.jsonc. `fix` points --cwd at the project when one is nearby.",
+    "`add` was pointed at a directory without a valid efforge.jsonc, or `list --cwd` at a directory that doesn't exist or holds an invalid efforge.jsonc (`list` in a directory without one succeeds with `project: false`). `fix` points `add` at the project when one is nearby; for `list` it drops --cwd.",
   NoAddonIds: "`add` was called with no add-on ids. `available` lists them; `fix` lists them.",
   UnknownAddon:
     "An add-on id that doesn't exist or is ambiguous. `fix` uses the one suggestion, or lists them all.",
@@ -184,9 +189,21 @@ export const insertAt = (
 
 const quote = (t: string) => (/^[\w@%+=:,./-]+$/.test(t) ? t : `'${t.replaceAll("'", `'\\''`)}'`)
 
-/** The command line for `args`, as the caller can paste it. */
-export const commandLine = (args: ReadonlyArray<string>): string =>
-  [BIN, ...args.map(quote)].join(" ")
+/**
+ * The command line for `args`, as the caller can paste it. It never needs a prompt: a create
+ * without `--yes` or `--json` gets `--yes`, so the fix doesn't stop to ask what flags didn't say.
+ */
+export const commandLine = (args: ReadonlyArray<string>): string => {
+  const [first] = positionals(args)
+  const isCreate = first === undefined || !["add", "list"].includes(first[1])
+  const flags = flagSpans(args, "yes").length + flagSpans(args, "json").length
+  const asks =
+    isCreate &&
+    flags === 0 &&
+    !args.includes("-y") &&
+    !args.some((t) => t === "--wizard" || t.startsWith("--wizard=") || t.startsWith("--help"))
+  return [BIN, ...args.map(quote), ...(asks ? ["--yes"] : [])].join(" ")
+}
 
 /** `cd <dir> && ...` relative to where efforge was run, or nothing when it's the same directory. */
 export const inDir = (relative: string, commands: ReadonlyArray<string>): string =>
@@ -194,33 +211,38 @@ export const inDir = (relative: string, commands: ReadonlyArray<string>): string
     " && ",
   )
 
-/** Edit distance, for "did you mean". */
+/** Edit distance where swapping two neighbours counts as one edit (optimal string alignment). */
 export const distance = (a: string, b: string): number => {
-  const row = Array.from({ length: b.length + 1 }, (_, i) => i)
-  for (let i = 1; i <= a.length; i++) {
-    let prev = row[0] as number
-    row[0] = i
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_row, i) =>
+    Array.from({ length: b.length + 1 }, (_col, j) => (i === 0 ? j : j === 0 ? i : 0)),
+  )
+  const at = (i: number, j: number) => (d[i] as number[])[j] as number
+  for (let i = 1; i <= a.length; i++)
     for (let j = 1; j <= b.length; j++) {
-      const tmp = row[j] as number
-      row[j] = Math.min(
-        (row[j] as number) + 1,
-        (row[j - 1] as number) + 1,
-        prev + (a[i - 1] === b[j - 1] ? 0 : 1),
-      )
-      prev = tmp
+      const same = a[i - 1] === b[j - 1]
+      let v = Math.min(at(i - 1, j) + 1, at(i, j - 1) + 1, at(i - 1, j - 1) + (same ? 0 : 1))
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1])
+        v = Math.min(v, at(i - 2, j - 2) + 1)
+      ;(d[i] as number[])[j] = v
     }
-  }
-  return row[b.length] as number
+  return at(a.length, b.length)
 }
 
-/** The closest of `options` to `value`, if any is within `max` edits. */
-export const closest = (
-  value: string,
-  options: ReadonlyArray<string>,
-  max = 2,
-): string | undefined => {
-  const best = options
-    .map((o) => [o, distance(value, o)] as const)
-    .toSorted((a, b) => a[1] - b[1])[0]
-  return best !== undefined && best[1] <= max ? best[0] : undefined
+/**
+ * The typo rule, the one place efforge decides that `typed` was meant as `option`. A `fix` built
+ * on it must never swap in a different value, so it is tight:
+ * - an option of one or two characters (`d1`) only matches exactly: every short word is a couple
+ *   of edits from it;
+ * - otherwise one edit (a swap of neighbours counts as one) for options up to six characters,
+ *   two for longer ones.
+ */
+export const isTypo = (typed: string, option: string): boolean => {
+  if (typed === option || option.length <= 2) return false
+  return distance(typed, option) <= (option.length <= 6 ? 1 : 2)
+}
+
+/** The one option `value` is a typo of, or undefined when none or more than one is. */
+export const typoOf = (value: string, options: ReadonlyArray<string>): string | undefined => {
+  const near = [...new Set(options)].filter((o) => isTypo(value, o))
+  return near.length === 1 ? near[0] : undefined
 }

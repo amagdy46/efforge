@@ -106,13 +106,14 @@ export const listCommand = Command.make(
           `${mark} ${a.installed === true ? pc.dim(a.id.padEnd(width)) : pc.cyan(a.id.padEnd(width))}  ${pc.dim(room === undefined ? a.description : short(a.description, room))}`,
         )
       }
-      lines.unshift(introLine("list"))
+      // in a pipe, stdout carries only the list (docs/json.md, "In a pipe")
+      if (process.stdout.isTTY) lines.unshift(introLine("list"))
       lines.push(
         "",
         pc.dim(
           project
-            ? "✓ already in this project. Add one with: npx create-efforge add <id>"
-            : "Pick them in npm create efforge, or add one later with: npx create-efforge add <id>",
+            ? "✓ already in this project. Add one with: npx -y create-efforge add <id>"
+            : "Pick them in npx -y create-efforge, or add one later with: npx -y create-efforge add <id>",
         ),
       )
       yield* Console.log(lines.join("\n").replace(/^\n/, ""))

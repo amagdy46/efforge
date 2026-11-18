@@ -9,6 +9,14 @@ export class CommandFailed extends Schema.TaggedError<CommandFailed>()("CommandF
 }) {}
 
 /**
+ * The one install efforge runs and tells people to run. `add` changes dependencies, so the
+ * lockfile must be rewritten; with `CI` set (CI, and many agent sandboxes) pnpm installs with a
+ * frozen lockfile by default and fails with OUTDATED_LOCKFILE.
+ */
+export const INSTALL_ARGS = ["install", "--no-frozen-lockfile"] as const
+export const INSTALL = `pnpm ${INSTALL_ARGS.join(" ")}`
+
+/**
  * Runs `cmd args` in `cwd`, returning combined output; a non-zero exit fails with `CommandFailed`.
  * `onLine` sees each output line as it arrives (for live progress).
  */

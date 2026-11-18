@@ -3,7 +3,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { stripVTControlCharacters } from "node:util"
 import { NodeServices } from "@effect/platform-node"
-import { Effect, Layer } from "effect"
+import { Effect, Fiber, Layer } from "effect"
 import { afterEach, expect, it, vi } from "vitest"
 import { runWith } from "../src/cli.ts"
 import { errorCodes } from "../src/contract.ts"
@@ -39,6 +39,8 @@ interface Scenario {
   /** Commands that fail, with their output. */
   readonly fail?: (command: string) => string | undefined
   readonly templates?: string
+  /** Stop the run (as Ctrl-C would) when it starts a command with this prefix. */
+  readonly interruptAt?: string
 }
 
 const cli = async (
@@ -57,18 +59,26 @@ const cli = async (
   const before = process.cwd()
   process.chdir(cwd)
   process.exitCode = undefined
+  const calls: string[] = []
+  const stopAt = s.interruptAt
+  const hang = stopAt === undefined ? undefined : (c: string) => c.startsWith(stopAt)
   try {
-    await runWith(args).pipe(
+    const fiber = runWith(args).pipe(
       Effect.provide(
         Layer.mergeAll(
           NodeServices.layer,
           quietIO,
-          recordingSpawner([], undefined, s.fail),
+          recordingSpawner(calls, undefined, s.fail, hang),
           ...(s.templates === undefined ? [] : [Layer.succeed(TemplatesDir, s.templates)]),
         ),
       ),
-      Effect.runPromise,
+      Effect.runFork,
     )
+    if (hang !== undefined) {
+      while (!calls.some(hang) && fiber.pollUnsafe() === undefined)
+        await new Promise((r) => setTimeout(r, 10))
+      await Effect.runPromise(Fiber.interrupt(fiber))
+    } else await Effect.runPromise(Fiber.join(fiber))
   } finally {
     process.chdir(before)
     log.mockRestore()
@@ -141,6 +151,7 @@ const scenarios: Record<string, Scenario> = {
       )
     },
   },
+  Interrupted: { interruptAt: "pnpm install" },
   CommandFailed: {
     setup: async (work) => {
       await myApp(work)
@@ -194,15 +205,17 @@ it("every example in docs/json.md is what the command prints", { timeout: 120_00
     try {
       await s.setup?.(work)
       const tokens = shellSplit(command as string)
-      expect(tokens.slice(0, 2), id).toEqual(["npx", "create-efforge"])
-      const r = await cli(tokens.slice(2), join(work, s.cwd ?? "."), s)
+      expect(tokens.slice(0, 3), id).toEqual(["npx", "-y", "create-efforge"])
+      const r = await cli(tokens.slice(3), join(work, s.cwd ?? "."), s)
       const raw = r.stdout !== "" ? r.stdout : r.stderr
       const out = normalize(raw, work)
       if (process.env.EFFORGE_UPDATE_DOCS === "1")
         updated = updated.replace(block, block.replace(shownOutput as string, out))
       else expect(unversioned(out), id).toBe(unversioned(shownOutput as string))
       // error examples are errors, success examples aren't
-      expect(r.exitCode, `${id}: ${raw}`).toBe((id as string) in errorCodes ? 1 : 0)
+      expect(r.exitCode, `${id}: ${raw}`).toBe(
+        id === "Interrupted" ? 130 : (id as string) in errorCodes ? 1 : 0,
+      )
     } finally {
       chmodSync(work, 0o755)
       for (const d of ["readonly"]) {

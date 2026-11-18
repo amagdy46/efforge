@@ -25,29 +25,7 @@
       "properties": {
         "code": {
           "type": "string",
-          "enum": [
-            "UnknownFlag",
-            "InvalidFlagValue",
-            "UnexpectedArgument",
-            "UnknownCommand",
-            "NeedsInput",
-            "UnknownValue",
-            "IncompatibleStack",
-            "InvalidProjectName",
-            "TargetNotEmpty",
-            "PnpmMissing",
-            "SetupIncomplete",
-            "WriteFailed",
-            "NotAnEfforgeProject",
-            "NoAddonIds",
-            "UnknownAddon",
-            "SlotAlreadySet",
-            "RemoveNotSupported",
-            "OverlayConflict",
-            "TransformAnchorMissing",
-            "CommandFailed",
-            "InternalError"
-          ]
+          "description": "A stable identifier. Known codes: UnknownFlag, InvalidFlagValue, UnexpectedArgument, UnknownCommand, NeedsInput, UnknownValue, IncompatibleStack, InvalidProjectName, TargetNotEmpty, PnpmMissing, SetupIncomplete, Interrupted, WriteFailed, NotAnEfforgeProject, NoAddonIds, UnknownAddon, SlotAlreadySet, RemoveNotSupported, OverlayConflict, TransformAnchorMissing, CommandFailed, InternalError. New codes can appear within a contract version; treat an unknown one like any failure."
         },
         "message": {
           "type": "string"

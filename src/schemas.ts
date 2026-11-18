@@ -114,7 +114,11 @@ export const ErrorOutput = Schema.Struct({
   ...Envelope,
   ok: Schema.Literal(false),
   error: Schema.Struct({
-    code: Schema.Literals(Object.keys(errorCodes) as [ErrorCode, ...ErrorCode[]]),
+    // open on purpose: a new code is not a change of contract, so an older copy of this schema
+    // must still accept a document from a newer CLI
+    code: Schema.String.annotate({
+      description: `A stable identifier. Known codes: ${(Object.keys(errorCodes) as ErrorCode[]).join(", ")}. New codes can appear within a contract version; treat an unknown one like any failure.`,
+    }),
     message: Schema.String,
     fix: Schema.NullOr(Schema.String).annotate({
       description: "A command to run instead, or null when there is none.",
