@@ -210,7 +210,7 @@
           },
           "split": {
             "type": "boolean",
-            "description": "Some members are at efforge's pin and others aren't."
+            "description": "Some members are at efforge's pin and others aren't: move the rest together."
           }
         },
         "required": [

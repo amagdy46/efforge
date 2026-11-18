@@ -94,7 +94,7 @@ export const renderUpgrade = (r: UpgradeReport, verbose: boolean, diff: boolean)
       const name =
         id === ""
           ? "others"
-          : `${id}${set?.split === true ? " (half moved: move it as one)" : " (moves together)"}`
+          : `${id}${set?.split === true ? " (moves together; some already match)" : " (moves together)"}`
       out.push(
         `  ${pc.cyan(name)}: ${verbose ? moved.map(arrow).join(", ") : some(moved.map(arrow), 3)}`,
       )

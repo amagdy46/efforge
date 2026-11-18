@@ -158,7 +158,7 @@ export const UpgradeOutput = Schema.Struct({
       why: Schema.String,
       packages: Strings,
       split: Schema.Boolean.annotate({
-        description: "Some members are at efforge's pin and others aren't.",
+        description: "Some members are at efforge's pin and others aren't: move the rest together.",
       }),
     }),
   ).annotate({ description: "Sets of pins that move together, when one of them differs." }),
