@@ -32,9 +32,10 @@ const repo = join(import.meta.dirname, "..")
 const base = resolve(values.dir ?? tmpdir())
 mkdirSync(base, { recursive: true })
 const work = mkdtempSync(join(base, "efforge-smoke-"))
-// its own npm cache, so nothing installed earlier answers for this run
+// its own npm cache, so nothing installed earlier answers for this run, and none of the npm_*
+// variables `pnpm smoke:pack` sets (npm_config_user_agent says pnpm), as on a clean machine
 const env = {
-  ...process.env,
+  ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^npm_/i.test(k))),
   npm_config_cache: join(work, "npm-cache"),
   npm_config_yes: "true",
   CI: "1",

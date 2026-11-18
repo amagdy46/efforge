@@ -24,6 +24,7 @@ import { generate } from "../src/generate.ts"
 import { hash } from "../src/manifest.ts"
 import { scriptedPromptIO } from "../src/prompts/navigable.ts"
 import { ROUTE_TREE_COMMAND } from "../src/routeTree.ts"
+import { pnpmVersion } from "../src/versions.ts"
 import { withDefaults } from "../src/stack.ts"
 import { writeTree } from "../src/write.ts"
 import { recordingSpawner } from "./recordingSpawner.ts"
@@ -342,6 +343,52 @@ it.skipIf(spawnSyncFails("pnpm"))(
       process.chdir(cwd)
     }
     expect(existsSync(join(dir, "pnpm-lock.yaml"))).toBe(false)
+  },
+)
+
+it.skipIf(spawnSyncFails("pnpm") || spawnSyncFails("git"))(
+  "add on a never-installed project: git status shows only efforge's edits, and no dirty-tree warning",
+  async () => {
+    // the pnpm generated projects pin; run inside the project, pnpm switches to it
+    const pkg = JSON.parse(file("package.json")) as Record<string, unknown>
+    put(
+      "package.json",
+      `${JSON.stringify({ ...pkg, packageManager: `pnpm@${pnpmVersion}` }, null, 2)}\n`,
+    )
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, encoding: "utf8" })
+    git("init", "-q")
+    git("add", "-A")
+    git(
+      "-c",
+      "user.name=efforge-test",
+      "-c",
+      "user.email=test@example.invalid",
+      "commit",
+      "-qm",
+      "init",
+    )
+    const plan = await run(
+      addAddons(dir, ["ai/effect-ai-byok"], { overwrite: false, dryRun: true }),
+    )
+    const io = scriptedPromptIO([])
+    // run from inside the project, as a user does: that is where pnpm 12 wrote its lockfile
+    const cwd = process.cwd()
+    process.chdir(dir)
+    try {
+      await runWith(["add", "ai/effect-ai-byok"]).pipe(
+        Effect.provide(Layer.mergeAll(env, io.layer)),
+        Effect.runPromise,
+      )
+    } finally {
+      process.chdir(cwd)
+    }
+    expect(io.output.filter((l) => l.includes("uncommitted changes"))).toEqual([])
+    const changed = git("status", "--porcelain", "-uall")
+      .split("\n")
+      .filter((l) => l !== "")
+      .map((l) => l.slice(3))
+    expect(changed.toSorted()).toEqual([...plan.written, ...plan.transformed].toSorted())
+    expect(changed).not.toContain("pnpm-lock.yaml")
   },
 )
 
