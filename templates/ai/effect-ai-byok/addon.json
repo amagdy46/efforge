@@ -443,6 +443,23 @@
       }
     },
     {
+      "name": "addImport",
+      "args": {
+        "file": "infra/alchemy.run.ts",
+        "import": "* as Redacted",
+        "from": "effect/Redacted"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "auth": [
+          "none",
+          "better-auth"
+        ]
+      }
+    },
+    {
       "name": "addAlchemyResource",
       "args": {
         "name": "llmEncryptionKey",
@@ -510,7 +527,7 @@
       "name": "addAlchemyResource",
       "args": {
         "name": "llmApiKey",
-        "code": "const llmApiKey = yield* Config.Redacted(\"LLM_API_KEY\")",
+        "code": "// empty until you set it: the AI card then says LLM_API_KEY is not set\nconst llmApiKey = yield* Config.Redacted(\"LLM_API_KEY\").pipe(\n  Config.withDefault(Redacted.make(\"\")),\n)",
         "binding": "LLM_API_KEY"
       },
       "when": {

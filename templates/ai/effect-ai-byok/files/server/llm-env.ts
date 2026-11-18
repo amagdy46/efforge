@@ -1,5 +1,5 @@
 import { type LlmProvider, Llm, LlmNotConfigured, llmProviders } from "@repo/core/llm"
-import { Config, type ConfigProvider, Effect, Layer, Option, Schema } from "effect"
+import { Config, type ConfigProvider, Effect, Layer, Option, Redacted, Schema } from "effect"
 import { WorkerConfig } from "effect-cf"
 import { WorkerEnvLive } from "./cloudflare"
 import { generateWith, type LlmSettings, streamWith } from "./llm-provider"
@@ -19,8 +19,10 @@ const loadSettings = (provider: ConfigProvider.ConfigProvider) =>
     const config = yield* Effect.all({
       provider: required("LLM_PROVIDER"),
       model: required("LLM_MODEL"),
+      // an empty key is no key (Alchemy binds an empty one until you set it)
       apiKey: Config.option(Config.Redacted("LLM_API_KEY"))
         .parse(provider)
+        .pipe(Effect.map(Option.filter((key) => Redacted.value(key) !== "")))
         .pipe(Effect.mapError(() => notConfigured("LLM_API_KEY is not set.", "LLM_API_KEY"))),
       baseUrl: Config.option(Config.String("LLM_BASE_URL"))
         .parse(provider)
