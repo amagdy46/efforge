@@ -22,4 +22,5 @@ efforge is young, and the CLI's options may still change.
 - With `infra=alchemy`, local secrets are read from `.env`, not `.dev.vars`, and `pnpm db:migrate` on D1 still expects a `wrangler.jsonc`. Both are known gaps.
 - CI generates, installs and runs the full gate (typecheck, check, test, build) for a matrix of 15 stacks, not every combination.
 - With `--auth=none`, the `effect-ai-byok` demo server function is not gated, so anyone who can reach the app can spend the configured API key. Add auth or remove the demo before deploying.
+- With `--auth=none`, the storage and email cards' server functions are not gated either: anyone who can reach the app can upload to and delete from the bucket's `uploads/` folder, and, with `MAIL_TRANSPORT=cloudflare`, send a test email from your domain to any address. The cards say so. Add auth or remove the demos before deploying.
 - The generated `.dev.vars` sets `BETTER_AUTH_URL=http://localhost:5173`. If Vite picks another port because 5173 is busy, sign-up fails with `INVALID_ORIGIN`; update the variable or free the port.
