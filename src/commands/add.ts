@@ -354,6 +354,12 @@ export const addAddons = (
         // package.json files are merged, not replaced: only a new workspace package's is created
         if (isComputed(f.target) && !(isNewPackageJson(f.target) && !(yield* read(f.target))))
           continue
+        // a base file the add-on brings only to a project without it (one made before efforge had it)
+        if (
+          f.ifAbsent === true &&
+          (overlays.has(f.target) || (yield* read(f.target)) !== undefined)
+        )
+          continue
         overlays.set(
           f.target,
           yield* fs.readFileString(path.join(addonDir, f.path)).pipe(io(f.path)),

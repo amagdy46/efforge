@@ -96,6 +96,7 @@ export const generate = (
     for (const { manifest, dir } of loaded) {
       for (const f of [...manifest.files, ...(manifest.card?.files ?? [])]) {
         if (!matches(f.when, config)) continue
+        if (f.ifAbsent === true && tree.has(f.target)) continue
         const content = yield* fs
           .readFileString(path.join(dir, f.path))
           .pipe(

@@ -344,3 +344,28 @@ it("loadAddons accepts a card whose transforms edit its own files", async () => 
   const addons = await run(loadAddons(root))
   expect(addons.get("extras/demo")?.manifest.card?.transforms).toHaveLength(1)
 })
+
+// Base files a user is expected to edit belong to the user: an add-on brings them only to a
+// project that lacks them (from before efforge 0.3), and never replaces them.
+const PROJECT = "apps/web/src/lib/project.ts"
+const SHELL = "apps/web/src/components/app-shell.tsx"
+
+for (const auth of AUTHS)
+  it(`${auth} added after the app is renamed and its shell edited keeps both edits`, async () => {
+    const { dir, result } = await addLater(d1("none"), [`auth/${auth}`], (d) => {
+      const edit = (f: string, from: string, to: string) =>
+        writeFileSync(join(d, f), readFileSync(join(d, f), "utf8").replace(from, to))
+      edit(PROJECT, 'PROJECT_NAME = "app"', 'PROJECT_NAME = "Rentals"')
+      edit(SHELL, `label: "Settings"`, `label: "Preferences"`)
+    })
+    expect(readFileSync(join(dir, PROJECT), "utf8")).toContain('PROJECT_NAME = "Rentals"')
+    expect(readFileSync(join(dir, SHELL), "utf8")).toContain("Preferences")
+    expect(result.written).not.toContain(PROJECT)
+    expect(result.written).not.toContain(SHELL)
+  })
+
+it("auth brings the app shell and the project name to a project from before cards", async () => {
+  const { dir, result } = await addLater(d1("none"), ["auth/better-auth"], beforeCards)
+  expect(result.created).toEqual(expect.arrayContaining([PROJECT, SHELL]))
+  expect(readFileSync(join(dir, PROJECT), "utf8")).toContain('PROJECT_NAME = "app"')
+})

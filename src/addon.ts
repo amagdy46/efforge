@@ -23,6 +23,11 @@ export const AddonFile = Schema.Struct({
   /** relative to the project root */
   target: Schema.String,
   when: Schema.optionalKey(When),
+  /**
+   * Written only where the project has no such file: a base file the add-on needs that an older
+   * project lacks. The add-on never replaces it, so it never conflicts with the user's edits.
+   */
+  ifAbsent: Schema.optionalKey(Schema.Boolean),
 })
 export type AddonFile = typeof AddonFile.Type
 

@@ -65,11 +65,13 @@
     },
     {
       "path": "../../base/files/web/src/components/app-shell.tsx",
-      "target": "apps/web/src/components/app-shell.tsx"
+      "target": "apps/web/src/components/app-shell.tsx",
+      "ifAbsent": true
     },
     {
       "path": "../../base/files/web/src/lib/project.ts",
-      "target": "apps/web/src/lib/project.ts"
+      "target": "apps/web/src/lib/project.ts",
+      "ifAbsent": true
     },
     {
       "path": "files/routes/onboarding.tsx",
