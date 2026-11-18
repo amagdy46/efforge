@@ -52,7 +52,7 @@ const cardsRequireSession = async (page: Page) => {
   const database = page.locator("#database")
   await database.getByLabel("New note").fill("n".repeat(250))
   await database.getByRole("button", { name: "Add note" }).click()
-  await database.getByText("InvalidNote").waitFor()
+  await database.getByRole("alert").getByText("InvalidNote").waitFor()
   if ((await database.getByLabel("New note").inputValue()).length !== 250)
     throw new Error("a failed add cleared the note input")
   await database.getByLabel("New note").fill("written by Ann")
