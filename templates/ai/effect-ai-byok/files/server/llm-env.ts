@@ -2,30 +2,37 @@ import { type LlmProvider, Llm, LlmNotConfigured, llmProviders } from "@repo/cor
 import { Config, type ConfigProvider, Effect, Layer, Option, Schema } from "effect"
 import { WorkerConfig } from "effect-cf"
 import { WorkerEnvLive } from "./cloudflare"
-import { generateWith, type LlmSettings } from "./llm-provider"
+import { generateWith, type LlmSettings, streamWith } from "./llm-provider"
 
 const decodeProvider = Schema.decodeUnknownEffect(Schema.Literals(llmProviders))
 
-const notConfigured = (message: string) => new LlmNotConfigured({ message })
+const notConfigured = (message: string, setting?: string) =>
+  new LlmNotConfigured({ message, setting })
 
 /** Reads LLM_PROVIDER, LLM_MODEL, LLM_API_KEY and LLM_BASE_URL on each call, so a missing one fails that call only. */
 const loadSettings = (provider: ConfigProvider.ConfigProvider) =>
   Effect.gen(function* () {
+    const required = (name: string) =>
+      Config.String(name)
+        .parse(provider)
+        .pipe(Effect.mapError(() => notConfigured(`${name} is not set.`, name)))
     const config = yield* Effect.all({
-      provider: Config.String("LLM_PROVIDER").parse(provider),
-      model: Config.String("LLM_MODEL").parse(provider),
-      apiKey: Config.option(Config.Redacted("LLM_API_KEY")).parse(provider),
-      baseUrl: Config.option(Config.String("LLM_BASE_URL")).parse(provider),
-    }).pipe(
-      Effect.mapError(() => notConfigured("Set LLM_PROVIDER and LLM_MODEL (and LLM_API_KEY).")),
-    )
+      provider: required("LLM_PROVIDER"),
+      model: required("LLM_MODEL"),
+      apiKey: Config.option(Config.Redacted("LLM_API_KEY"))
+        .parse(provider)
+        .pipe(Effect.mapError(() => notConfigured("LLM_API_KEY is not set.", "LLM_API_KEY"))),
+      baseUrl: Config.option(Config.String("LLM_BASE_URL"))
+        .parse(provider)
+        .pipe(Effect.mapError(() => notConfigured("LLM_BASE_URL is not valid.", "LLM_BASE_URL"))),
+    })
     const name: LlmProvider = yield* decodeProvider(config.provider).pipe(
       Effect.mapError(() =>
         notConfigured(`LLM_PROVIDER must be one of: ${llmProviders.join(", ")}.`),
       ),
     )
     if (name !== "ollama" && Option.isNone(config.apiKey))
-      return yield* notConfigured("LLM_API_KEY is not set.")
+      return yield* notConfigured("LLM_API_KEY is not set.", "LLM_API_KEY")
     const settings: LlmSettings = {
       provider: name,
       model: config.model,
@@ -43,6 +50,8 @@ export const LlmLive = Layer.effect(
     return Llm.of({
       generateText: (prompt) =>
         loadSettings(provider).pipe(Effect.flatMap((settings) => generateWith(settings, prompt))),
+      streamText: (prompt) =>
+        loadSettings(provider).pipe(Effect.map((settings) => streamWith(settings, prompt))),
     })
   }),
 ).pipe(Layer.provide(WorkerEnvLive))

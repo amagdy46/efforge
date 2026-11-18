@@ -64,7 +64,14 @@ it("every add-on file that replaces the dashboard renders the card registry", as
 const combos: StackConfig[] = (["none", "postgres", "d1"] as const).flatMap((database) =>
   (["none", "drizzle", "effect-sql"] as const).flatMap((orm) =>
     (["none", "better-auth", "better-auth-orgs"] as const).map((auth) =>
-      withDefaults({ name: "app", database, orm, auth, extras: ["realtime", "workflows"] }),
+      withDefaults({
+        name: "app",
+        database,
+        orm,
+        auth,
+        ai: "effect-ai-byok",
+        extras: ["realtime", "workflows"],
+      }),
     ),
   ),
 )
@@ -81,6 +88,7 @@ it("every database, ORM and auth registers its cards, and the dashboard renders 
       "runtime",
       ...(config.orm === "none" ? [] : ["database"]),
       ...(config.auth === "none" ? [] : ["auth"]),
+      "ai",
       "workflows",
       "realtime",
     ])
@@ -140,6 +148,7 @@ it("adding realtime later adds its card to the dashboard", async () => {
 // add-on, its card's export, and the server file only the card uses
 const laterCards: ReadonlyArray<readonly [string, string, string]> = [
   ["workflows", "workflows", "apps/web/src/server/workflows-demo.ts"],
+  ["ai/effect-ai-byok", "ai", "apps/web/src/server/ai-demo.ts"],
 ]
 
 for (const [addon, card, server] of laterCards)
