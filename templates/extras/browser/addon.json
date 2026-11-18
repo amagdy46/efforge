@@ -1,7 +1,7 @@
 {
   "id": "extras/browser",
   "title": "Browser",
-  "description": "A headless browser: a Browser service on a Cloudflare Container that runs Playwright (apps/browser).",
+  "description": "A headless browser: a Browser service on a Cloudflare Container that runs Playwright (apps/browser), and a dashboard card that opens a page.",
   "files": [
     {
       "path": "files/core-browser.ts",
@@ -16,8 +16,12 @@
       "target": "apps/web/src/server/browser.ts"
     },
     {
-      "path": "files/run-browser.ts",
-      "target": "apps/web/src/server/run-browser.ts"
+      "path": "files/browser-in-memory.ts",
+      "target": "packages/core/test/browser-in-memory.ts"
+    },
+    {
+      "path": "files/browser.test.ts",
+      "target": "packages/core/test/browser.test.ts"
     },
     {
       "path": "files/app/Dockerfile",
@@ -48,6 +52,19 @@
       "target": "apps/browser/src/server.ts"
     }
   ],
+  "card": {
+    "export": "browser",
+    "files": [
+      {
+        "path": "files/card/browser.tsx",
+        "target": "apps/web/src/capabilities/browser.tsx"
+      },
+      {
+        "path": "files/card/browser-demo.ts",
+        "target": "apps/web/src/server/browser-demo.ts"
+      }
+    ]
+  },
   "dependencies": {
     "apps/web": [
       "@cloudflare/containers"
@@ -155,18 +172,10 @@
       }
     },
     {
-      "name": "addServerFnMiddleware",
+      "name": "appendAgentsSection",
       "args": {
-        "file": "apps/web/src/server/run-browser.ts",
-        "middleware": "requireSession",
-        "import": "requireSession",
-        "from": "./require-session"
-      },
-      "when": {
-        "auth": [
-          "better-auth",
-          "better-auth-orgs"
-        ]
+        "id": "browser",
+        "content": "## Browser\n\n- `Browser` (`packages/core/src/browser.ts`) opens a page and reports its title, request count and a screenshot; `visit(url)` is the program the dashboard card runs. `BrowserLive` (`apps/web/src/server/browser.ts`) sends the URL to Playwright in the `apps/browser` container (a Node server, `apps/browser/src/server.ts`), bound as `BROWSER` through `BrowserContainer` (`apps/web/src/browser/BrowserContainer.ts`).\n- The container refuses private and local addresses (`apps/browser/src/url-policy.ts`, answered as `UrlRefused`). Keep that policy: the container fetches whatever it is sent, so without it it is a request-forgery proxy into your network.\n- Keep the Dockerfile's Playwright image tag and the `playwright` version in `apps/browser/package.json` in step, and update `apps/browser/package-lock.json` with `npm install --package-lock-only` after a dependency change.\n- Locally the container needs Docker. On a wrangler stack, `pnpm dev` runs no container until `dev.enable_containers` is true in `wrangler.jsonc`; calls then fail with `BrowserUnavailable`. A page that never loads in local dev usually means the container cannot reach the internet: a host firewall that drops traffic from Docker's bridge network to the host blocks it.\n- Test code that opens pages with `BrowserInMemory` from `packages/core/test/browser-in-memory.ts` (see `browser.test.ts`); it needs no container.\n- The dashboard card's server function (`apps/web/src/server/browser-demo.ts`) requires a session when the project has auth; without auth anyone who can reach the app can make the container load pages."
       }
     }
   ]

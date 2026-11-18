@@ -70,7 +70,7 @@ const combos: StackConfig[] = (["none", "postgres", "d1"] as const).flatMap((dat
         orm,
         auth,
         ai: "effect-ai-byok",
-        extras: ["realtime", "workflows"],
+        extras: ["realtime", "workflows", "browser"],
       }),
     ),
   ),
@@ -91,6 +91,7 @@ it("every database, ORM and auth registers its cards, and the dashboard renders 
       "ai",
       "workflows",
       "realtime",
+      "browser",
     ])
     expectModules(tree, where)
     expect(rendersRegistry(tree.get(DASHBOARD) ?? ""), where).toBe(true)
@@ -149,6 +150,7 @@ it("adding realtime later adds its card to the dashboard", async () => {
 const laterCards: ReadonlyArray<readonly [string, string, string]> = [
   ["workflows", "workflows", "apps/web/src/server/workflows-demo.ts"],
   ["ai/effect-ai-byok", "ai", "apps/web/src/server/ai-demo.ts"],
+  ["browser", "browser", "apps/web/src/server/browser-demo.ts"],
 ]
 
 for (const [addon, card, server] of laterCards)

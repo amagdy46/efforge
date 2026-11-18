@@ -5,8 +5,9 @@ import { Container } from "@cloudflare/containers"
  * and stops it after `sleepAfter` without traffic. Bound as BROWSER (wrangler.jsonc or infra/alchemy.run.ts) and exported
  * from `src/server.ts`.
  *
- * `pnpm dev` doesn't start containers (`dev.enable_containers` is false in wrangler.jsonc), so it
- * works without Docker and Browser calls fail locally. Set it to true to run the image locally.
+ * Locally the container runs in Docker. With wrangler, `pnpm dev` starts no container until you set
+ * `dev.enable_containers` to true in wrangler.jsonc (so the app starts without Docker); until then
+ * Browser calls fail with `BrowserUnavailable`, which the dashboard card shows with what to do.
  */
 export class BrowserContainer extends Container {
   defaultPort = 8080
