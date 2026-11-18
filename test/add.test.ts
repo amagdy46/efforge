@@ -170,8 +170,12 @@ it("a missing Layer.mergeAll gives TransformAnchorMissing and writes nothing", a
 
 it("single-select slots: set when none, refuse a swap", async () => {
   const d1 = await fail(addAddons(dir, ["database/d1"], opts))
-  expect(d1).toMatchObject({ _tag: "IncompatibleStack", slot: "database", value: "d1" })
-  expect(d1.reason).toContain("swapping")
+  expect(d1).toMatchObject({
+    _tag: "SlotAlreadySet",
+    slot: "database",
+    current: "postgres",
+    value: "d1",
+  })
 
   await run(addAddons(dir, ["effect-ai-byok"], opts))
   expect(manifestOf().stack.ai).toBe("effect-ai-byok")
@@ -181,7 +185,11 @@ it("single-select slots: set when none, refuse a swap", async () => {
 
 it("rejects unknown and ambiguous ids", async () => {
   expect((await fail(addAddons(dir, ["nope"], opts)))._tag).toBe("UnknownAddon")
-  expect((await fail(addAddons(dir, ["none"], opts)))._tag).toBe("UnknownAddon")
+  expect((await fail(addAddons(dir, ["none"], opts)))._tag).toBe("RemoveNotSupported")
+  expect((await fail(addAddons(dir, ["auth"], opts))).suggestions).toEqual([
+    "auth/better-auth-orgs",
+    "auth/better-auth",
+  ])
 })
 
 it("rejects a directory that is not an efforge project", async () => {
@@ -206,8 +214,8 @@ it("CLI: add --json --dry-run --cwd", async () => {
   )
   vi.restoreAllMocks()
   const out = JSON.parse(logs.join("\n"))
-  expect(out.dryRun).toBe(true)
-  expect(out.written).toContain("apps/web/src/mailer.ts")
+  expect(out).toMatchObject({ ok: true, contract: 1, dryRun: true, directory: dir })
+  expect(out.created).toContain("apps/web/src/mailer.ts")
 })
 
 it("unifiedDiff shows context and hunks", () => {
@@ -248,6 +256,7 @@ it("a second add is a no-op: all skipped, no install", async () => {
   const first = snapshot()
   const again = await run(addAddons(dir, ["email"], { overwrite: false, dryRun: false }))
   expect(again).toEqual({
+    stack: manifestOf().stack,
     written: [],
     created: [],
     transformed: [],
@@ -346,14 +355,15 @@ it.skipIf(spawnSyncFails("pnpm"))(
 it("on a never-installed project, add skips the route tree and says to run pnpm install", async () => {
   // ai/effect-ai-byok changes no dependencies in the fixtures, so nothing triggers an install
   const { calls, out } = await addRecorded(["ai/effect-ai-byok"])
-  expect(out.written.length).toBeGreaterThan(0)
-  expect(calls).toEqual(["pnpm --version"])
-  expect(out.nextSteps).toEqual(["pnpm install"])
+  expect(out.created.length).toBeGreaterThan(0)
+  expect(calls).toEqual(["pnpm --version", "git status --porcelain"])
+  expect(out.installed).toBe(false)
+  expect(out.nextSteps).toEqual([{ command: "pnpm install", cwd: dir }])
 })
 
 it("on an installed project, add regenerates the route tree and needs no install", async () => {
   mkdirSync(join(dir, "node_modules"))
   const { calls, out } = await addRecorded(["ai/effect-ai-byok"])
-  expect(calls).toEqual(["pnpm --version", ROUTE_TREE_COMMAND])
+  expect(calls).toEqual(["pnpm --version", "git status --porcelain", ROUTE_TREE_COMMAND])
   expect(out.nextSteps).toEqual([])
 })

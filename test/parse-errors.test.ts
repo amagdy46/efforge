@@ -39,26 +39,42 @@ const cli = (args: string[]) =>
   )
 
 it.each([
-  [["zz", "--yes", "--databse=d1", "--json"], "--database", "create-efforge --help"],
-  [["add", "email", "--jsn", "--json"], "--json", "create-efforge add --help"],
-  [["list", "--jsonn", "--json"], "--json", "create-efforge list --help"],
-])("--json: %j prints one JSON error naming the closest flag", async (args, flag, help) => {
+  [
+    ["zz", "--yes", "--databse=d1", "--json"],
+    "--database",
+    "npx create-efforge --help",
+    "npx create-efforge zz --yes --database=d1 --json",
+  ],
+  [
+    ["add", "email", "--jsn", "--json"],
+    "--json",
+    "npx create-efforge add --help",
+    "npx create-efforge add email --json",
+  ],
+  [
+    ["list", "--jsonn", "--json"],
+    "--json",
+    "npx create-efforge list --help",
+    "npx create-efforge list --json",
+  ],
+])("--json: %j prints one JSON error naming the closest flag", async (args, flag, help, fix) => {
   await cli(args)
   expect(process.exitCode).toBe(1)
   expect(stderr).toEqual([])
   const out = JSON.parse(stdout.join("\n"))
-  expect(Object.keys(out)).toEqual(["error"])
-  expect(Object.keys(out.error).toSorted()).toEqual(["code", "message"])
-  expect(out.error.code).toBe("UnrecognizedOption")
+  expect(Object.keys(out)).toEqual(["efforge", "contract", "ok", "error"])
+  expect(out.ok).toBe(false)
+  expect(out.error.code).toBe("UnknownFlag")
   expect(out.error.message).toContain(`Did you mean ${flag}?`)
   expect(out.error.message).toContain(help)
+  expect(out.error.fix).toBe(fix)
+  expect(out.error.suggestions).toEqual([flag])
 })
 
 it.each([
   [["zz", "--yes", "--databse=d1"], "Unknown flag --databse. Did you mean --database?"],
   [["add", "emial", "--dry-rn"], "Unknown flag --dry-rn. Did you mean --dry-run?"],
   [["list", "--jsonn"], "Unknown flag --jsonn. Did you mean --json?"],
-  [["add"], "Name the add-ons to add"],
 ])("without --json: %j prints a short error, not the help", async (args, message) => {
   await cli(args)
   expect(process.exitCode).toBe(1)
@@ -66,6 +82,7 @@ it.each([
   const err = stripVTControlCharacters(stderr.join("\n"))
   expect(err).toContain(message)
   expect(err).toContain("--help to see every flag")
+  expect(err).toContain("Try: npx create-efforge ")
   expect(err).not.toContain("USAGE")
   expect(err.split("\n").length).toBeLessThanOrEqual(3)
 })
@@ -73,7 +90,7 @@ it.each([
 it("a valid command still runs, and --help still prints the help", async () => {
   await cli(["list", "--json"])
   expect(process.exitCode).toBeUndefined()
-  expect(JSON.parse(stdout.join("\n")).length).toBeGreaterThan(0)
+  expect(JSON.parse(stdout.join("\n")).addons.length).toBeGreaterThan(0)
   stdout.length = 0
   await cli(["add", "--help"])
   expect(stdout.join("\n")).toContain("USAGE")

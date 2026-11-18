@@ -1,10 +1,27 @@
-import { Console, Effect, FileSystem, Path, Schema } from "effect"
+import { existsSync, readdirSync } from "node:fs"
+import { dirname, join, relative, resolve } from "node:path"
+import { Effect, FileSystem, Path, Schema } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import type { ChildProcessSpawner } from "effect/process"
 import { type ParseError, parse } from "jsonc-parser"
 import pc from "picocolors"
 import { parseDocument } from "yaml"
 import { type AddonLoadError, addonIdsFor, loadAddons } from "../addon.ts"
+import {
+  commandLine,
+  distance,
+  dropFlag,
+  type Failure,
+  inDir,
+  insertAt,
+  internal,
+  Invocation,
+  positionals,
+  printSuccess,
+  replaceAt,
+  report,
+  setFlag,
+} from "../contract.ts"
 import { unifiedDiff } from "../diff.ts"
 import { type CommandFailed, exec, has } from "../exec.ts"
 import { GenerateError, generate, isComputed, matches } from "../generate.ts"
@@ -29,22 +46,44 @@ import {
   isEffectLockstep,
   versions,
 } from "../versions.ts"
-import { PnpmMissing, TemplatesDir } from "./create.ts"
+import {
+  assigns,
+  type EnvVar,
+  localEnvFile,
+  PnpmMissing,
+  type Step,
+  TemplatesDir,
+} from "./create.ts"
 
 export class NotAnEfforgeProject extends Schema.TaggedError<NotAnEfforgeProject>()(
   "NotAnEfforgeProject",
   { dir: Schema.String, reason: Schema.String },
 ) {}
 
-/** An id that names no add-on (typo, removal via `none`, or ambiguous). */
+/** An id that names no add-on (a typo), or more than one (`auth`): `suggestions` are full ids. */
 export class UnknownAddon extends Schema.TaggedError<UnknownAddon>()("UnknownAddon", {
   id: Schema.String,
   message: Schema.String,
+  suggestions: Schema.Array(Schema.String),
+}) {}
+
+/** `ai/none` and friends: removing an add-on isn't supported yet. */
+export class RemoveNotSupported extends Schema.TaggedError<RemoveNotSupported>()(
+  "RemoveNotSupported",
+  { id: Schema.String },
+) {}
+
+/** A single-choice slot already holds another value; `add` only moves a slot from `none`. */
+export class SlotAlreadySet extends Schema.TaggedError<SlotAlreadySet>()("SlotAlreadySet", {
+  slot: Schema.String,
+  current: Schema.String,
+  value: Schema.String,
 }) {}
 
 /** A target file that exists, differs from what efforge generated, and `--overwrite` wasn't given. */
 export class OverlayConflict extends Schema.TaggedError<OverlayConflict>()("OverlayConflict", {
   file: Schema.String,
+  files: Schema.Array(Schema.String),
   diff: Schema.String,
 }) {}
 
@@ -72,15 +111,19 @@ export interface AddResult {
     readonly title: string
     readonly docs?: string
   }>
-  /** Env vars this run added to `.env.example`. */
-  readonly envVars: ReadonlyArray<{ readonly name: string; readonly description: string }>
+  /** Env vars this run added to `.env.example`, and where their local values live. */
+  readonly envVars: ReadonlyArray<EnvVar>
   /** `<package.json>: <script>` entries whose existing command an add-on replaced. */
   readonly replacedScripts: string[]
+  /** The project's stack after this run. */
+  readonly stack: StackConfig
 }
 
 export type AddError =
   | NotAnEfforgeProject
   | UnknownAddon
+  | RemoveNotSupported
+  | SlotAlreadySet
   | IncompatibleStack
   | OverlayConflict
   | TransformAnchorMissing
@@ -94,40 +137,22 @@ const incompatible = (
   value: string,
   allowed: string[],
   reason: string,
-) => new IncompatibleStack({ slot, value, allowed, reason })
+  needs: string[],
+) => new IncompatibleStack({ slot, value, allowed, reason, needs })
 
 const allIds = slots.flatMap((s) =>
   s.options.filter((o) => o.id !== "none").map((o) => `${s.id}/${o.id}`),
 )
 
-/** Edit distance, for "did you mean". */
-const distance = (a: string, b: string): number => {
-  const row = Array.from({ length: b.length + 1 }, (_, i) => i)
-  for (let i = 1; i <= a.length; i++) {
-    let prev = row[0] as number
-    row[0] = i
-    for (let j = 1; j <= b.length; j++) {
-      const tmp = row[j] as number
-      row[j] = Math.min(
-        (row[j] as number) + 1,
-        (row[j - 1] as number) + 1,
-        prev + (a[i - 1] === b[j - 1] ? 0 : 1),
-      )
-      prev = tmp
-    }
-  }
-  return row[b.length] as number
-}
-
-const suggest = (id: string): string | undefined => {
-  // a slot name or a fragment ("ai", "auth", "better") before edit distance, which favours short ids
+/** Full ids close to `id`: a slot name or fragment ("ai", "auth", "better") first, then a typo. */
+const suggest = (id: string): string[] => {
   const partial = allIds.filter((full) => full.split("/").some((part) => part.startsWith(id)))
-  if (partial.length > 0) return partial.join(", ")
+  if (partial.length > 0) return partial
   const best = allIds
-    .flatMap((full) => [full, full.split("/")[1] as string])
-    .map((c) => [c, distance(id, c)] as const)
+    .flatMap((full) => [[full, full], [full, full.split("/")[1] as string]] as const)
+    .map(([full, c]) => [full, distance(id, c)] as const)
     .toSorted((a, b) => a[1] - b[1])[0]
-  return best !== undefined && best[1] <= 3 ? best[0] : undefined
+  return best !== undefined && best[1] <= 3 ? [best[0]] : []
 }
 
 /** Same JSONC data and comments, ignoring formatting, key order and array order (earlier `add`s reorder bindings). */
@@ -162,30 +187,48 @@ const isNewPackageJson = (target: string) => target.endsWith("/package.json")
 
 const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
-/** `email`, `extras/email`, `ai/effect-ai-byok`, `ai=effect-ai-byok` -> slot + option. */
-const parseId = (raw: string): Effect.Effect<{ slot: SlotDef; option: string }, UnknownAddon> => {
+/** `email`, `extras/email`, `ai/effect-ai-byok`, `ai=effect-ai-byok`, `ai` (a slot with one option) -> slot + option. */
+const parseId = (
+  raw: string,
+): Effect.Effect<{ slot: SlotDef; option: string }, UnknownAddon | RemoveNotSupported> => {
   const id = raw.trim().toLowerCase()
   const [slotPart, option = ""] = id.includes("=")
     ? id.split("=", 2)
     : id.includes("/")
       ? id.split("/", 2)
       : [undefined, id]
-  const unknown = (message: string) => Effect.fail(new UnknownAddon({ id: raw, message }))
-  if (option === "none") return unknown(`Removing an add-on isn't supported yet ("${raw}").`)
+  if (option === "none") return Effect.fail(new RemoveNotSupported({ id: raw }))
+  // a bare slot name with exactly one add-on to add: `ai`, `infra`
+  if (slotPart === undefined) {
+    const named = slots.find((s) => s.id === option)
+    const choices = named?.options.filter((o) => o.id !== "none") ?? []
+    if (named !== undefined && choices.length === 1 && named.options.length > 1)
+      return Effect.succeed({ slot: named, option: (choices[0] as { id: string }).id })
+  }
   const candidates = slots.filter(
     (s) => (slotPart === undefined || s.id === slotPart) && s.options.some((o) => o.id === option),
   )
   const [first] = candidates
   if (first === undefined) {
-    const guess = suggest(id)
-    return unknown(
-      `"${raw}" is not an add-on.${guess === undefined ? "" : ` Did you mean ${guess}?`} Run efforge list to see them all.`,
+    const suggestions = suggest(id)
+    return Effect.fail(
+      new UnknownAddon({
+        id: raw,
+        suggestions,
+        message: `"${raw}" is not an add-on.${suggestions.length === 0 ? "" : ` Did you mean ${suggestions.join(" or ")}?`} See them all with npx create-efforge list.`,
+      }),
     )
   }
-  if (candidates.length > 1)
-    return unknown(
-      `"${id}" is ambiguous; write it as ${candidates.map((s) => `${s.id}/${id}`).join(" or ")}.`,
+  if (candidates.length > 1) {
+    const suggestions = candidates.map((s) => `${s.id}/${option}`)
+    return Effect.fail(
+      new UnknownAddon({
+        id: raw,
+        suggestions,
+        message: `"${raw}" is ambiguous; write it as ${suggestions.join(" or ")}.`,
+      }),
     )
+  }
   return Effect.succeed({ slot: first, option })
 }
 
@@ -193,7 +236,10 @@ const parseId = (raw: string): Effect.Effect<{ slot: SlotDef; option: string }, 
 const applyIds = (
   stack: StackConfig,
   ids: ReadonlyArray<string>,
-): Effect.Effect<{ stack: StackConfig; skipped: string[] }, IncompatibleStack | UnknownAddon> =>
+): Effect.Effect<
+  { stack: StackConfig; skipped: string[] },
+  IncompatibleStack | UnknownAddon | RemoveNotSupported | SlotAlreadySet
+> =>
   Effect.gen(function* () {
     let next = stack
     const skipped: string[] = []
@@ -213,13 +259,7 @@ const applyIds = (
       const current = next[slot.id]
       if (current === option) skipped.push(`${slot.id}/${option}`)
       else if (current === "none") next = { ...next, [slot.id]: option }
-      else
-        return yield* incompatible(
-          slot.id,
-          option,
-          [current],
-          `${slot.id} is already "${current}"; swapping an existing choice isn't supported yet. Create a new project to use a different ${slot.id}.`,
-        )
+      else return yield* new SlotAlreadySet({ slot: slot.id, current, value: option })
     }
     const valid = yield* validate(next).pipe(
       Effect.mapError((e) => {
@@ -228,19 +268,23 @@ const applyIds = (
         const hasOrm = typed.some(
           (x) => x.startsWith("orm/") || x === "drizzle" || x === "effect-sql",
         )
-        if (next.database === "none" && (e.slot === "orm" || e.slot === "auth"))
+        if (next.database === "none" && (e.slot === "orm" || e.slot === "auth")) {
+          const needs = ["database/d1", ...(hasOrm ? [] : ["orm/effect-sql"])]
           return incompatible(
             e.slot,
             e.value,
             [...e.allowed],
-            `${e.slot === "auth" ? "auth" : "an ORM"} needs a database, and this project has none. Add one in the same command: efforge add database/d1 ${[...(hasOrm ? [] : ["orm/effect-sql"]), ...typed].join(" ")}`,
+            `${e.slot === "auth" ? "auth" : "an ORM"} needs a database, and this project has none. Add one in the same command: npx create-efforge add ${[...needs, ...typed].join(" ")}`,
+            needs,
           )
+        }
         if (e.slot === "orm" && next.orm === "none")
           return incompatible(
             "database",
             next.database,
             [...e.allowed],
-            `a database needs an ORM. Add one with it: efforge add ${typed.join(" ")} orm/drizzle (or orm/effect-sql)`,
+            `a database needs an ORM. Add one with it: npx create-efforge add ${typed.join(" ")} orm/drizzle (or orm/effect-sql)`,
+            ["orm/drizzle"],
           )
         return e
       }),
@@ -384,6 +428,7 @@ export const addAddons = (
     if (conflicts.length > 0)
       return yield* new OverlayConflict({
         file: conflicts.map((c) => c.file).join(", "),
+        files: conflicts.map((c) => c.file),
         diff: conflicts.map((c) => c.diff).join("\n"),
       })
 
@@ -405,6 +450,7 @@ export const addAddons = (
       else
         return yield* new OverlayConflict({
           file: WRANGLER_FILE,
+          files: [WRANGLER_FILE],
           diff: unifiedDiff(WRANGLER_FILE, existing, generated ?? ""),
         })
     }
@@ -560,12 +606,19 @@ export const addAddons = (
     const envText = (yield* read(".env.example")) ?? ""
     const have = new Set(envText.split("\n").map((l) => l.split("=")[0]?.trim()))
     const groups: string[] = []
-    const envVars: Array<{ name: string; description: string }> = []
+    const envVars: EnvVar[] = []
+    const envFile = localEnvFile(stack)
+    const local = out.get(envFile) ?? (yield* read(envFile))
     for (const { manifest: m } of scope) {
       const vars = m.envVars.filter((v) => switchedOn(m.id, v.when) && !have.has(v.name))
       for (const v of vars) {
         have.add(v.name)
-        envVars.push({ name: v.name, description: v.description })
+        envVars.push({
+          name: v.name,
+          description: v.description,
+          file: envFile,
+          set: assigns(local, v.name),
+        })
       }
       if (vars.length > 0)
         groups.push(`# ${m.title}\n${vars.map((v) => `${v.name}=${v.example}`).join("\n")}`)
@@ -595,6 +648,7 @@ export const addAddons = (
     }
 
     const result: AddResult = {
+      stack,
       written: [...written].toSorted(),
       created: [...written].filter((f) => disk.has(f) && disk.get(f) === undefined).toSorted(),
       transformed: [...transformed].toSorted(),
@@ -627,33 +681,173 @@ export const addAddons = (
 
 // --- CLI -----------------------------------------------------------------------
 
-const describe = (
-  e: { readonly _tag: string; readonly message?: string } & Record<string, unknown>,
-): string => {
-  switch (e._tag) {
-    case "NotAnEfforgeProject":
-      return `${String(e.dir)} is not an efforge project (${String(e.reason)}). Run this from the project root or pass --cwd.`
-    case "PnpmMissing":
-      return "efforge projects use pnpm, and it isn't on your PATH. Install it (corepack enable pnpm, or https://pnpm.io/installation) and re-run, or pass --no-install."
-    case "UnknownAddon":
-      return String(e.message)
-    case "IncompatibleStack":
-      return `Can't add ${String(e.slot)}/${String(e.value)}: ${typeof e.reason === "string" ? e.reason : "not compatible with the current stack."}`
-    case "OverlayConflict":
-      return `You've edited ${String(e.file)} since it was generated. Nothing was written. Re-run with --overwrite to replace it.\n\n${String(e.diff)}`
-    case "TransformAnchorMissing":
-      return `Couldn't find ${String(e.anchor)} in ${String(e.file)}. Nothing was written. Add this by hand, then re-run:\n${String(e.snippet)}`
-    case "CommandFailed":
-      return `\`${String(e.command)}\` failed. The files were written; run it yourself.\n${String(e.output).trim()}`
-    default:
-      return e.message ?? e._tag
+/** `add` was given no ids: `available` are the add-ons the project doesn't have yet. */
+export class NoAddonIds extends Schema.TaggedError<NoAddonIds>()("NoAddonIds", {
+  available: Schema.Array(Schema.String),
+}) {}
+
+/** Add-on ids the project doesn't have yet, in `list` order. */
+export const addable = (stack: StackConfig): string[] =>
+  slots
+    .filter((s) => s.options.length > 1)
+    .flatMap((s) =>
+      s.options
+        .filter((o) => o.id !== "none")
+        .filter((o) =>
+          s.id === "extras" ? !stack.extras.includes(o.id as never) : stack[s.id] === "none",
+        )
+        .map((o) => `${s.id}/${o.id}`),
+    )
+
+/** The efforge project nearest to `dir`: a parent, or the one child that holds efforge.jsonc. */
+const nearbyProject = (dir: string): string | undefined => {
+  for (let d = dirname(dir); d !== dirname(d); d = dirname(d))
+    if (existsSync(join(d, "efforge.jsonc"))) return d
+  try {
+    const children = readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && existsSync(join(dir, e.name, "efforge.jsonc")))
+      .map((e) => join(dir, e.name))
+    return children.length === 1 ? children[0] : undefined
+  } catch {
+    return undefined
   }
+}
+
+/** `--cwd` for `dir`, relative to where efforge runs. */
+const cwdArg = (dir: string) => relative(process.cwd(), dir) || "."
+
+/** What went wrong in `add` (or `list --cwd`), as the contract reports it. */
+export const addFailure = (
+  e: { readonly _tag: string; readonly message?: string } & Record<string, unknown>,
+  args: ReadonlyArray<string>,
+  projectDir: string = process.cwd(),
+): Failure => {
+  const run = commandLine
+  const ids = positionals(args).slice(1)
+  switch (e._tag) {
+    case "NotAnEfforgeProject": {
+      const dir = String(e.dir)
+      const near = e.reason === "efforge.jsonc not found" ? nearbyProject(dir) : undefined
+      return {
+        code: "NotAnEfforgeProject",
+        message: `${dir} is not an efforge project (${String(e.reason)}). Run this from the project root or pass --cwd.`,
+        fix: near === undefined ? null : run(setFlag(args, "cwd", cwdArg(near))),
+        details: {
+          directory: dir,
+          reason: String(e.reason),
+          ...(near === undefined ? {} : { project: near }),
+        },
+      }
+    }
+    case "NoAddonIds": {
+      const available = e.available as string[]
+      return {
+        code: "NoAddonIds",
+        message: `Name the add-ons to add${available.length > 0 ? `: ${available.join(", ")}` : "; this project already has every add-on"}. For example: npx create-efforge add ${available[0] ?? "email"}.`,
+        fix: run(["list", ...jsonOf(args), ...cwdOf(args)]),
+        details: { available },
+      }
+    }
+    case "UnknownAddon": {
+      const suggestions = e.suggestions as string[]
+      const at = ids.find(([, t]) => t === e.id)
+      return {
+        code: "UnknownAddon",
+        message: String(e.message),
+        fix:
+          suggestions.length === 1 && at !== undefined
+            ? run(replaceAt(args, at[0], suggestions[0] as string))
+            : run(["list", ...jsonOf(args), ...cwdOf(args)]),
+        details: { id: String(e.id), suggestions },
+      }
+    }
+    case "RemoveNotSupported":
+      return {
+        code: "RemoveNotSupported",
+        message: `Removing an add-on isn't supported yet ("${String(e.id)}").`,
+        fix: null,
+        details: { id: String(e.id) },
+      }
+    case "SlotAlreadySet":
+      return {
+        code: "SlotAlreadySet",
+        message: `Can't add ${String(e.slot)}/${String(e.value)}: ${String(e.slot)} is already "${String(e.current)}", and swapping an existing choice isn't supported yet. Create a new project to use a different ${String(e.slot)}.`,
+        fix: null,
+        details: { slot: String(e.slot), current: String(e.current), value: String(e.value) },
+      }
+    case "IncompatibleStack": {
+      const needs = (e.needs as string[] | undefined) ?? []
+      const [first] = ids
+      return {
+        code: "IncompatibleStack",
+        message: `Can't add ${String(e.slot)}/${String(e.value)}: ${typeof e.reason === "string" ? e.reason : "not compatible with the current stack."}`,
+        fix: needs.length > 0 && first !== undefined ? run(insertAt(args, first[0], ...needs)) : null,
+        details: {
+          slot: String(e.slot),
+          value: String(e.value),
+          allowed: e.allowed as string[],
+          needs,
+          ...(typeof e.reason === "string" ? { reason: e.reason } : {}),
+        },
+      }
+    }
+    case "OverlayConflict": {
+      const files = e.files as string[]
+      return {
+        code: "OverlayConflict",
+        message: `You've edited ${files.join(", ")} since ${files.length === 1 ? "it was" : "they were"} generated. Nothing was written. Re-run with --overwrite to replace ${files.length === 1 ? "it" : "them"} (your edits are lost), or commit first and merge by hand.`,
+        fix: run(setFlag(args, "overwrite")),
+        details: { files, diff: String(e.diff) },
+        more: String(e.diff),
+      }
+    }
+    case "TransformAnchorMissing":
+      return {
+        code: "TransformAnchorMissing",
+        message: `Couldn't find ${String(e.anchor)} in ${String(e.file)}. Nothing was written. Add this by hand, then re-run:\n${String(e.snippet)}`,
+        fix: null,
+        details: { file: String(e.file), anchor: String(e.anchor), snippet: String(e.snippet) },
+      }
+    case "CommandFailed": {
+      const output = String(e.output).trim()
+      const dir = projectDir
+      return {
+        code: "CommandFailed",
+        message: `\`${String(e.command)}\` failed. The files were written; run it yourself.`,
+        fix: inDir(relative(process.cwd(), dir), [String(e.command)]),
+        details: { failed: String(e.command), output: output.split("\n").slice(-15).join("\n") },
+        more: output,
+      }
+    }
+    case "PnpmMissing":
+      return {
+        code: "PnpmMissing",
+        message:
+          "efforge projects use pnpm, and it isn't on your PATH. Install it (npm install --global pnpm, or https://pnpm.io/installation) and re-run, or pass --no-install.",
+        fix: `npm install --global pnpm && ${run(args)}`,
+      }
+    default:
+      return internal(e)
+  }
+}
+
+const jsonOf = (args: ReadonlyArray<string>): string[] =>
+  args.some((a) => a === "--json" || a.startsWith("--json=")) ? ["--json"] : []
+
+/** `--cwd=<dir>` from `args`, to carry over into a suggested `list`. */
+const cwdOf = (args: ReadonlyArray<string>): string[] => {
+  const i = args.findIndex((t) => t === "--cwd" || t.startsWith("--cwd="))
+  const t = args[i]
+  if (t === undefined) return []
+  if (t.includes("=")) return [t]
+  const v = args[i + 1]
+  return v === undefined ? [] : [`--cwd=${v}`]
 }
 
 export const addConfig = {
   ids: Argument.String("ids").pipe(
     Argument.withDescription("Add-ons to add: email, extras/email, ai/effect-ai-byok, ..."),
-    Argument.atLeast(1),
+    Argument.atLeast(0),
   ),
   overwrite: Flag.Boolean("overwrite").pipe(
     Flag.withDescription("Replace generated files you have edited"),
@@ -664,7 +858,7 @@ export const addConfig = {
     Flag.withDefault(false),
   ),
   json: Flag.Boolean("json").pipe(
-    Flag.withDescription("Print the result as JSON on stdout"),
+    Flag.withDescription("Print one JSON document on stdout, nothing else (docs/json.md)"),
     Flag.withDefault(false),
   ),
   cwd: Flag.String("cwd").pipe(
@@ -712,27 +906,34 @@ export const addHandler = (input: {
   json: boolean
   cwd: string
   install: boolean
-}) =>
-  Effect.gen(function* () {
+}) => {
+  const dir = resolve(input.cwd)
+  return Effect.gen(function* () {
     const path = yield* Path.Path
     const fs = yield* FileSystem.FileSystem
     const live = yield* PromptIO
-    const dir = path.resolve(input.cwd)
-    // --json keeps stdout to the one JSON document: steps still run, silently
+    // --json keeps stdout to the one JSON document: steps still run, silently, and warnings are
+    // collected into the document
+    const warnings: string[] = []
     const io: PromptIOShape = input.json
       ? {
           ...live,
+          warn: (m) => Effect.sync(() => void warnings.push(m)),
+          info: (m) => Effect.sync(() => void warnings.push(m)),
           step: (_label, eff) => eff,
           task: (_label, eff) => eff(() => {}),
         }
       : live
-    if (!input.json)
+    if (!input.json && input.ids.length > 0)
       yield* io.intro(
         `${pc.bgCyan(pc.black(" efforge add "))}${pc.dim(`  ${input.ids.join(" ")}`)}`,
       )
 
     const manifest = yield* readManifest(dir)
-    if (!input.json && newer(manifest.efforgeVersion, efforgeVersion))
+    // a picker for people belongs here later; for now, say what there is to add
+    if (input.ids.length === 0)
+      return yield* new NoAddonIds({ available: addable(manifest.stack) })
+    if (newer(manifest.efforgeVersion, efforgeVersion))
       yield* io.warn(
         `This project was made with efforge ${manifest.efforgeVersion}, newer than this CLI (${efforgeVersion}). Use npx create-efforge@latest add.`,
       )
@@ -742,7 +943,7 @@ export const addHandler = (input: {
     // plan first (in memory): the dirty-tree warning only matters when something will change
     const plan = yield* addAddons(dir, input.ids, { ...opts, dryRun: true })
     const changes = plan.written.length + plan.transformed.length + plan.removed.length > 0
-    if (changes && !input.dryRun && !input.json) {
+    if (changes && !input.dryRun) {
       const dirty = yield* exec("git", ["status", "--porcelain"], dir).pipe(
         Effect.map((out) => out.trim() !== ""),
         Effect.catchTag("CommandFailed", () => Effect.succeed(false)),
@@ -762,7 +963,7 @@ export const addHandler = (input: {
     const installed = yield* fs
       .exists(path.join(dir, "node_modules"))
       .pipe(Effect.orElseSucceed(() => false))
-    const installs = input.install && changes && depsChanged
+    const installs = input.install && !input.dryRun && changes && depsChanged
     const finish = Effect.gen(function* () {
       if (!input.install || input.dryRun || !changes) return
       if (installs)
@@ -776,16 +977,44 @@ export const addHandler = (input: {
     const database = result.added.find((a) => a.id.startsWith("database/"))?.id.split("/")[1]
     const alchemy =
       manifest.stack.infra === "alchemy" || result.added.some((a) => a.id === "infra/alchemy")
-    const commands = [
-      ...(changes && !installs && (depsChanged || !installed) ? ["pnpm install"] : []),
-      ...(database === "postgres" ? ["docker compose up -d --wait", "pnpm db:migrate"] : []),
-      ...(database === "d1" && !alchemy ? ["pnpm db:migrate"] : []),
+    const steps: Step[] = [
+      ...(changes && !installs && (depsChanged || !installed) ? [{ command: "pnpm install" }] : []),
+      ...(database === "postgres"
+        ? [
+            { command: "docker compose up -d --wait", note: "local Postgres" },
+            { command: "pnpm db:migrate" },
+          ]
+        : []),
+      ...(database === "d1" && !alchemy ? [{ command: "pnpm db:migrate", note: "local D1" }] : []),
     ]
+    if (result.removed.length > 0)
+      yield* io.warn(
+        `${input.dryRun ? "Would remove" : "Removed"} ${result.removed.join(", ")}: the new add-ons replace it.`,
+      )
+    if (result.replacedScripts.length > 0)
+      yield* io.warn(
+        `${input.dryRun ? "Would replace" : "Replaced"} existing package scripts:\n${result.replacedScripts.map((x) => `  ${x}`).join("\n")}`,
+      )
     if (input.json) {
       yield* finish
-      return yield* Console.log(
-        JSON.stringify({ dryRun: input.dryRun, ...result, nextSteps: commands }, null, 2),
-      )
+      return yield* printSuccess({
+        dryRun: input.dryRun,
+        directory: dir,
+        stack: result.stack,
+        added: result.added,
+        skipped: result.skipped,
+        created: result.created,
+        changed: [
+          ...result.written.filter((f) => !result.created.includes(f)),
+          ...result.transformed,
+        ].toSorted(),
+        removed: result.removed,
+        replacedScripts: result.replacedScripts,
+        installed: installs,
+        env: result.envVars,
+        nextSteps: steps.map((s) => ({ ...s, cwd: dir })),
+        warnings,
+      })
     }
 
     const changed = result.written.length + result.transformed.length + result.removed.length > 0
@@ -807,24 +1036,16 @@ export const addHandler = (input: {
       ].join("\n"),
       `${input.dryRun ? "Would change" : "Changed"}: ${result.added.map((a) => a.title).join(", ") || "stack"}`,
     )
-    if (result.removed.length > 0)
-      yield* io.warn(
-        `${input.dryRun ? "Would remove" : "Removed"} ${result.removed.join(", ")}: the new add-ons replace it.`,
-      )
-    if (result.replacedScripts.length > 0)
-      yield* io.warn(
-        `${input.dryRun ? "Would replace" : "Replaced"} existing package scripts:\n${result.replacedScripts.map((x) => `  ${x}`).join("\n")}`,
-      )
     if (input.dryRun) return yield* io.outro(pc.dim("dry run: nothing written"))
 
     yield* finish
     const width = Math.max(0, ...result.envVars.map((x) => x.name.length))
     const room = Math.max(30, (process.stdout.columns || 80) - 14)
-    const steps = [
-      ...commands.map((c) => `  ${pc.cyan(c)}`),
+    const lines = [
+      ...steps.map((s) => `  ${pc.cyan(s.command)}`),
       ...(result.envVars.length > 0
         ? [
-            `${commands.length > 0 ? "\n" : ""}${pc.bold("New env vars")} ${pc.dim("(in .env.example; local values in .dev.vars)")}`,
+            `${steps.length > 0 ? "\n" : ""}${pc.bold("New env vars")} ${pc.dim("(in .env.example; local values in .dev.vars)")}`,
             // full descriptions, wrapped under the name: the hint at the end is often the useful part
             ...result.envVars.map(
               (v) =>
@@ -838,22 +1059,17 @@ export const addHandler = (input: {
         .filter((a) => a.docs !== undefined)
         .map((a) => `${a.title}: ${pc.dim(a.docs as string)}`),
     ]
-    if (steps.length > 0) yield* io.note(steps.join("\n"), "Next steps")
+    if (lines.length > 0) yield* io.note(lines.join("\n"), "Next steps")
     yield* io.outro(`${pc.green("Done.")} ${pc.dim("Review the changes with")} git diff`)
   }).pipe(
     Effect.catch((e) =>
       Effect.gen(function* () {
-        yield* Effect.sync(() => {
-          process.exitCode = 1
-        })
-        if (input.json)
-          return yield* Console.log(
-            JSON.stringify({ error: { code: e._tag, message: describe(e as never) } }, null, 2),
-          )
-        yield* Console.error(pc.red(describe(e as never)))
+        const args = yield* Invocation
+        yield* report(input.json, addFailure(e as never, args, dir))
       }),
     ),
   )
+}
 
 export const addCommand = Command.make("add", addConfig, addHandler).pipe(
   Command.withDescription("Add an add-on to an existing efforge project"),

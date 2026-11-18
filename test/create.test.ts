@@ -53,10 +53,11 @@ const cli = (args: string[], answers: ReadonlyArray<Answer> = []) => {
 // the fixture templates cover postgres/d1, drizzle and the email extra only
 const stackFlags = ["--auth=none", "--infra=none", "--ai=none"]
 
-it("dry-run --json prints valid JSON {stack, command, files} and writes nothing", async () => {
+it("dry-run --json prints the contract's create document and writes nothing", async () => {
   await cli(["app", "--dry-run", "--json", ...stackFlags, "--extras=email"]).p
   const out = JSON.parse(logs.join("\n"))
-  expect(Object.keys(out).toSorted()).toEqual(["command", "files", "stack"])
+  expect(Object.keys(out).toSorted()).toEqual(["command", "contract", "directory", "dryRun", "efforge", "env", "files", "git", "installed", "nextSteps", "ok", "stack", "warnings"])
+  expect(out).toMatchObject({ ok: true, contract: 1, dryRun: true, installed: false, git: "skipped" })
   expect(out.stack).toMatchObject({
     name: "app",
     database: "postgres",
@@ -195,7 +196,9 @@ it("--json without --dry-run keeps stdout JSON-only and writes the project", asy
   const { s, p } = cli(["app", "--json", "--no-install", "--no-git", ...stackFlags])
   await p
   expect(s.output).toEqual([])
-  expect(Object.keys(JSON.parse(logs.join("\n"))).toSorted()).toEqual(["command", "files", "stack"])
+  const out = JSON.parse(logs.join("\n"))
+  expect(Object.keys(out).toSorted()).toEqual(["command", "contract", "directory", "dryRun", "efforge", "env", "files", "git", "installed", "nextSteps", "ok", "stack", "warnings"])
+  expect(out).toMatchObject({ dryRun: false, installed: false, git: "skipped" })
   expect(existsSync(join(tmp, "app", "efforge.jsonc"))).toBe(true)
 })
 

@@ -79,7 +79,12 @@ it("--json reports errors as JSON on stdout", async () => {
   const logs: string[] = []
   vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => void logs.push(a.join(" ")))
   await cli(["app", "--json", "--dry-run", "--database=nope"])
-  expect(JSON.parse(logs.join("\n")).error.code).toBe("IncompatibleStack")
+  expect(JSON.parse(logs.join("\n")).error).toMatchObject({
+    code: "UnknownValue",
+    flag: "--database",
+    value: "nope",
+    fix: "npx create-efforge app --json --dry-run --database=none",
+  })
   expect(process.exitCode).toBe(1)
 })
 
@@ -180,7 +185,7 @@ it.effect("add: unknown ids get a did-you-mean, ids are case-insensitive", () =>
     const dir = yield* noDbProject()
     const e = yield* addAddons(dir, ["emial"], { overwrite: false, dryRun: true }).pipe(Effect.flip)
     expect(e._tag).toBe("UnknownAddon")
-    expect((e as { message?: string }).message).toContain("Did you mean email?")
+    expect((e as { message?: string }).message).toContain("Did you mean extras/email?")
     const ok = yield* addAddons(dir, ["Email"], { overwrite: false, dryRun: true })
     expect(ok.added.map((a) => a.id)).toEqual(["extras/email"])
   }).pipe(Effect.provide(env)),

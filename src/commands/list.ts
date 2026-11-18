@@ -3,7 +3,8 @@ import { Command, Flag } from "effect/cli"
 import pc from "picocolors"
 import { loadAddons } from "../addon.ts"
 import { slots } from "../slots.ts"
-import { readManifest } from "./add.ts"
+import { commandLine, dropFlag, Invocation, printSuccess, report } from "../contract.ts"
+import { addFailure, readManifest } from "./add.ts"
 import { TemplatesDir } from "./create.ts"
 
 export interface ListedAddon {
@@ -50,7 +51,7 @@ export const listAddons = (cwd: string) =>
         })
       }
     }
-    return { project: stack !== undefined, addons: out }
+    return { project: stack !== undefined, stack, addons: out }
   })
 
 /** First clause of a description, cut to fit the terminal. */
@@ -63,7 +64,7 @@ export const listCommand = Command.make(
   "list",
   {
     json: Flag.Boolean("json").pipe(
-      Flag.withDescription("Print the add-ons as JSON on stdout"),
+      Flag.withDescription("Print one JSON document on stdout, nothing else (docs/json.md)"),
       Flag.withDefault(false),
     ),
     cwd: Flag.String("cwd").pipe(
@@ -76,8 +77,14 @@ export const listCommand = Command.make(
   (input) =>
     Effect.gen(function* () {
       const path = yield* Path.Path
-      const { project, addons } = yield* listAddons(path.resolve(input.cwd))
-      if (input.json) return yield* Console.log(JSON.stringify(addons, null, 2))
+      const dir = path.resolve(input.cwd)
+      const { project, stack, addons } = yield* listAddons(dir)
+      if (input.json)
+        return yield* printSuccess({
+          project,
+          ...(stack === undefined ? {} : { directory: dir, stack }),
+          addons,
+        })
       const width = Math.max(...addons.map((a) => a.id.length))
       // cut descriptions to the terminal; piped output keeps them whole, a very narrow one drops them
       const room = process.stdout.isTTY ? (process.stdout.columns || 80) - width - 6 : undefined
@@ -110,11 +117,15 @@ export const listCommand = Command.make(
     }).pipe(
       Effect.catch((e) =>
         Effect.gen(function* () {
-          const err = e as { readonly _tag: string; readonly message?: string }
-          yield* Console.error(pc.red(err.message ?? err._tag))
-          yield* Effect.sync(() => {
-            process.exitCode = 1
-          })
+          const args = yield* Invocation
+          const f = addFailure(e as never, args)
+          // a --cwd that isn't a project: listing everything still works
+          yield* report(
+            input.json,
+            f.code === "NotAnEfforgeProject" && f.fix === null
+              ? { ...f, fix: commandLine(dropFlag(args, "cwd")) }
+              : f,
+          )
         }),
       ),
     ),
