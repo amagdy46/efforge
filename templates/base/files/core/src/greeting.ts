@@ -1,15 +1,16 @@
 import { Clock, Data, Effect } from "effect"
 
-/** The name to greet was empty or longer than 40 characters. */
+// #region card
+/** The name was blank or longer than 40 characters. */
 export class InvalidName extends Data.TaggedError("InvalidName")<{ readonly message: string }> {}
 
 export interface Greeting {
   readonly message: string
-  /** When the server answered, in epoch milliseconds (from `Clock`, so tests can fix it). */
+  /** When the server answered (epoch ms, from `Clock`) */
   readonly at: number
 }
 
-/** Greets `name`. The dashboard's runtime card calls this through a server function. */
+/** Greets `name`. A server function runs it; tests run it too. */
 export const greet = (name: string): Effect.Effect<Greeting, InvalidName> =>
   Effect.gen(function* () {
     const trimmed = name.trim()
@@ -19,3 +20,4 @@ export const greet = (name: string): Effect.Effect<Greeting, InvalidName> =>
     yield* Effect.log(`greeting ${trimmed}`)
     return { message: `Hello, ${trimmed}`, at }
   })
+// #endregion

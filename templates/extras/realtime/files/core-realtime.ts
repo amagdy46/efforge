@@ -25,7 +25,7 @@ export class Realtime extends Context.Service<
 >()("@repo/core/Realtime") {}
 
 // #region card
-/** Sends a message from the server to everyone in the room, and says how many received it. */
+/** Sends `text` to everyone in the room; returns how many are in it. */
 export const announce = (
   roomId: string,
   text: string,

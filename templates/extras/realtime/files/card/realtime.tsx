@@ -51,7 +51,7 @@ function RealtimeDemo() {
         </p>
       </div>
       <ul
-        aria-label="Messages"
+        aria-label="Room messages"
         aria-live="polite"
         className="h-36 space-y-1 overflow-y-auto rounded-md border bg-background p-3 text-sm"
       >

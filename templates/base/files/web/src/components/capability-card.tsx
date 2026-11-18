@@ -51,7 +51,7 @@ export function CapabilityCard({
         )}
         <p className="basis-full text-sm text-muted-foreground">{summary}</p>
       </header>
-      <div className="grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+      <div className="grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <div className="flex flex-col gap-4 p-5">
           <h3 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
             Try it

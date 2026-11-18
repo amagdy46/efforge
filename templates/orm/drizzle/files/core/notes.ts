@@ -26,7 +26,7 @@ export class Notes extends Context.Service<
 >()("@repo/core/Notes") {}
 
 // #region card
-/** Checks the title, then stores the note. Server functions call this; tests run it on a fake `Notes`. */
+/** Checks the title, then stores the note through `Notes`. */
 export const createNote = (
   input: string,
 ): Effect.Effect<Note, InvalidNote | NotesUnavailable, Notes> =>

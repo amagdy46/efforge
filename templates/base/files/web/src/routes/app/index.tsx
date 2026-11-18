@@ -21,13 +21,12 @@ const tone = (name: string | undefined) => {
 
 function Dashboard() {
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <header className="space-y-3">
+    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+      <header className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">Capabilities</h1>
         <p className="max-w-3xl text-muted-foreground">
-          Each card runs a real demo against this app's server, next to the Effect code behind it.
-          The code is read from the files as they are, so when you change a service its card shows
-          your change.
+          Each card runs a live demo against this app's server next to the Effect code behind it,
+          read from the files as they are now.
         </p>
         <nav aria-label="Capabilities" className="flex flex-wrap gap-2">
           {capabilities.map((capability) => (
@@ -41,6 +40,10 @@ function Dashboard() {
           ))}
         </nav>
       </header>
+      {/* the overview comes first on wide screens; on a phone the cards do */}
+      <div className="order-last lg:order-none">
+        <LayerGraph layers={layers} capabilities={capabilities} />
+      </div>
       {capabilities.map((capability) => (
         <CapabilityCard
           key={capability.id}
@@ -48,7 +51,6 @@ function Dashboard() {
           tone={tone(capability.layer?.name)}
         />
       ))}
-      <LayerGraph layers={layers} capabilities={capabilities} />
     </div>
   )
 }

@@ -8,7 +8,7 @@ type Row = Pick<Note, "id" | "title" | "createdAt">
 const toNote = (row: Row) => ({ id: row.id, title: row.title, createdAt: new Date(row.createdAt) })
 
 // #region card
-/** `Notes` on the `note` table, with Effect SQL: each query is a tagged template and an Effect. */
+/** `Notes` on the `note` table. Each query is a tagged template and an Effect. */
 export const NotesLive = Layer.effect(
   Notes,
   Effect.gen(function* () {

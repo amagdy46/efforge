@@ -5,8 +5,8 @@ import { requireSession } from "./require-session"
 
 // #region card
 /**
- * A server function only signed-in users can call: the `requireSession` middleware runs
- * `Auth.currentSession` first and rejects the call when it fails with `Unauthorized`.
+ * Only signed-in users get here: `requireSession` runs
+ * `Auth.currentSession` first and rejects the call on `Unauthorized`.
  */
 export const whoAmI = createServerFn({ method: "GET" })
   .middleware([requireSession])

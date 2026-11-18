@@ -46,13 +46,13 @@ export function LayerGraph({
                   <dl className="space-y-1 text-xs">
                     <div className="flex gap-2">
                       <dt className="w-16 shrink-0 text-muted-foreground">provides</dt>
-                      <dd className="font-mono break-all">
+                      <dd className="font-mono break-words">
                         {info === undefined ? "see layers.ts" : info.provides.join(", ")}
                       </dd>
                     </div>
                     <div className="flex gap-2">
                       <dt className="w-16 shrink-0 text-muted-foreground">needs</dt>
-                      <dd className="font-mono break-all">
+                      <dd className="font-mono break-words">
                         {needs.length === 0 ? "nothing" : needs.join(", ")}
                       </dd>
                     </div>

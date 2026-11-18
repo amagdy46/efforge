@@ -33,7 +33,7 @@ const toLines = (source: string): Line[] => {
 function Code({ source }: { source: string }) {
   const lines = useMemo(() => toLines(source), [source])
   return (
-    <pre className="overflow-x-auto py-3 font-mono text-[0.8125rem] leading-6 text-code-foreground">
+    <pre className="overflow-x-auto py-3 font-mono text-[0.78rem] leading-6 text-code-foreground">
       <code className="grid min-w-max">
         {lines.map((line) => (
           <span key={line.number} className="grid grid-cols-[2.75rem_1fr] pr-4">
@@ -54,7 +54,9 @@ function Code({ source }: { source: string }) {
   )
 }
 
-const basename = (path: string) => path.split("/").at(-1) ?? path
+/** `packages/core/src/notes.ts` -> `core/notes.ts`, `apps/web/src/server/notes.ts` -> `server/notes.ts` */
+const tabName = (path: string) =>
+  path.replace(/^packages\/([^/]+)\/src\//, "$1/").replace(/^apps\/[^/]+\/src\//, "")
 
 /** Source files with syntax colouring; several become tabs. The file path is the caption. */
 export function CodeBlock({ files }: { files: ReadonlyArray<CodeFile> }) {
@@ -84,7 +86,7 @@ export function CodeBlock({ files }: { files: ReadonlyArray<CodeFile> }) {
                 i === active && "border-border border-b-code bg-code text-foreground",
               )}
             >
-              {basename(f.path)}
+              {tabName(f.path)}
             </button>
           ))}
         </div>
