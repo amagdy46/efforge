@@ -79,22 +79,32 @@ export const formatReport = (lines: ReadonlyArray<Line>): string => {
   ].join("\n")
 }
 
-/** Pure: rewrites literal `"pkg": "old"` pins that are strictly behind a stable latest. */
+/**
+ * Pure: rewrites literal `"pkg": "old"` pins that are strictly behind a stable latest, except the
+ * ones in `held` (pin -> why it stays), which it lists in `skipped` with the reason.
+ */
 export const applyBumps = (
   source: string,
   lines: ReadonlyArray<Line>,
-): { source: string; applied: string[] } => {
+  held: ReadonlyMap<string, string> = new Map(),
+): { source: string; applied: string[]; skipped: string[] } => {
   let out = source
   const applied: string[] = []
+  const skipped: string[] = []
   for (const l of lines) {
     if (l.status !== "behind" || l.latest === undefined || isPre(l.latest)) continue
+    const reason = held.get(l.pkg)
+    if (reason !== undefined) {
+      skipped.push(`${l.pkg} ${l.pin} -> ${l.latest}: ${reason}`)
+      continue
+    }
     const key = l.pkg.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")
     const re = new RegExp(`((?:"${key}"|\\b${key}):\\s*")${l.pin.replace(/[.+]/g, "\\$&")}(")`)
     if (!re.test(out)) continue // derived from a shared const (e.g. effect4): edit by hand
     out = out.replace(re, `$1${l.latest}$2`)
     applied.push(`${l.pkg} ${l.pin} -> ${l.latest}`)
   }
-  return { source: out, applied }
+  return { source: out, applied, skipped }
 }
 
 /**
@@ -149,6 +159,29 @@ export const checkToolchain = (
   return problems
 }
 
+/**
+ * Pure: the behind pins that `--write` must leave alone, because moving them alone would break the
+ * lint toolchain (vitest is held at the one vite-plus bundles). Maps each to the problem it causes.
+ */
+export const heldPins = (
+  lines: ReadonlyArray<Line>,
+  pins: Readonly<Record<string, string>>,
+  tsgoSupport: Readonly<Record<string, ReadonlyArray<string>>>,
+  vitePlusDependencies: Readonly<Record<string, string>>,
+): Map<string, string> => {
+  const before = new Set(checkToolchain(pins, tsgoSupport, vitePlusDependencies))
+  const held = new Map<string, string>()
+  for (const l of lines) {
+    if (l.status !== "behind" || l.latest === undefined) continue
+    const bumped = { ...pins, [l.pkg]: l.latest }
+    const added = checkToolchain(bumped, tsgoSupport, vitePlusDependencies).filter(
+      (p) => !before.has(p),
+    )
+    if (added.length > 0) held.set(l.pkg, added.join("; "))
+  }
+  return held
+}
+
 /** One field of one published version; `npm view --json` sometimes wraps it in an array. */
 const npmView = async <A>(spec: string, field: string): Promise<A> => {
   const value = JSON.parse((await run("npm", ["view", spec, field, "--json"])).stdout) as A | A[]
@@ -186,11 +219,14 @@ if (import.meta.main) {
   const lines = diffPins(entries.map(([pkg, pin], i) => ({ pkg, pin, latest: latest[i] })))
   console.log(formatReport(lines))
   const pins = (pin: string) => versions[pin] as string
-  const problems = checkToolchain(
-    versions,
-    parseTsgoSupport(await npmView<string>(`@effect/tsgo@${pins("@effect/tsgo")}`, "readme")),
-    await npmView<Record<string, string>>(`vite-plus@${pins("vite-plus")}`, "dependencies"),
+  const tsgoSupport = parseTsgoSupport(
+    await npmView<string>(`@effect/tsgo@${pins("@effect/tsgo")}`, "readme"),
   )
+  const vitePlusDependencies = await npmView<Record<string, string>>(
+    `vite-plus@${pins("vite-plus")}`,
+    "dependencies",
+  )
+  const problems = checkToolchain(versions, tsgoSupport, vitePlusDependencies)
   console.log(
     problems.length === 0
       ? "\nlint toolchain: pins fit @effect/tsgo's supported table and vite-plus's bundle"
@@ -199,8 +235,10 @@ if (import.meta.main) {
   if (problems.length > 0) process.exitCode = 1
   if (write) {
     const file = new URL("../src/versions.ts", import.meta.url)
-    const { source, applied } = applyBumps(readFileSync(file, "utf8"), lines)
+    const held = heldPins(lines, versions, tsgoSupport, vitePlusDependencies)
+    const { source, applied, skipped } = applyBumps(readFileSync(file, "utf8"), lines, held)
     writeFileSync(file, source)
+    if (skipped.length > 0) console.log(`\nheld (not written):\n${skipped.join("\n")}`)
     console.log(applied.length > 0 ? `\nwrote:\n${applied.join("\n")}` : "\nnothing to write")
   } else {
     console.log(
