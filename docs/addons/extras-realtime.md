@@ -2,7 +2,7 @@
 
 # Realtime
 
-WebSockets: a Realtime service, a hibernating Room Durable Object, a useRoom hook and a demo on /app.
+WebSockets: a Realtime service, a hibernating Room Durable Object, a useRoom hook and a dashboard card.
 
 Id `extras/realtime`: Realtime, in the Extras slot. Template: [`templates/extras/realtime/`](../../templates/extras/realtime/).
 
@@ -48,9 +48,9 @@ Your code asks for `Realtime`, declared in `packages/core/src/realtime.ts`, and 
 | `apps/web/src/server/realtime.ts` | Always |
 | `apps/web/src/server/realtime-route.ts` | Always |
 | `apps/web/src/lib/use-room.ts` | Always |
-| `apps/web/src/components/realtime-demo.tsx` | Always |
 | `packages/core/src/realtime-limits.ts` | Always |
 | `packages/core/test/realtime-limits.test.ts` | Always |
+| `packages/core/test/realtime.test.ts` | Always |
 
 ## Files it edits
 
@@ -71,10 +71,6 @@ Your code asks for `Realtime`, declared in `packages/core/src/realtime.ts`, and 
 ### `apps/web/src/server/routes.ts`
 
 - Adds `realtimeRoute` to `workerRoutes`.
-
-### `apps/web/src/components/widgets.tsx`
-
-- Adds `<RealtimeDemo key="realtime" />` to `widgets`.
 
 ### `wrangler.jsonc`
 

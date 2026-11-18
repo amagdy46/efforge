@@ -113,7 +113,9 @@ None.
 
 Only with `orm=drizzle`:
 
-### Database (D1, Drizzle)
+### Database
+
+Cloudflare D1, queried through Drizzle.
 
 - Tables live in `packages/db/src/schema.ts`; queries go through the `Database` service from `@repo/core`.
 - Change the schema, then run `pnpm --filter @repo/db db:generate` to write a migration to `packages/db/drizzle/`, then `pnpm db:migrate` (flattens them into `packages/db/migrations/` and applies them locally).
@@ -121,7 +123,9 @@ Only with `orm=drizzle`:
 
 Only with `orm=effect-sql`:
 
-### Database (D1, effect-sql)
+### Database
+
+Cloudflare D1, queried through effect-sql.
 
 - Migrations are plain SQL files in `packages/db/migrations/`, named `NNNN_name.sql` and applied in order by `pnpm db:migrate` (wrangler, local D1).
 - Add a new file for every schema change; never edit one that has already been applied.

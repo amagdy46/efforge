@@ -37,6 +37,6 @@ Each add-on is one choice in one slot. Pick them when you create a project, or a
 
 - [Browser](extras-browser.md) (`extras/browser`): A headless browser: a Browser service on a Cloudflare Container that runs Playwright (apps/browser).
 - [Email](extras-email.md) (`extras/email`): Transactional email: a Mailer service on Cloudflare Email Service, printed to the console in development, plus invitation emails with organizations.
-- [Realtime](extras-realtime.md) (`extras/realtime`): WebSockets: a Realtime service, a hibernating Room Durable Object, a useRoom hook and a demo on /app.
+- [Realtime](extras-realtime.md) (`extras/realtime`): WebSockets: a Realtime service, a hibernating Room Durable Object, a useRoom hook and a dashboard card.
 - [Storage](extras-storage.md) (`extras/storage`): Object storage: a Storage service on R2 with Worker-served signed download URLs.
 - [Workflows](extras-workflows.md) (`extras/workflows`): Durable background jobs: a Jobs service on Cloudflare Workflows, with an example workflow and server functions.

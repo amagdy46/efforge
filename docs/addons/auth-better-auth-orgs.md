@@ -44,8 +44,10 @@ Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`, and it fails
 | File | Only with |
 | --- | --- |
 | `packages/core/src/Auth.ts` | Always |
+| `packages/core/test/auth.test.ts` | Always |
 | `apps/web/src/server/auth.ts` | Always |
 | `apps/web/src/server/auth-live.ts` | Always |
+| `apps/web/src/server/auth-url.ts` | Always |
 | `apps/web/src/server/auth-route.ts` | Always |
 | `apps/web/src/server/session.ts` | Always |
 | `apps/web/src/server/require-session.ts` | Always |
@@ -56,8 +58,9 @@ Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`, and it fails
 | `apps/web/src/components/user-menu.tsx` | Always |
 | `apps/web/src/routes/sign-in.tsx` | Always |
 | `apps/web/src/routes/sign-up.tsx` | Always |
-| `apps/web/src/routes/app/index.tsx` | Always |
 | `apps/web/src/routes/app.tsx` | Always |
+| `apps/web/src/components/app-shell.tsx` | Always |
+| `apps/web/src/lib/project.ts` | Always |
 | `apps/web/src/routes/onboarding.tsx` | Always |
 | `apps/web/src/routes/accept-invite.$id.tsx` | Always |
 | `apps/web/src/routes/app/settings.tsx` | Always |
@@ -78,7 +81,6 @@ Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`, and it fails
 ### `.dev.vars`
 
 - Sets `BETTER_AUTH_SECRET=dev-only-secret-replace-me-with-openssl-rand-base64-32` for local development.
-- Sets `BETTER_AUTH_URL=http://localhost:5173` for local development.
 
 ### `packages/core/src/index.ts`
 
@@ -140,7 +142,7 @@ Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`, and it fails
 ## Environment variables
 
 - `BETTER_AUTH_SECRET`, for example `change-me-to-a-long-random-string`: Signs sessions and cookies (local: .dev.vars; production: wrangler secret put BETTER_AUTH_SECRET).
-- `BETTER_AUTH_URL`, for example `http://localhost:5173`: Public origin of the app, used for redirects and trusted origins (a Worker var in production).
+- `BETTER_AUTH_URL`, for example `https://app.example.com`: Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port).
 
 ## Package scripts
 
@@ -164,11 +166,11 @@ Only with `orm=effect-sql`:
 
 Only with `infra=none`:
 
-- `BETTER_AUTH_SECRET` signs sessions: set it as a Worker secret (`.dev.vars` locally, `wrangler secret put BETTER_AUTH_SECRET` in production). Never log or return it. `BETTER_AUTH_URL` is the public origin; when unset Better Auth infers it from the request.
+- `BETTER_AUTH_SECRET` signs sessions: set it as a Worker secret (`.dev.vars` locally, `wrangler secret put BETTER_AUTH_SECRET` in production). Never log or return it. `BETTER_AUTH_URL` is the public origin and always wins when set. Unset, Better Auth takes it from the request (under `pnpm dev`, from localhost on any port); set it to sign in from another host in development, such as a phone on your network or a tunnel.
 
 Only with `infra=alchemy`:
 
-- `BETTER_AUTH_SECRET` signs sessions: Alchemy passes it to the Worker from `.env` locally and from the deploy workflow secret in CI. Never log or return it. `BETTER_AUTH_URL` is the public origin; when unset Better Auth infers it from the request.
+- `BETTER_AUTH_SECRET` signs sessions: Alchemy passes it to the Worker from `.env` locally and from the deploy workflow secret in CI. Never log or return it. `BETTER_AUTH_URL` is the public origin and always wins when set. Unset, Better Auth takes it from the request (under `pnpm dev`, from localhost on any port); set it to sign in from another host in development, such as a phone on your network or a tunnel.
 
 ### Organizations
 

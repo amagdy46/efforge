@@ -44,8 +44,9 @@ Your code asks for `Database`, declared in `packages/core/src/Database.ts`. `Dat
 | File | Only with |
 | --- | --- |
 | `packages/db/src/index.ts` | Always |
-| `apps/web/src/server/notes.ts` | Always |
-| `apps/web/src/routes/app/index.tsx` | Always |
+| `packages/core/src/notes.ts` | Always |
+| `packages/core/test/notes.test.ts` | Always |
+| `packages/db/src/notes.ts` | Always |
 | `packages/db/src/layer.ts` | `database=postgres`; `database=d1` |
 | `packages/db/src/schema.ts` | `database=postgres`; `database=d1` |
 | `packages/db/scripts/migrate.ts` | `database=postgres`; `database=d1` |

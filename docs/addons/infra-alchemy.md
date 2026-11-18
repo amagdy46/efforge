@@ -45,6 +45,7 @@ None: this add-on adds no service of its own.
 | `infra/README.md` | Always |
 | `.github/workflows/deploy.yml` | Always |
 | `apps/web/vite.config.ts` | Always |
+| `apps/web/regions.ts` | Always |
 
 ## Files it edits
 

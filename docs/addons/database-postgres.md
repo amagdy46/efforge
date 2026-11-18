@@ -44,6 +44,8 @@ None: this add-on adds no service of its own.
 | `packages/db/package.json` | Always |
 | `packages/db/tsconfig.json` | Always |
 | `apps/web/src/server/runtime.ts` | Always |
+| `apps/web/src/server/settings.ts` | Always |
+| `apps/web/src/server/manifest.ts` | Always |
 
 ## Files it edits
 
@@ -120,7 +122,9 @@ None: this add-on adds no service of its own.
 
 Only with `orm=drizzle`:
 
-### Database (Postgres, Drizzle)
+### Database
+
+Postgres (through Hyperdrive in production), queried through Drizzle.
 
 - Tables live in `packages/db/src/schema.ts`; queries go through the `Database` service from `@repo/core`.
 - Change the schema, then run `pnpm --filter @repo/db db:generate` to write a migration to `packages/db/drizzle/`, then `pnpm db:migrate`.
@@ -129,7 +133,9 @@ Only with `orm=drizzle`:
 
 Only with `orm=effect-sql`:
 
-### Database (Postgres, effect-sql)
+### Database
+
+Postgres (through Hyperdrive in production), queried through effect-sql.
 
 - Migrations are plain SQL files in `packages/db/migrations/`, named `NNNN_name.sql` and applied in order by `pnpm db:migrate`.
 - Add a new file for every schema change; never edit one that has already been applied.
