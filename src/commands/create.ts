@@ -24,6 +24,7 @@ import { generate, matches } from "../generate.ts"
 import { askStack, DEFAULT_NAME, type StackFlags } from "../prompts/flow.ts"
 import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
 import { projectDirName } from "../projectName.ts"
+import { introLine } from "../intro.ts"
 import { generateRouteTree } from "../routeTree.ts"
 import { slots } from "../slots.ts"
 import { type StackConfig, toCommand } from "../stack.ts"
@@ -199,10 +200,7 @@ export const create = (opts: CreateOptions) =>
     const warnings: string[] = []
     const io: PromptIOShape = quiet ? collectingIO(live, warnings) : live
 
-    if (!quiet)
-      yield* io.intro(
-        `${pc.bgCyan(pc.black(" efforge "))}${pc.dim("  Effect apps on Cloudflare, already wired")}`,
-      )
+    if (!quiet) yield* io.intro(introLine())
 
     // `.` scaffolds into the current directory, named after it.
     const inPlace = opts.flags.name === "."

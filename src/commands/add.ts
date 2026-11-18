@@ -24,6 +24,7 @@ import {
 import { unifiedDiff } from "../diff.ts"
 import { type CommandFailed, exec, has } from "../exec.ts"
 import { GenerateError, generate, isComputed, matches } from "../generate.ts"
+import { introLine } from "../intro.ts"
 import { EfforgeManifest, hash, renderManifest } from "../manifest.ts"
 import { applyProjectName } from "../projectName.ts"
 import { generateRouteTree } from "../routeTree.ts"
@@ -998,9 +999,7 @@ export const addHandler = (input: {
         }
       : live
     if (!input.json && input.ids.length > 0)
-      yield* io.intro(
-        `${pc.bgCyan(pc.black(" efforge add "))}${pc.dim(`  ${input.ids.join(" ")}`)}`,
-      )
+      yield* io.intro(introLine(`add ${input.ids.join(" ")}`))
 
     const manifest = yield* readManifest(dir)
     // a picker for people belongs here later; for now, say what there is to add

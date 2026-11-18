@@ -40,15 +40,20 @@
     "format": "vp fmt",
     "check": "vp check",
     "smoke:pack": "node scripts/smoke-pack.ts",
-    "schemas": "node scripts/schemas.ts"
+    "schemas": "node scripts/schemas.ts",
+    "brand": "node scripts/brand/build.ts",
+    "brand:outline": "node scripts/brand/outline.ts"
   },
   "devDependencies": {
     "@clack/prompts": "1.9.0",
     "@effect/platform-node": "4.1.4",
     "@effect/vitest": "4.1.4",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@fontsource/saira-semi-condensed": "5.3.0",
     "@types/node": "26.6.6",
     "effect": "4.1.4",
     "jsonc-parser": "3.3.1",
+    "opentype.js": "2.0.0",
     "oxlint": "1.94.0",
     "oxlint-tsgolint": "7.0.2007",
     "picocolors": "1.1.1",

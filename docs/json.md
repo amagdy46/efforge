@@ -67,7 +67,7 @@ npx create-efforge create my-app --json --database=d1 --auth=better-auth
     ".dev.vars",
     ".env.example",
     ".gitignore",
-    "... 72 more"
+    "... 73 more"
   ],
   "installed": true,
   "git": "committed",
@@ -132,7 +132,7 @@ npx create-efforge create my-app --json --dry-run
     ".dev.vars",
     ".env.example",
     ".gitignore",
-    "... 78 more"
+    "... 79 more"
   ],
   "installed": false,
   "git": "skipped",
