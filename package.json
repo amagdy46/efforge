@@ -40,7 +40,8 @@
     "check": "vp check",
     "smoke:pack": "node scripts/smoke-pack.ts",
     "brand": "node scripts/brand/build.ts",
-    "brand:outline": "node scripts/brand/outline.ts"
+    "brand:outline": "node scripts/brand/outline.ts",
+    "docs:addons": "node scripts/docs/addons.ts"
   },
   "devDependencies": {
     "@clack/prompts": "1.9.0",
