@@ -1,8 +1,10 @@
-// `pnpm docs:diagram`: writes the diagram in docs/architecture.md, docs/assets/layers-*.svg: a wide
-// layout (800 px and up) and a narrow one for phones, each in light and dark. Colours come from
-// scripts/brand/source.ts: the tempering colours in order, one per part (interface, layer,
+// `pnpm docs:diagram`: writes the diagram in docs/architecture.md, docs/assets/layers-light.svg and
+// layers-dark.svg. One layout, 520 wide, for desktops and phones alike: no text is smaller than
+// 17 px, so in a 380 px viewport (the image about 348 px wide) the smallest is 11 px. Colours come
+// from scripts/brand/source.ts: the tempering colours in order, one per part (interface, layer,
 // composition, test layer). Text is outlined with the brand fonts, so it renders the same on every
-// machine; each glyph is drawn once and reused. test/docs.test.ts fails while a file is stale.
+// machine; each glyph is drawn once and reused. test/docs.test.ts fails while a file is stale, and
+// checks that the page's text list names every label in `diagramText`.
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -52,13 +54,47 @@ const themes: Record<Mode, Theme> = {
   },
 }
 
+/** Every label in the diagram that names something; the page's text list must contain each. */
+export const diagramText = {
+  steps: ["The interface", "A layer", "One file composes", "A test swaps the layer"],
+  names: [
+    "Notes",
+    "list",
+    "insert(title)",
+    "NotesUnavailable",
+    "createNote",
+    "NotesLive",
+    "AppLayer",
+    "DatabaseLayer",
+    "AuthLive",
+    "NotesInMemory",
+    "layer(NotesInMemory)",
+  ],
+  files: [
+    "packages/core/src/notes.ts",
+    "packages/db/src/notes.ts",
+    "apps/web/src/server/layers.ts",
+    "packages/core/test/notes.test.ts",
+  ],
+} as const
+
+const [interfaceFile, layerFile, layersFile, testFile] = diagramText.files
+const [stepInterface, stepLayer, stepCompose] = diagramText.steps
+
+const title = "A service, a layer, one file that composes the layers, and a test that swaps one"
+const desc =
+  "1. The interface: Notes, in packages/core/src/notes.ts, has list and insert(title), which can fail with NotesUnavailable. createNote asks for Notes and never sees a layer. " +
+  "2. A layer: NotesLive, in packages/db/src/notes.ts, implements Notes with queries on the note table. " +
+  "3. One file composes: AppLayer, in apps/web/src/server/layers.ts, lists DatabaseLayer, which holds NotesLive, and AuthLive. " +
+  "4. A test swaps the layer: in packages/core/test/notes.test.ts, NotesInMemory also implements Notes and keeps notes in memory; layer(NotesInMemory) provides it in place of NotesLive."
+
 const round = (n: number) => Math.round(n * 100) / 100
 
-interface Row {
-  readonly y: number
-  readonly h: number
-}
-type Line = string | { readonly code: string }
+/** The smallest text in the diagram, in px at its natural width (code; labels are larger). */
+const SMALL = 17
+/** Saira Semi Condensed is narrow and short for its size, so labels are set larger than code. */
+const LABEL = 18
+const MUTED = 0.8
 
 /** Drawing helpers over one theme; `svg()` wraps what was drawn. */
 const canvas = (t: Theme) => {
@@ -82,19 +118,23 @@ const canvas = (t: Theme) => {
     return { width: x, placed }
   }
 
+  /** Text with its baseline at `y`; throws if it is smaller than SMALL or wider than `max`. */
   const text = (
     s: string,
     x: number,
     y: number,
     f: Face,
     size: number,
-    o: { fill?: string; muted?: boolean; middle?: boolean } = {},
+    o: { fill?: string; muted?: boolean; middle?: boolean; max?: number } = {},
   ) => {
+    if (size < SMALL) throw new Error(`"${s}" is ${size} px; the smallest text is ${SMALL} px`)
     const { width, placed } = measure(f, s, size)
+    if (o.max !== undefined && width > o.max)
+      throw new Error(`"${s}" is ${round(width)} px wide; it has ${o.max} px`)
     const left = o.middle === true ? x - width / 2 : x
     const fill = o.fill ?? t.ink
     out.push(
-      `<g fill="${fill}"${o.muted === true ? ' fill-opacity="0.72"' : ""}>${placed
+      `<g fill="${fill}"${o.muted === true ? ` fill-opacity="${MUTED}"` : ""}>${placed
         .map((p) => `<use href="#${p.id}" x="${round(left + p.x)}" y="${y}"/>`)
         .join("")}</g>`,
     )
@@ -106,65 +146,30 @@ const canvas = (t: Theme) => {
     )
 
   const badge = (n: number, cx: number, cy: number) => {
-    out.push(`<circle cx="${cx}" cy="${cy}" r="12" fill="${t.ink}"/>`)
-    text(String(n), cx, cy + 5.5, "digit", 15, { fill: t.paper, middle: true })
+    out.push(`<circle cx="${cx}" cy="${cy}" r="13" fill="${t.ink}"/>`)
+    text(String(n), cx, cy + 6, "digit", 17, { fill: t.paper, middle: true })
   }
 
   const chip = (x: number, y: number, w: number, name: string, colour?: string) => {
     out.push(
       colour === undefined
-        ? `<rect x="${x + 0.75}" y="${y + 0.75}" width="${w - 1.5}" height="26.5" rx="4" fill="none" stroke="${t.ink}" stroke-opacity="0.35" stroke-width="1.5"/>`
-        : `<rect x="${x}" y="${y}" width="${w}" height="28" rx="4" fill="${colour}" fill-opacity="${t.tint}" stroke="${colour}" stroke-width="1.5"/>`,
+        ? `<rect x="${x + 0.75}" y="${y + 0.75}" width="${w - 1.5}" height="30.5" rx="4" fill="none" stroke="${t.ink}" stroke-opacity="0.4" stroke-width="1.5"/>`
+        : `<rect x="${x}" y="${y}" width="${w}" height="32" rx="4" fill="${colour}" fill-opacity="${t.tint}" stroke="${colour}" stroke-width="1.5"/>`,
     )
-    text(name, x + 12, y + 19, "code", 14)
+    text(name, x + 12, y + 22, "code", SMALL, { max: w - 24 })
   }
 
-  /** A part: optional step number, its name, up to three lines, and optionally its file. */
-  const part = (
-    x: number,
-    w: number,
-    row: Row,
-    colour: string,
-    p: { step?: number; name: string; size?: number; lines: ReadonlyArray<Line>; file?: string },
-  ) => {
-    box(x, row.y, w, row.h, colour)
-    let left = x + 16
-    if (p.step !== undefined) {
-      badge(p.step, x + 28, row.y + 28)
-      left = x + 48
-    }
-    text(p.name, left, row.y + 35, "title", p.size ?? 20)
-    p.lines.forEach((l, i) => {
-      const y = row.y + 64 + i * 22
-      if (typeof l === "string") text(l, x + 16, y, "label", 16)
-      else text(l.code, x + 16, y, "code", 15)
-    })
-    if (p.file !== undefined) text(p.file, x + 16, row.y + row.h - 16, "code", 13, { muted: true })
-  }
-
-  /** A labelled arrow from (x1, y1) to (x2, y2); horizontal or vertical. */
-  const arrow = (x1: number, y1: number, x2: number, y2: number, label: string) => {
-    const dx = Math.sign(x2 - x1)
-    const dy = Math.sign(y2 - y1)
-    const bx = x2 - dx * 9
-    const by = y2 - dy * 9
-    const wing = (a: number, b: number) => (dx === 0 ? `${a + b},${by}` : `${bx},${a + b}`)
-    const across = dx === 0 ? x2 : y2
+  /** A labelled vertical arrow at x from y1 to y2; the label sits to its right. */
+  const arrow = (x: number, y1: number, y2: number, label: string) => {
+    const by = y2 - Math.sign(y2 - y1) * 10
     out.push(
-      `<line x1="${x1}" y1="${y1}" x2="${bx}" y2="${by}" stroke="${t.ink}" stroke-width="1.5"/>`,
-      `<polygon points="${x2},${y2} ${wing(across, -5)} ${wing(across, 5)}" fill="${t.ink}"/>`,
+      `<line x1="${x}" y1="${y1}" x2="${x}" y2="${by}" stroke="${t.ink}" stroke-width="1.75"/>`,
+      `<polygon points="${x},${y2} ${x - 6},${by} ${x + 6},${by}" fill="${t.ink}"/>`,
     )
-    if (dx === 0) text(label, x1 + 10, (y1 + y2) / 2 + 5, "label", 14, { muted: true })
-    else text(label, (x1 + x2) / 2, y1 - 9, "label", 14, { muted: true, middle: true })
+    text(label, x + 12, (y1 + y2) / 2 + 6, "label", LABEL, { muted: true })
   }
 
   const svg = (w: number, h: number) => {
-    const title = "A service, a layer, one file that composes the layers, and a test that swaps one"
-    const desc =
-      "1. The Mailer interface in packages/core/src/mailer.ts: send(message), which fails with MailerError. Your code asks for Mailer and never sees a layer. " +
-      "2. MailerLive in apps/web/src/server/mailer.ts implements Mailer by sending through the EMAIL binding. " +
-      "3. MailerLive is listed in AppLayer, next to DatabaseLayer and AuthLive, in apps/web/src/server/layers.ts. " +
-      "4. In a test, MailerTest also implements Mailer and keeps messages in an array; layer(MailerTest) provides it instead of MailerLive."
     const defs = [...glyphs]
       .filter(([, d]) => d !== "")
       .map(([id, d]) => `<path id="${id}" d="${d}"/>`)
@@ -179,119 +184,116 @@ ${out.join("\n")}
 `
   }
 
-  return { text, box, badge, chip, part, arrow, svg }
+  return { measure, text, box, badge, chip, arrow, svg }
 }
 
-/** 840 wide: three columns (interface, layer, composition), the test row under the app row. */
-const wide = (t: Theme) => {
-  const c = canvas(t)
-  const col = [24, 320, 616] as const
-  const w = 200
-  const rowA: Row = { y: 88, h: 188 }
-  const rowB: Row = { y: 368, h: 136 }
+const W = 520
+const M = 16 // outer margin
+const GAP = 24 // between the two columns
+const COL = (W - 2 * M - GAP) / 2
+const PAD = 14 // inside a box
+const LINE = 24 // line height
+const ARROW = 64 // room for an arrow and its label between rows
 
-  const step = (n: number, x: number, y: number, heading: string, dir: string) => {
-    c.badge(n, x + 12, y)
-    c.text(heading, x + 32, y + 6, "heading", 18)
-    c.text(dir, x, y + 32, "code", 13, { muted: true })
+/**
+ * The interface across the top. Under it two columns that mirror each other: the app on the left
+ * (the layer, then the file that composes it), the test on the right (the test layer, then what
+ * provides it). Both layers point up at the one interface.
+ */
+const layout = (t: Theme) => {
+  const c = canvas(t)
+  const left = M
+  const right = M + COL + GAP
+  const inner = COL - 2 * PAD
+  const wide = W - 2 * M - 2 * PAD
+
+  /** The step's badge and name, on one line or two. */
+  const heading = (n: number, x: number, y: number, lines: ReadonlyArray<string>) => {
+    c.badge(n, x + PAD + 13, y + 29)
+    lines.forEach((l, i) =>
+      c.text(l, x + PAD + 34, y + 36 + i * LINE, "heading", 20, { max: COL - 2 * PAD - 34 }),
+    )
   }
-  step(1, col[0], 36, "The interface", "packages/core/src")
-  step(2, col[1], 36, "A layer", "apps/web/src/server")
-  step(3, col[2], 36, "One file composes", "apps/web/src/server")
-  step(4, col[1], rowB.y - 52, "A test swaps the layer", "packages/core/test")
+  /** A file path at the bottom of a box, split after its last slash when it does not fit. */
+  const path = (x: number, bottom: number, file: string, width: number) => {
+    const fits = c.measure("code", file, SMALL).width <= width
+    const cut = file.lastIndexOf("/") + 1
+    const lines = fits ? [file] : [file.slice(0, cut), file.slice(cut)]
+    lines.forEach((l, i) =>
+      c.text(l, x + PAD, bottom - PAD - (lines.length - 1 - i) * LINE, "code", SMALL, {
+        muted: true,
+        max: width,
+      }),
+    )
+  }
+  const label = (s: string, x: number, y: number, muted = false) =>
+    c.text(s, x + PAD, y, "label", LABEL, { muted, max: inner })
 
-  const mailer: Row = { y: rowA.y, h: rowB.y + rowB.h - rowA.y }
-  c.part(col[0], w, mailer, t.straw, {
-    name: "Mailer",
-    lines: [{ code: "send(message)" }, "fails with MailerError"],
-    file: "mailer.ts",
-  })
-  const note = ["Your code asks for", "Mailer and never", "sees a layer."]
-  note.forEach((l, i) => c.text(l, col[0] + 16, 296 + i * 22, "label", 16, { muted: true }))
+  // 1. the interface, across the top
+  const top = { y: M, h: 212 }
+  c.box(M, top.y, W - 2 * M, top.h, t.straw)
+  heading(1, M, top.y, [stepInterface])
+  c.text("Notes", M + PAD, top.y + 72, "title", 20)
+  c.text("list, insert(title)", M + PAD, top.y + 100, "code", SMALL)
+  c.text("can fail with NotesUnavailable", M + PAD, top.y + 126, "label", LABEL)
+  c.text(
+    "createNote asks for Notes and never sees a layer.",
+    M + PAD,
+    top.y + 152,
+    "label",
+    LABEL,
+    {
+      muted: true,
+      max: wide,
+    },
+  )
+  path(M, top.y + top.h, interfaceFile, wide)
 
-  c.part(col[1], w, rowA, t.bronze, {
-    name: "MailerLive",
-    lines: ["sends through the", "EMAIL binding"],
-    file: "mailer.ts",
-  })
+  // 2 and 4: the layer and the test layer, side by side
+  const row2 = { y: top.y + top.h + ARROW, h: 220 }
+  c.box(left, row2.y, COL, row2.h, t.bronze)
+  heading(2, left, row2.y, [stepLayer])
+  c.text("NotesLive", left + PAD, row2.y + 94, "title", 20, { max: inner })
+  label("queries the note", left, row2.y + 124)
+  label("table with Drizzle", left, row2.y + 124 + LINE)
+  path(left, row2.y + row2.h, layerFile, inner)
 
-  c.box(col[2], rowA.y, w, rowA.h, t.purple)
-  c.text("AppLayer", col[2] + 16, rowA.y + 35, "title", 20)
-  const chipY = (i: number) => rowA.y + 52 + i * 36
-  c.chip(col[2] + 16, chipY(0), w - 32, "DatabaseLayer")
-  c.chip(col[2] + 16, chipY(1), w - 32, "AuthLive")
-  c.chip(col[2] + 16, chipY(2), w - 32, "MailerLive", t.bronze)
-  c.text("layers.ts", col[2] + 16, rowA.y + rowA.h - 16, "code", 13, { muted: true })
+  c.box(right, row2.y, COL, row2.h, t.blued)
+  heading(4, right, row2.y, ["A test swaps", "the layer"])
+  c.text("NotesInMemory", right + PAD, row2.y + 94, "title", 20, { max: inner })
+  label("keeps notes in a", right, row2.y + 124)
+  label("list in memory", right, row2.y + 124 + LINE)
+  path(right, row2.y + row2.h, testFile, inner)
 
-  c.part(col[1], w, rowB, t.blued, {
-    name: "MailerTest",
-    lines: ["keeps messages", "in an array"],
-    file: "mailer.test.ts",
-  })
-  c.part(col[2], w, rowB, t.blued, {
-    name: "layer(MailerTest)",
-    size: 16,
-    lines: ["runs your code with", "the test layer"],
-    file: "mailer.test.ts",
-  })
+  // 3: the file that composes the layers, and what provides the test layer
+  const row3 = { y: row2.y + row2.h + ARROW, h: 260 }
+  c.box(left, row3.y, COL, row3.h, t.purple)
+  heading(3, left, row3.y, [stepCompose])
+  c.text("AppLayer", left + PAD, row3.y + 74, "title", 20)
+  c.chip(left + PAD, row3.y + 92, inner, "DatabaseLayer", t.bronze)
+  label("holds NotesLive", left + 12, row3.y + 148, true)
+  c.chip(left + PAD, row3.y + 162, inner, "AuthLive")
+  path(left, row3.y + row3.h, layersFile, inner)
 
-  const lineA = chipY(2) + 14
-  const lineB = rowB.y + 52
-  c.arrow(col[1], lineA, col[0] + w, lineA, "implements")
-  c.arrow(col[1] + w, lineA, col[2] + 16, lineA, "listed in")
-  c.arrow(col[1], lineB, col[0] + w, lineB, "implements")
-  c.arrow(col[1] + w, lineB, col[2], lineB, "provided by")
-  return c.svg(840, 528)
-}
+  const provides = { y: row3.y, h: 172 }
+  c.box(right, provides.y, COL, provides.h, t.blued)
+  c.text("layer(NotesInMemory)", right + PAD, provides.y + 38, "title", SMALL, { max: inner })
+  label("runs createNote with", right, provides.y + 72)
+  label("the test layer", right, provides.y + 72 + LINE)
+  path(right, provides.y + provides.h, testFile, inner)
 
-/** 440 wide, for phones: the interface on top, the app in the left column, the test in the right. */
-const narrow = (t: Theme) => {
-  const c = canvas(t)
-  const col = [20, 230] as const
-  const w = 190
-  c.part(col[0], 400, { y: 20, h: 100 }, t.straw, {
-    step: 1,
-    name: "Mailer",
-    lines: [{ code: "send(message)" }, "fails with MailerError"],
-  })
-  const row2: Row = { y: 184, h: 100 }
-  c.part(col[0], w, row2, t.bronze, {
-    step: 2,
-    name: "MailerLive",
-    lines: ["sends through the", "EMAIL binding"],
-  })
-  c.part(col[1], w, row2, t.blued, {
-    step: 4,
-    name: "MailerTest",
-    lines: ["keeps messages", "in an array"],
-  })
-  const row3: Row = { y: 348, h: 168 }
-  c.box(col[0], row3.y, w, row3.h, t.purple)
-  c.badge(3, col[0] + 28, row3.y + 28)
-  c.text("AppLayer", col[0] + 48, row3.y + 35, "title", 20)
-  c.chip(col[0] + 16, row3.y + 56, w - 32, "DatabaseLayer")
-  c.chip(col[0] + 16, row3.y + 92, w - 32, "AuthLive")
-  c.chip(col[0] + 16, row3.y + 128, w - 32, "MailerLive", t.bronze)
-  c.part(col[1], w, { y: row3.y, h: 100 }, t.blued, {
-    name: "layer(MailerTest)",
-    size: 16,
-    lines: ["runs your code with", "the test layer"],
-  })
-
-  const up = 120
-  c.arrow(col[0] + 40, row2.y, col[0] + 40, up, "implements")
-  c.arrow(col[1] + 40, row2.y, col[1] + 40, up, "implements")
-  c.arrow(col[0] + 40, row2.y + row2.h, col[0] + 40, row3.y, "listed in")
-  c.arrow(col[1] + 40, row2.y + row2.h, col[1] + 40, row3.y, "provided by")
-  return c.svg(440, 536)
+  const ax = (x: number) => x + PAD + 13 // under the step badges
+  c.arrow(ax(left), row2.y, top.y + top.h, "implements")
+  c.arrow(ax(right), row2.y, top.y + top.h, "implements")
+  c.arrow(ax(left), row2.y + row2.h, row3.y, "listed in")
+  c.arrow(ax(right), row2.y + row2.h, provides.y, "provided by")
+  return c.svg(W, row3.y + row3.h + M)
 }
 
 export const diagramFiles = (): Map<string, string> =>
   new Map([
-    ["docs/assets/layers-light.svg", wide(themes.light)],
-    ["docs/assets/layers-dark.svg", wide(themes.dark)],
-    ["docs/assets/layers-narrow-light.svg", narrow(themes.light)],
-    ["docs/assets/layers-narrow-dark.svg", narrow(themes.dark)],
+    ["docs/assets/layers-light.svg", layout(themes.light)],
+    ["docs/assets/layers-dark.svg", layout(themes.dark)],
   ])
 
 if (import.meta.main) {
