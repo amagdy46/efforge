@@ -39,6 +39,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      # the tarball must install with npm alone, with no lockfile, and run (docs/decisions/0004)
+      - run: pnpm smoke:pack
       # trusted publishing needs npm 11.5.1+
       - run: npm install -g npm@latest
       - run: npm publish --access public

@@ -57,8 +57,12 @@ export const versions: Record<string, string> = {
   wrangler: "4.151.1",
 }
 
-/** Walks up from this file (src/ or dist/) to efforge's own package.json. */
-const readVersion = (): string => {
+/**
+ * efforge's own package root: the nearest directory above this module whose package.json is
+ * create-efforge. Works from `src/` (tests, `node src/bin.ts`) and from the single bundled
+ * `dist/bin.js`, whatever their depth.
+ */
+const findPackageRoot = (): { readonly dir: string; readonly version: string } | undefined => {
   let dir = import.meta.dirname
   for (;;) {
     try {
@@ -66,12 +70,18 @@ const readVersion = (): string => {
         name?: string
         version?: string
       }
-      if (pkg.name === "create-efforge" && pkg.version !== undefined) return pkg.version
+      if (pkg.name === "create-efforge" && pkg.version !== undefined)
+        return { dir, version: pkg.version }
     } catch {}
     const parent = dirname(dir)
-    if (parent === dir) return "0.0.0"
+    if (parent === dir) return undefined
     dir = parent
   }
 }
 
-export const efforgeVersion: string = readVersion()
+const packageRoot = findPackageRoot()
+
+export const efforgeVersion: string = packageRoot?.version ?? "0.0.0"
+
+/** The shipped `templates/` dir, next to `src/` and `dist/`. */
+export const templatesDir: string = join(packageRoot?.dir ?? import.meta.dirname, "templates")

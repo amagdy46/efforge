@@ -16,6 +16,22 @@ const ignorePatterns = [
 ]
 
 export default defineConfig({
+  // `pnpm build`: the CLI ships as one file with every dependency inlined, so nothing is resolved on
+  // the user's machine at install time (see docs/decisions/0004-bundle-the-cli.md).
+  pack: {
+    entry: { bin: "src/bin.ts" },
+    outDir: "dist",
+    format: "esm",
+    platform: "node",
+    target: "node24",
+    fixedExtension: false,
+    deps: { alwaysBundle: [/.*/], onlyBundle: false },
+    // jsonc-parser's `main` is a UMD build that require()s its own files at runtime; take its ESM build
+    alias: { "jsonc-parser": "jsonc-parser/lib/esm/main.js" },
+    // TypeScript (inside ts-morph) is CommonJS and reads __filename/__dirname
+    shims: true,
+    dts: false,
+  },
   lint: {
     ignorePatterns,
     categories: { correctness: "error", suspicious: "error", perf: "error" },
