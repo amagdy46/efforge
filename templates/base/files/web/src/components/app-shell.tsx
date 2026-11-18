@@ -62,13 +62,14 @@ export function AppShell({
       </aside>
       <div className="flex min-w-0 flex-col">
         <header className="sticky top-0 z-10 flex items-center gap-3 border-b bg-background/90 px-4 py-2.5 backdrop-blur lg:px-8">
-          <div className="lg:hidden">
+          {/* the name gives way (truncates) before the nav and the controls do */}
+          <div className="min-w-0 lg:hidden">
             <ProjectLink />
           </div>
-          <nav aria-label="App" className="flex gap-1 lg:hidden">
+          <nav aria-label="App" className="flex shrink-0 gap-1 lg:hidden">
             <NavLinks compact />
           </nav>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <ThemeToggle />
             {account}
           </div>

@@ -19,11 +19,15 @@ const BetterAuthLive = Layer.effect(
       secret: Config.Redacted("BETTER_AUTH_SECRET").parse(provider),
       baseURL: Config.option(Config.String("BETTER_AUTH_URL")).parse(provider),
     })
-    return makeAuth({
+    const auth = makeAuth({
       database,
       secret: Redacted.value(secret),
       baseURL: authBaseURL(Option.getOrUndefined(baseURL), import.meta.env.DEV),
     })
+    // Better Auth finishes starting in a promise. Settle it in the request that builds the layer:
+    // workerd refuses a promise from a request that has ended, which would fail later sign-ins
+    yield* Effect.promise(() => auth.$context)
+    return auth
   }),
 ).pipe(Layer.provide(AuthDatabaseLayer), Layer.provide(WorkerEnvLive))
 

@@ -1,7 +1,11 @@
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { basename, join } from "node:path"
+import { basename, join, posix } from "node:path"
+import { NodeServices } from "@effect/platform-node"
 import { afterAll, expect, it } from "@effect/vitest"
 import { Cause, Config, ConfigProvider, Effect, Exit, Layer } from "effect"
+import { loadAddons } from "../src/addon.ts"
+import { generate } from "../src/generate.ts"
+import { withDefaults } from "../src/stack.ts"
 
 // Modules of the generated app, run here. They are copied out of templates/ first (the templates'
 // tsconfig files extend paths that only exist in a generated project), into a directory that
@@ -125,4 +129,44 @@ it("regions: a card gets only the marked region of a file, and a file without on
   await expect(
     plugin.load.call(context, `${join(dir, "unmarked.ts")}?region=card`),
   ).rejects.toThrow(/has no "\/\/ #region card"/)
+})
+
+/** The code panel fits this many characters at 1440 px wide (docs/capability-cards.md). */
+const REGION_WIDTH = 80
+
+const stacksWithCards = (["none", "better-auth", "better-auth-orgs"] as const).flatMap((auth) =>
+  (["drizzle", "effect-sql"] as const).flatMap((orm) =>
+    (["d1", "postgres"] as const).map((database) =>
+      withDefaults({ name: "app", database, orm, auth, infra: "none", extras: ["realtime"] }),
+    ),
+  ),
+)
+
+it(`every region a registered card shows fits in ${REGION_WIDTH} characters, on every stack`, async () => {
+  const addons = await Effect.runPromise(
+    loadAddons(templates).pipe(Effect.provide(NodeServices.layer)),
+  )
+  const long: string[] = []
+  let regionsChecked = 0
+  for (const config of stacksWithCards) {
+    const tree = await Effect.runPromise(
+      generate(config, addons).pipe(Effect.provide(NodeServices.layer)),
+    )
+    for (const [file, text] of tree) {
+      if (!file.startsWith("apps/web/src/") || !file.endsWith(".tsx")) continue
+      for (const m of text.matchAll(/from "([^"]+)\?region=card"/g)) {
+        const target = posix.normalize(posix.join(posix.dirname(file), m[1] as string))
+        const shown = region(tree.get(target) ?? "", "card")
+        expect(shown, `${file} shows ${target}, which has no card region`).toBeDefined()
+        regionsChecked++
+        for (const line of (shown ?? "").split("\n"))
+          if (line.length > REGION_WIDTH)
+            long.push(
+              `${config.database}/${config.orm}/${config.auth} ${target}: ${line.length}: ${line}`,
+            )
+      }
+    }
+  }
+  expect(regionsChecked).toBeGreaterThan(50)
+  expect([...new Set(long)]).toEqual([])
 })

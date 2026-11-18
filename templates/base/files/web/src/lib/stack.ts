@@ -74,7 +74,8 @@ export const stackItems = (stack: Stack, cards: ReadonlyArray<string>): StackIte
   ]
 }
 
-const suggestions = ["email", "storage", "realtime", "workflows", "ai/effect-ai-byok", "browser"]
+// capabilities with a dashboard card come first
+const suggestions = ["realtime", "email", "storage", "workflows", "ai/effect-ai-byok", "browser"]
 
 /** The `add` command for one capability this project does not have yet. */
 export const nextAdd = (stack: Stack): string => {

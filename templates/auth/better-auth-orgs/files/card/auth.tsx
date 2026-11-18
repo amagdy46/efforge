@@ -87,10 +87,7 @@ export const auth: Capability = {
     ["Service", "packages/core/src/Auth.ts"],
     ["Layer", "apps/web/src/server/auth-live.ts"],
   ],
-  test: {
-    path: "packages/core/test/auth.test.ts",
-    name: "activeOrganizationId fails with NoActiveOrganization",
-  },
+  test: { path: "packages/core/test/auth.test.ts", name: "sessionOrNull is null" },
   agents: "Auth (Better Auth)",
   Demo: AuthDemo,
 }

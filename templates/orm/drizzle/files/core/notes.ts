@@ -7,12 +7,16 @@ export interface Note {
 }
 
 /** The title was blank or longer than 200 characters. */
-export class InvalidNote extends Data.TaggedError("InvalidNote")<{ readonly message: string }> {}
+export class InvalidNote extends Data.TaggedError("InvalidNote")<{
+  readonly message: string
+}> {}
 
 /** The notes could not be read or written; `message` says what to do about it. */
 export class NotesUnavailable extends Data.TaggedError("NotesUnavailable")<{
   readonly reason: "not-migrated" | "unreachable" | "query-failed"
   readonly message: string
+  /** The driver's error, for the server log */
+  readonly cause?: string
 }> {}
 
 /** Where notes are kept. packages/db implements it on the `Database` service; tests swap in a fake. */
@@ -33,7 +37,9 @@ export const createNote = (
   Effect.gen(function* () {
     const title = input.trim()
     if (title.length === 0 || title.length > 200)
-      return yield* new InvalidNote({ message: "A note needs a title of 1 to 200 characters." })
+      return yield* new InvalidNote({
+        message: "A note needs a title of 1 to 200 characters.",
+      })
     const notes = yield* Notes
     return yield* notes.insert(title)
   })
@@ -61,5 +67,10 @@ export const notesUnavailable = (cause: unknown): NotesUnavailable => {
       message:
         "The database is not reachable. For Postgres, start it with docker compose up -d --wait.",
     })
-  return new NotesUnavailable({ reason: "query-failed", message: text })
+  // the driver's own text stays in the server log (runOutcome logs failures), not in the browser
+  return new NotesUnavailable({
+    reason: "query-failed",
+    message: "The database refused the query. The server log has its error.",
+    cause: text,
+  })
 }

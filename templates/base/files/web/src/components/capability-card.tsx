@@ -1,12 +1,40 @@
+import { Fragment } from "react"
 import type { Capability } from "@/capabilities/types"
 import { CodeBlock } from "@/components/code-block"
 import { cn } from "@/lib/utils"
 
-/** The tempering colours, in order; a card takes the colour of its layer in the layer graph. */
-export const temperClasses = ["bg-temper-1", "bg-temper-2", "bg-temper-3", "bg-temper-4"] as const
+/**
+ * The tempering colours, in order: one per layer, repeating only past the eighth. A card takes the
+ * colour of its layer in the layer graph.
+ */
+export const temperClasses = [
+  "bg-temper-1",
+  "bg-temper-2",
+  "bg-temper-3",
+  "bg-temper-4",
+  "bg-temper-5",
+  "bg-temper-6",
+  "bg-temper-7",
+  "bg-temper-8",
+] as const
 
+/** A file path that wraps after a `/`, not in the middle of a name. */
 function Path({ children }: { children: string }) {
-  return <code className="font-mono text-[0.8rem] break-all text-foreground">{children}</code>
+  const parts = children.split("/")
+  return (
+    <code className="font-mono text-[0.8rem] [overflow-wrap:anywhere] text-foreground">
+      {parts.map((part, i) => (
+        <Fragment key={parts.slice(0, i + 1).join("/")}>
+          {part}
+          {i < parts.length - 1 ? (
+            <>
+              /<wbr />
+            </>
+          ) : null}
+        </Fragment>
+      ))}
+    </code>
+  )
 }
 
 /** One capability: its demo next to its code, then the files, test and docs to read next. */

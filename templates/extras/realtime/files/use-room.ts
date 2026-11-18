@@ -40,8 +40,8 @@ export function useRoom(roomId: string) {
       })
       ws.addEventListener("message", ({ data }: MessageEvent) => {
         if (typeof data === "string" && data !== PONG) {
-          const id = nextId.current++
-          setMessages((all) => [...all, { id, text: data }].slice(-MAX_KEPT_MESSAGES))
+          const message = { id: nextId.current++, text: data }
+          setMessages((all) => [...all, message].slice(-MAX_KEPT_MESSAGES))
         }
       })
       ws.addEventListener("close", () => {

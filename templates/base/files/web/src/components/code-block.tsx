@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react"
+import { type KeyboardEvent, useId, useMemo, useRef, useState } from "react"
 import type { CodeFile } from "@/capabilities/types"
 import { highlight } from "@/lib/highlight"
 import { cn } from "@/lib/utils"
@@ -61,22 +61,43 @@ const tabName = (path: string) =>
 /** Source files with syntax colouring; several become tabs. The file path is the caption. */
 export function CodeBlock({ files }: { files: ReadonlyArray<CodeFile> }) {
   const [active, setActive] = useState(0)
+  const tabs = useRef<Array<HTMLButtonElement | null>>([])
   const id = useId()
   const file = files[active] ?? files[0]
   if (file === undefined) return null
+
+  // one tab stop for the tab list; arrow keys, Home and End move between files
+  const onKeyDown = (event: KeyboardEvent) => {
+    const last = files.length - 1
+    const next = {
+      ArrowRight: active === last ? 0 : active + 1,
+      ArrowLeft: active === 0 ? last : active - 1,
+      Home: 0,
+      End: last,
+    }[event.key]
+    if (next === undefined) return
+    event.preventDefault()
+    setActive(next)
+    tabs.current[next]?.focus()
+  }
   return (
     <figure className="flex h-full min-w-0 flex-col">
       {files.length > 1 ? (
         <div
           role="tablist"
           aria-label="Files"
-          className="flex gap-1 overflow-x-auto border-b px-2 pt-2"
+          onKeyDown={onKeyDown}
+          className="flex gap-1 overflow-x-auto overflow-y-hidden border-b px-2 pt-2"
         >
           {files.map((f, i) => (
             <button
               key={f.path}
+              ref={(element) => {
+                tabs.current[i] = element
+              }}
               type="button"
               role="tab"
+              tabIndex={i === active ? 0 : -1}
               id={`${id}-tab-${i}`}
               aria-selected={i === active}
               aria-controls={`${id}-panel`}

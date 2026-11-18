@@ -22,9 +22,10 @@ const failure = (error: { readonly _tag: string; readonly message: string }): Fa
 }
 
 /**
- * Runs `effect` on the app runtime for a server function. Its typed failures come back as data
- * (`{ ok: false, error: { _tag, message } }`) so the UI can show each one as a normal state, and
- * a missing setting comes back as `NotConfigured`. Defects still reject, like `runPromise`.
+ * Runs `effect` on the app runtime for a server function. Its typed failures are logged on the
+ * server and come back as data (`{ ok: false, error: { _tag, message } }`, nothing else of the
+ * error), so the UI can show each one as a normal state; a missing setting comes back as
+ * `NotConfigured`. Defects still reject, like `runPromise`.
  */
 export const runOutcome = <A, E extends Failure, R extends Layer.Success<typeof AppLayer>>(
   effect: Effect.Effect<A, E, R>,
@@ -32,6 +33,7 @@ export const runOutcome = <A, E extends Failure, R extends Layer.Success<typeof 
   runtime
     .runPromise(
       effect.pipe(
+        Effect.tapError((error) => Effect.logWarning(error._tag, error)),
         Effect.match({
           onSuccess: (value): Outcome<A> => ({ ok: true, value }),
           onFailure: (error): Outcome<A> => ({ ok: false, error: failure(error) }),

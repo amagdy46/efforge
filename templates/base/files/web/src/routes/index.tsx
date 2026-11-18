@@ -113,7 +113,8 @@ function Landing() {
             </Step>
             <Step n={3} title="Add a capability">
               <p className="text-sm text-muted-foreground">
-                efforge wires it in and adds its card to the dashboard.
+                efforge wires in its service, layer and test, and its dashboard card when it has
+                one.
               </p>
               <Command command={nextAdd(stack)} />
             </Step>

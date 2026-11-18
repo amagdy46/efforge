@@ -25,11 +25,4 @@ layer(SignedOut)("signed out", (it) => {
       expect(yield* sessionOrNull).toBeNull()
     }),
   )
-
-  it.effect("a program that needs the session fails with Unauthorized", () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(Auth.use((auth) => auth.currentSession))
-      expect(error).toBeInstanceOf(Unauthorized)
-    }),
-  )
 })

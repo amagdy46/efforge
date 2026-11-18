@@ -4,7 +4,9 @@ import { Schema } from "effect"
 import { runOutcome } from "./outcome"
 
 // #region card
-const GreetInput = Schema.Struct({ name: Schema.String.check(Schema.isMaxLength(200)) })
+const GreetInput = Schema.Struct({
+  name: Schema.String.check(Schema.isMaxLength(200)),
+})
 
 /** Runs `greet` on the server; `InvalidName` comes back as data. */
 export const greet = createServerFn({ method: "POST" })

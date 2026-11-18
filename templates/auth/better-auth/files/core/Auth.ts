@@ -12,14 +12,14 @@ export interface Session {
 }
 
 // #region card
-/** Who is making the current request. Implemented by Better Auth in apps/web/src/server/auth-live.ts. */
+/** Who is making the request. Better Auth implements it (auth-live.ts). */
 export class Auth extends Context.Service<
   Auth,
   { readonly currentSession: Effect.Effect<Session, Unauthorized> }
 >()("@repo/core/Auth") {}
 
-/** The signed-in user, or `null` when nobody is. Route guards use it to decide where to send a visitor. */
-export const sessionOrNull: Effect.Effect<Session | null, never, Auth> = Auth.use(
-  (auth) => auth.currentSession,
-).pipe(Effect.catchTag("Unauthorized", () => Effect.succeed(null)))
+/** The signed-in user, or `null`. Route guards use it to pick a page. */
+export const sessionOrNull = Auth.use((auth) => auth.currentSession).pipe(
+  Effect.catchTag("Unauthorized", () => Effect.succeed(null)),
+)
 // #endregion

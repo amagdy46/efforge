@@ -9,7 +9,9 @@ export const listNotes = createServerFn({ method: "GET" }).handler(() =>
   runOutcome(Notes.use((notes) => notes.list)),
 )
 
-const AddNoteInput = Schema.Struct({ title: Schema.String.check(Schema.isMaxLength(1000)) })
+const AddNoteInput = Schema.Struct({
+  title: Schema.String.check(Schema.isMaxLength(1000)),
+})
 
 /** `InvalidNote` and `NotesUnavailable` come back as data. */
 export const addNote = createServerFn({ method: "POST" })

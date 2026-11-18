@@ -20,7 +20,11 @@ export const NotesLive = Layer.effect(
         db
           .insert(note)
           .values({ title })
-          .returning({ id: note.id, title: note.title, createdAt: note.createdAt })
+          .returning({
+            id: note.id,
+            title: note.title,
+            createdAt: note.createdAt,
+          })
           .pipe(
             Effect.mapError(notesUnavailable),
             Effect.flatMap(([row]) =>
