@@ -134,7 +134,7 @@ const makeCase = (
       b.lines[0] = last
       b.lines[b.lines.length - 1] = first
     } else if (kind === "dropPair") {
-      b.lines = b.lines.slice(1, -1).map((l) => ({ ...l, user: true }))
+      b.lines = b.lines.slice(1, -1).map((l) => ({ text: l.text, user: true }))
     } else if (kind === "nest") {
       const inner = take()
       if (inner === undefined) {

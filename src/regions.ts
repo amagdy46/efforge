@@ -207,10 +207,9 @@ export const syncSections = (
 
   if (legacy) {
     if (missing.length === 0) return { kind: "synced", text, added }
-    const block = missing.flatMap((s) => [
-      line(openMarker(prefix, s.id), eol),
-      ...body(s.content, eol),
-    ])
+    const block: string[] = []
+    for (const s of missing)
+      block.push(line(openMarker(prefix, s.id), eol), ...body(s.content, eol))
     return { kind: "synced", text: insertAt(lines, footer, block, eol).join("\n"), added }
   }
 
