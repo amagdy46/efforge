@@ -3,12 +3,11 @@ import { FailureNote, Pending } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { region } from "@/lib/snippet"
 import { useServerCall } from "@/lib/use-server-call"
 import { addNote, listNotes } from "@/server/notes"
-import program from "../../../../packages/core/src/notes.ts?raw"
-import store from "../../../../packages/db/src/notes.ts?raw"
-import serverFns from "../server/notes.ts?raw"
+import program from "../../../../packages/core/src/notes.ts?region=card"
+import store from "../../../../packages/db/src/notes.ts?region=card"
+import serverFns from "../server/notes.ts?region=card"
 import type { Capability } from "./types"
 
 function DatabaseDemo() {
@@ -24,9 +23,11 @@ function DatabaseDemo() {
   const submit = useCallback(
     (event: SubmitEvent) => {
       event.preventDefault()
-      void adding.run({ data: { title } }).then(() => {
+      // keep what was typed when the add fails, so it can be fixed and sent again
+      void adding.run({ data: { title } }).then((outcome) => {
+        if (!outcome.ok) return
         setTitle("")
-        return load()
+        void load()
       })
     },
     [adding, load, title],
@@ -42,6 +43,7 @@ function DatabaseDemo() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Buy milk"
+            maxLength={1000}
           />
           <Button type="submit" disabled={adding.state.status === "running"}>
             Add note
@@ -91,9 +93,9 @@ export const database: Capability = {
     "Notes are stored through the Notes service, which packages/db implements on the Database service.",
   layer: { name: "DatabaseLayer", provides: ["Database", "Notes"], needs: ["database binding"] },
   code: [
-    { path: "packages/core/src/notes.ts", source: region(program, "card") },
-    { path: "packages/db/src/notes.ts", source: region(store, "card") },
-    { path: "apps/web/src/server/notes.ts", source: region(serverFns, "card") },
+    { path: "packages/core/src/notes.ts", source: program },
+    { path: "packages/db/src/notes.ts", source: store },
+    { path: "apps/web/src/server/notes.ts", source: serverFns },
   ],
   files: [
     ["Service and program", "packages/core/src/notes.ts"],

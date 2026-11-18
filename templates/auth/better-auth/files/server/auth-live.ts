@@ -4,6 +4,7 @@ import { Config, Context, Effect, Layer, Option, Redacted } from "effect"
 import { WorkerConfig } from "effect-cf"
 import { type AuthInstance, makeAuth } from "./auth"
 import { AuthDatabase, AuthDatabaseLayer } from "./auth-database"
+import { authBaseURL } from "./auth-url"
 import { WorkerEnvLive } from "./cloudflare"
 
 /** The Better Auth instance; `/api/auth/*` is served from it (see auth-route.ts). */
@@ -21,11 +22,7 @@ const BetterAuthLive = Layer.effect(
     return makeAuth({
       database,
       secret: Redacted.value(secret),
-      // under `pnpm dev` the origin comes from each request on a local host, so sign-in works on
-      // whatever port Vite picks; a deployed Worker uses BETTER_AUTH_URL when it is set
-      baseURL: import.meta.env.DEV
-        ? { allowedHosts: ["localhost:*", "127.0.0.1:*"], protocol: "http" }
-        : Option.getOrUndefined(Option.filter(baseURL, (url) => url !== "")),
+      baseURL: authBaseURL(Option.getOrUndefined(baseURL), import.meta.env.DEV),
     })
   }),
 ).pipe(Layer.provide(AuthDatabaseLayer), Layer.provide(WorkerEnvLive))

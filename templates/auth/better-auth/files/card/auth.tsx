@@ -3,12 +3,11 @@ import type { ReactNode } from "react"
 import { FailureNote, Pending } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { authClient } from "@/lib/auth-client"
-import { region } from "@/lib/snippet"
 import { useServerCall } from "@/lib/use-server-call"
 import { whoAmI } from "@/server/account"
-import service from "../../../../packages/core/src/Auth.ts?raw"
-import serverFn from "../server/account.ts?raw"
-import middleware from "../server/require-session.ts?raw"
+import service from "../../../../packages/core/src/Auth.ts?region=card"
+import serverFn from "../server/account.ts?region=card"
+import middleware from "../server/require-session.ts?region=card"
 import type { Capability } from "./types"
 
 const app = getRouteApi("/app")
@@ -72,9 +71,9 @@ export const auth: Capability = {
     "Better Auth behind the Auth service: code reads the session from Auth.currentSession, never from cookies.",
   layer: { name: "AuthLive", provides: ["Auth", "BetterAuth"], needs: ["BETTER_AUTH_SECRET"] },
   code: [
-    { path: "apps/web/src/server/account.ts", source: region(serverFn, "card") },
-    { path: "apps/web/src/server/require-session.ts", source: region(middleware, "card") },
-    { path: "packages/core/src/Auth.ts", source: region(service, "card") },
+    { path: "apps/web/src/server/account.ts", source: serverFn },
+    { path: "apps/web/src/server/require-session.ts", source: middleware },
+    { path: "packages/core/src/Auth.ts", source: service },
   ],
   files: [
     ["Service", "packages/core/src/Auth.ts"],

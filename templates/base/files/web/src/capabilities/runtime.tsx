@@ -3,12 +3,11 @@ import { FailureNote, Pending } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { region } from "@/lib/snippet"
 import { useServerCall } from "@/lib/use-server-call"
 import { greet } from "@/server/greeting"
-import program from "../../../../packages/core/src/greeting.ts?raw"
-import serverFn from "../server/greeting.ts?raw"
-import layers from "../server/layers.ts?raw"
+import program from "../../../../packages/core/src/greeting.ts?region=card"
+import serverFn from "../server/greeting.ts?region=card"
+import layers from "../server/layers.ts?region=card"
 import type { Capability } from "./types"
 
 function RuntimeDemo() {
@@ -25,7 +24,12 @@ function RuntimeDemo() {
       <form onSubmit={submit} className="space-y-2">
         <Label htmlFor="runtime-name">Name</Label>
         <div className="flex gap-2">
-          <Input id="runtime-name" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input
+            id="runtime-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={200}
+          />
           <Button type="submit" disabled={state.status === "running"}>
             Run on the server
           </Button>
@@ -66,9 +70,9 @@ export const runtime: Capability = {
     "Server functions run Effect programs on AppLayer, the one place this app composes its layers.",
   layer: { name: "Logger.layer", provides: ["Logger"], needs: [] },
   code: [
-    { path: "packages/core/src/greeting.ts", source: region(program, "card") },
-    { path: "apps/web/src/server/greeting.ts", source: region(serverFn, "card") },
-    { path: "apps/web/src/server/layers.ts", source: region(layers, "card") },
+    { path: "packages/core/src/greeting.ts", source: program },
+    { path: "apps/web/src/server/greeting.ts", source: serverFn },
+    { path: "apps/web/src/server/layers.ts", source: layers },
   ],
   files: [
     ["Program", "packages/core/src/greeting.ts"],

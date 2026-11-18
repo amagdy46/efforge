@@ -4,7 +4,7 @@ import { CapabilityCard } from "@/components/capability-card"
 import { LayerGraph } from "@/components/layer-graph"
 import { parseAppLayer } from "@/lib/layer-graph"
 import { PROJECT_NAME } from "@/lib/project"
-import layersSource from "../../server/layers.ts?raw"
+import layersSource from "../../server/layers.ts?region=card"
 
 export const Route = createFileRoute("/app/")({
   head: () => ({ meta: [{ title: `Capabilities · ${PROJECT_NAME}` }] }),

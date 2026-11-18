@@ -1,17 +1,17 @@
 import { ExternalLink } from "lucide-react"
 import { type SubmitEvent, useState } from "react"
+import { isMessageTooLarge, MAX_MESSAGE_BYTES } from "@repo/core/realtime-limits"
 import { FailureNote } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { region } from "@/lib/snippet"
 import { type RoomStatus, useRoom } from "@/lib/use-room"
 import { useServerCall } from "@/lib/use-server-call"
 import { cn } from "@/lib/utils"
 import { announce } from "@/server/realtime-demo"
-import program from "../../../../packages/core/src/realtime.ts?raw"
-import serverFn from "../server/realtime-demo.ts?raw"
-import hook from "../lib/use-room.ts?raw"
+import program from "../../../../packages/core/src/realtime.ts?region=card"
+import serverFn from "../server/realtime-demo.ts?region=card"
+import hook from "../lib/use-room.ts?region=card"
 import type { Capability } from "./types"
 
 const statusText: Record<RoomStatus, string> = {
@@ -25,10 +25,11 @@ function RealtimeDemo() {
   const { messages, status, send } = useRoom("demo")
   const [text, setText] = useState("")
   const server = useServerCall(announce)
+  const tooLarge = isMessageTooLarge(text)
 
   const submit = (event: SubmitEvent) => {
     event.preventDefault()
-    if (text.trim() === "") return
+    if (text.trim() === "" || tooLarge) return
     send(text)
     setText("")
   }
@@ -76,10 +77,17 @@ function RealtimeDemo() {
             onChange={(e) => setText(e.target.value)}
             placeholder="Say hi"
           />
-          <Button type="submit" disabled={status !== "open"}>
+          <Button type="submit" disabled={status !== "open" || tooLarge}>
             Send
           </Button>
         </div>
+        {tooLarge ? (
+          <p className="text-xs text-muted-foreground">
+            Over the room's {MAX_MESSAGE_BYTES}-byte limit, so the room would close the socket. Send
+            it from the server to see the <code className="font-mono">announce</code> program refuse
+            it with <code className="font-mono">MessageTooLarge</code>.
+          </p>
+        ) : null}
       </form>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <Button
@@ -88,7 +96,10 @@ function RealtimeDemo() {
           disabled={server.state.status === "running"}
           onClick={() =>
             void server.run({
-              data: { text: `From the server, ${new Date().toLocaleTimeString()}` },
+              data: {
+                text:
+                  text.trim() === "" ? `From the server, ${new Date().toLocaleTimeString()}` : text,
+              },
             })
           }
         >
@@ -125,9 +136,9 @@ export const realtime: Capability = {
     "WebSocket rooms on a hibernating Durable Object, behind the Realtime service; the server can broadcast into any room.",
   layer: { name: "RealtimeLive", provides: ["Realtime"], needs: ["ROOM Durable Object"] },
   code: [
-    { path: "packages/core/src/realtime.ts", source: region(program, "card") },
-    { path: "apps/web/src/server/realtime-demo.ts", source: region(serverFn, "card") },
-    { path: "apps/web/src/lib/use-room.ts", source: region(hook, "card") },
+    { path: "packages/core/src/realtime.ts", source: program },
+    { path: "apps/web/src/server/realtime-demo.ts", source: serverFn },
+    { path: "apps/web/src/lib/use-room.ts", source: hook },
   ],
   files: [
     ["Service and program", "packages/core/src/realtime.ts"],

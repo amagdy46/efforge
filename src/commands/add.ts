@@ -404,7 +404,7 @@ export const addAddons = (
     }
     if (cardsSkipped.length > 0)
       notes.push(
-        `No dashboard card for ${cardsSkipped.join(", ")}: this project has no ${REGISTRY_FILE} (the dashboard came with efforge 0.3). The add-on works without it; there is nothing to do.`,
+        `No dashboard card for ${cardsSkipped.join(", ")}: this project has no ${REGISTRY_FILE} (made before efforge 0.3, or its dashboard was removed). The add-on works without it; there is nothing to do.`,
       )
     if (conflicts.length > 0)
       return yield* new OverlayConflict({

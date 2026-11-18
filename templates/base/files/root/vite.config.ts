@@ -33,9 +33,6 @@ export default defineConfig({
       "react/react-in-jsx-scope": "off",
       // Effect's tagged values are matched on `_tag` (Data.TaggedEnum, Data.TaggedError)
       "no-underscore-dangle": ["error", { allow: ["_tag"] }],
-      // TypeScript checks default imports; this rule cannot see the default export of Vite's
-      // `?raw` modules, which capability cards use to show source files
-      "import/default": "off",
       // exact pins make "unstable" Effect APIs safe; this flags it.effect itself
       "effecttsgo/unstable-api-usage": "off",
       // bindings reach code through effect-cf layers; cloudflare.ts is the one file that reads env
@@ -57,6 +54,12 @@ export default defineConfig({
       {
         files: ["**/*.test.ts", "**/*.test.tsx"],
         rules: { "effect-tests/no-manual-runtime": "error" },
+      },
+      {
+        // TypeScript checks default imports; this rule cannot see the default export of the
+        // `?region=card` modules (apps/web/regions.ts) the dashboard shows source with
+        files: ["apps/web/src/capabilities/**", "apps/web/src/routes/app/index.tsx"],
+        rules: { "import/default": "off" },
       },
       {
         files: ["apps/web/src/server/cloudflare.ts"],

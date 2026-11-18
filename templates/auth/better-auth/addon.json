@@ -20,6 +20,10 @@
       "target": "apps/web/src/server/auth-live.ts"
     },
     {
+      "path": "files/shared/server/auth-url.ts",
+      "target": "apps/web/src/server/auth-url.ts"
+    },
+    {
       "path": "files/shared/server/auth-route.ts",
       "target": "apps/web/src/server/auth-route.ts"
     },
@@ -270,7 +274,7 @@
     {
       "name": "BETTER_AUTH_URL",
       "example": "https://app.example.com",
-      "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). Under pnpm dev the origin comes from each request."
+      "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port)."
     }
   ],
   "requires": [],
@@ -416,7 +420,7 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "auth-secret",
-        "content": "- `BETTER_AUTH_SECRET` signs sessions: set it as a Worker secret (`.dev.vars` locally, `wrangler secret put BETTER_AUTH_SECRET` in production). Never log or return it. `BETTER_AUTH_URL` is the public origin; when unset, and always under `pnpm dev`, Better Auth takes it from the request."
+        "content": "- `BETTER_AUTH_SECRET` signs sessions: set it as a Worker secret (`.dev.vars` locally, `wrangler secret put BETTER_AUTH_SECRET` in production). Never log or return it. `BETTER_AUTH_URL` is the public origin and always wins when set. Unset, Better Auth takes it from the request (under `pnpm dev`, from localhost on any port); set it to sign in from another host in development, such as a phone on your network or a tunnel."
       },
       "when": {
         "infra": [
@@ -428,7 +432,7 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "auth-secret",
-        "content": "- `BETTER_AUTH_SECRET` signs sessions: Alchemy passes it to the Worker from `.env` locally and from the deploy workflow secret in CI. Never log or return it. `BETTER_AUTH_URL` is the public origin; when unset, and always under `pnpm dev`, Better Auth takes it from the request."
+        "content": "- `BETTER_AUTH_SECRET` signs sessions: Alchemy passes it to the Worker from `.env` locally and from the deploy workflow secret in CI. Never log or return it. `BETTER_AUTH_URL` is the public origin and always wins when set. Unset, Better Auth takes it from the request (under `pnpm dev`, from localhost on any port); set it to sign in from another host in development, such as a phone on your network or a tunnel."
       },
       "when": {
         "infra": [

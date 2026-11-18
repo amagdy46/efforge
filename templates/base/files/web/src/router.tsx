@@ -1,8 +1,14 @@
 import { createRouter } from "@tanstack/react-router"
+import { ErrorPage } from "./components/error-page"
 import { routeTree } from "./routeTree.gen"
 
 export function getRouter() {
-  return createRouter({ routeTree, scrollRestoration: true, defaultPreload: "intent" })
+  return createRouter({
+    routeTree,
+    scrollRestoration: true,
+    defaultPreload: "intent",
+    defaultErrorComponent: ErrorPage,
+  })
 }
 
 declare module "@tanstack/react-router" {

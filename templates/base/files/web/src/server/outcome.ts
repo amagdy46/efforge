@@ -1,6 +1,7 @@
 import { Effect, type Layer } from "effect"
 import type { AppLayer } from "./layers"
 import { runtime } from "./runtime"
+import { asNotConfigured } from "./settings"
 
 /** A failure the browser can match on: the tagged error's `_tag` and its message. */
 export interface Failure {
@@ -13,18 +14,11 @@ export type Outcome<A> =
   | { readonly ok: true; readonly value: A }
   | { readonly ok: false; readonly error: Failure }
 
-/** A layer could not start because a setting is missing, so nothing that needs it can run. */
-const notConfigured = (error: unknown): Failure | undefined => {
-  if (typeof error !== "object" || error === null || !("_tag" in error)) return undefined
-  const tag = String(error._tag)
-  if (!tag.endsWith("ConfigError")) return undefined
-  const message = "message" in error ? String(error.message) : tag
-  // Config errors name the key as `at ["NAME"]`
-  const key = /\["([A-Z0-9_]+)"\]/.exec(message)?.[1]
-  return {
-    _tag: "NotConfigured",
-    message: key === undefined ? message : `${key} is not set.`,
-  }
+const failure = (error: { readonly _tag: string; readonly message: string }): Failure => {
+  const missing = asNotConfigured(error)
+  return missing === undefined
+    ? { _tag: error._tag, message: error.message }
+    : { _tag: missing._tag, message: missing.message }
 }
 
 /**
@@ -40,15 +34,12 @@ export const runOutcome = <A, E extends Failure, R extends Layer.Success<typeof 
       effect.pipe(
         Effect.match({
           onSuccess: (value): Outcome<A> => ({ ok: true, value }),
-          onFailure: (error): Outcome<A> => ({
-            ok: false,
-            error: { _tag: error._tag, message: error.message },
-          }),
+          onFailure: (error): Outcome<A> => ({ ok: false, error: failure(error) }),
         }),
       ),
     )
-    .catch((error: unknown) => {
-      const failure = notConfigured(error)
-      if (failure === undefined) throw error
-      return { ok: false, error: failure }
+    .catch((error: unknown): Outcome<A> => {
+      const missing = asNotConfigured(error)
+      if (missing === undefined) throw error
+      return { ok: false, error: { _tag: missing._tag, message: missing.message } }
     })

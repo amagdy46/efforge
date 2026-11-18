@@ -9,10 +9,7 @@ export function FailureNote({ error }: { error: Failure }) {
       <div role="status" className="flex gap-2 rounded-md border border-dashed p-3 text-sm">
         <Settings2 aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <p>
-          <span className="font-medium">Not configured yet.</span> {error.message} Set it in{" "}
-          <code className="font-mono text-[0.85em]">.dev.vars</code> (
-          <code className="font-mono text-[0.85em]">.env</code> with Alchemy) and restart{" "}
-          <code className="font-mono text-[0.85em]">pnpm dev</code>.
+          <span className="font-medium">Not configured yet.</span> {error.message}
         </p>
       </div>
     )

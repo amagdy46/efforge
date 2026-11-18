@@ -1,8 +1,10 @@
 import { Context, Data, Effect } from "effect"
 import { isMessageTooLarge, MAX_MESSAGE_BYTES } from "./realtime-limits"
 
+/** The room could not be reached; `message` says what failed, `cause` is the underlying error. */
 export class RealtimeError extends Data.TaggedError("RealtimeError")<{
-  readonly operation: string
+  readonly operation: "connect" | "broadcast" | "connections"
+  readonly message: string
   readonly cause: unknown
 }> {}
 

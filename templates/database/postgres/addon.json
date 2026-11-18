@@ -18,6 +18,16 @@
     {
       "path": "files/runtime.ts",
       "target": "apps/web/src/server/runtime.ts"
+    },
+    {
+      "path": "../../base/files/web/src/server/settings.ts",
+      "target": "apps/web/src/server/settings.ts",
+      "ifAbsent": true
+    },
+    {
+      "path": "../../base/files/web/src/server/manifest.ts",
+      "target": "apps/web/src/server/manifest.ts",
+      "ifAbsent": true
     }
   ],
   "dependencies": {

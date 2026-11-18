@@ -24,7 +24,10 @@ export interface Capability {
     /** Bindings and settings it reads */
     readonly needs: ReadonlyArray<string>
   }
-  /** 10-20 lines each, imported with `?raw` so the card shows the code as it is now */
+  /**
+   * 10-20 lines each: the `card` region of a file, imported with `?region=card` (see regions.ts),
+   * so the card shows the code as it is now. The region is public: it ships to the browser.
+   */
   readonly code: ReadonlyArray<CodeFile>
   /** Files to open next, as `[what, path]` */
   readonly files: ReadonlyArray<readonly [string, string]>

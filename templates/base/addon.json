@@ -192,10 +192,6 @@
       "target": "apps/web/src/lib/project.ts"
     },
     {
-      "path": "files/web/src/lib/snippet.ts",
-      "target": "apps/web/src/lib/snippet.ts"
-    },
-    {
       "path": "files/web/src/lib/highlight.ts",
       "target": "apps/web/src/lib/highlight.ts"
     },
@@ -226,6 +222,34 @@
     {
       "path": "files/web/src/capabilities/registry.ts",
       "target": "apps/web/src/capabilities/registry.ts"
+    },
+    {
+      "path": "files/web/src/server/manifest.ts",
+      "target": "apps/web/src/server/manifest.ts"
+    },
+    {
+      "path": "files/web/src/server/settings.ts",
+      "target": "apps/web/src/server/settings.ts"
+    },
+    {
+      "path": "files/web/src/components/error-page.tsx",
+      "target": "apps/web/src/components/error-page.tsx"
+    },
+    {
+      "path": "files/web/src/start.ts",
+      "target": "apps/web/src/start.ts"
+    },
+    {
+      "path": "files/web/src/lib/failure.ts",
+      "target": "apps/web/src/lib/failure.ts"
+    },
+    {
+      "path": "files/web/regions.ts",
+      "target": "apps/web/regions.ts"
+    },
+    {
+      "path": "files/web/src/regions.d.ts",
+      "target": "apps/web/src/regions.d.ts"
     }
   ],
   "card": {
