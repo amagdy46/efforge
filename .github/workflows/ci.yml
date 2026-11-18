@@ -3,9 +3,16 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Daily, so a dependency release that breaks new projects shows up within a day even when
+  # nothing here changed. Generated projects install without a lockfile, so they resolve
+  # against today's npm.
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # the event is part of the key, so a scheduled run and a push to main don't cancel each other
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -24,7 +31,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: pnpm
+          # scheduled and manual runs fetch every package fresh: a cached store could hide a
+          # version that was unpublished or broken upstream
+          cache: ${{ (github.event_name != 'schedule' && github.event_name != 'workflow_dispatch') && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
@@ -69,10 +78,35 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: pnpm
+          # scheduled and manual runs fetch every package fresh: a cached store could hide a
+          # version that was unpublished or broken upstream
+          cache: ${{ (github.event_name != 'schedule' && github.event_name != 'workflow_dispatch') && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
       # anchored: `pg-drizzle` must not also select `pg-drizzle-orgs`
       - run: pnpm test:e2e -t "stacks build ${{ matrix.case }}$"
+
+  # Installs the packed tarball the way `npm create efforge` does (npm, its own cache, no
+  # lockfile, outside the repo), creates the default stack, builds it, runs one `add` with the
+  # packed CLI and builds again. Catches what the repo's own lockfile hides.
+  smoke-pack:
+    name: packed tarball (create, build, add)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # so create's initial commit and add's clean-tree check behave as on a user's machine
+      GIT_AUTHOR_NAME: efforge-ci
+      GIT_AUTHOR_EMAIL: efforge-ci@users.noreply.github.com
+      GIT_COMMITTER_NAME: efforge-ci
+      GIT_COMMITTER_EMAIL: efforge-ci@users.noreply.github.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # only to build dist/ for the tarball; the smoke install never sees these node_modules
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/smoke-pack.ts --dir "$RUNNER_TEMP"
 
   # The Browser extra ships a container image (apps/browser); make sure it builds.
   # Skipped until the `house` e2e case exists on the branch.
@@ -88,7 +122,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: pnpm
+          # scheduled and manual runs fetch every package fresh: a cached store could hide a
+          # version that was unpublished or broken upstream
+          cache: ${{ (github.event_name != 'schedule' && github.event_name != 'workflow_dispatch') && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
       - name: Generate the house stack
         run: |
@@ -127,7 +163,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: pnpm
+          # scheduled and manual runs fetch every package fresh: a cached store could hide a
+          # version that was unpublished or broken upstream
+          cache: ${{ (github.event_name != 'schedule' && github.event_name != 'workflow_dispatch') && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e -t "browser flow"
