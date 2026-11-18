@@ -2,7 +2,7 @@ import { Console, Context, Effect } from "effect"
 import pc from "picocolors"
 import { efforgeVersion } from "./versions.ts"
 
-// The `--json` contract (docs/json.md, ADR 0006). Every document carries `efforge` (the CLI
+// The `--json` contract (docs/json.md, ADR 0007). Every document carries `efforge` (the CLI
 // version) and `contract` (this number). Adding a field is not a change of contract; renaming or
 // removing one, or changing what a field means, bumps it.
 

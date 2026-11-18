@@ -162,6 +162,37 @@
       },
       "description": "`<package.json>: <script>` entries an add-on replaced."
     },
+    "packageManager": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The root packageManager, when this run raised it so pnpm honours the Effect overrides (0.2.0 projects); else null."
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Things left to do by hand, one line each."
+    },
     "installed": {
       "type": "boolean",
       "description": "pnpm install ran in this run."
@@ -247,6 +278,8 @@
     "changed",
     "removed",
     "replacedScripts",
+    "packageManager",
+    "notes",
     "installed",
     "env",
     "nextSteps",

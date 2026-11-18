@@ -77,6 +77,13 @@ export const AddOutput = Schema.Struct({
   replacedScripts: Strings.annotate({
     description: "`<package.json>: <script>` entries an add-on replaced.",
   }),
+  packageManager: Schema.NullOr(Schema.Struct({ from: Schema.String, to: Schema.String })).annotate(
+    {
+      description:
+        "The root packageManager, when this run raised it so pnpm honours the Effect overrides (0.2.0 projects); else null.",
+    },
+  ),
+  notes: Strings.annotate({ description: "Things left to do by hand, one line each." }),
   installed: Schema.Boolean.annotate({ description: "pnpm install ran in this run." }),
   env: Schema.Array(EnvVar),
   nextSteps: Schema.Array(Step),

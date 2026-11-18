@@ -169,7 +169,7 @@ npx create-efforge create my-app --json --dry-run
 
 ## `add`
 
-`stack` is the project's stack afterwards. `created` and `changed` are the files this run created and changed, `removed` the generated files it deleted (`wrangler.jsonc` when you add Alchemy), `skipped` the ids the project already had and files already as efforge would write them. `replacedScripts` names package scripts an add-on replaced. `installed` says whether `pnpm install` ran in this run; when it didn't and should, `nextSteps` starts with it. `env` lists only the env vars this run added.
+`stack` is the project's stack afterwards. `created` and `changed` are the files this run created and changed, `removed` the generated files it deleted (`wrangler.jsonc` when you add Alchemy), `skipped` the ids the project already had and files already as efforge would write them. `replacedScripts` names package scripts an add-on replaced. `packageManager` is `{from, to}` when `add` raised the root `packageManager` (projects made by efforge 0.2.0, whose pnpm ignored the Effect overrides), else `null`. `notes` are things left to do by hand, one line each (for example, the widgets line to add to a dashboard you edited). `installed` says whether `pnpm install` ran in this run; when it didn't and should, `nextSteps` starts with it. `env` lists only the env vars this run added.
 
 <!-- example: add -->
 
@@ -218,6 +218,8 @@ npx create-efforge add email --json --cwd my-app
   ],
   "removed": [],
   "replacedScripts": [],
+  "packageManager": null,
+  "notes": [],
   "installed": false,
   "env": [
     {
@@ -306,6 +308,8 @@ npx create-efforge add ai storage --json --dry-run --cwd my-app
   ],
   "removed": [],
   "replacedScripts": [],
+  "packageManager": null,
+  "notes": [],
   "installed": false,
   "env": [
     {
@@ -341,7 +345,7 @@ npx create-efforge add ai storage --json --dry-run --cwd my-app
   ],
   "nextSteps": [
     {
-      "command": "pnpm install",
+      "command": "pnpm install --no-frozen-lockfile",
       "cwd": "/home/me/projects/my-app"
     }
   ],
@@ -1020,10 +1024,10 @@ npx create-efforge add ai --json --cwd my-app
   "ok": false,
   "error": {
     "code": "CommandFailed",
-    "message": "`pnpm install` failed. The files were written; run it yourself.",
-    "fix": "cd my-app && pnpm install",
-    "failed": "pnpm install",
-    "output": "ERR_PNPM_OUTDATED_LOCKFILE  Cannot install with a frozen lockfile"
+    "message": "`pnpm install --no-frozen-lockfile` failed. The files were written; run it yourself.",
+    "fix": "cd my-app && pnpm install --no-frozen-lockfile",
+    "failed": "pnpm install --no-frozen-lockfile",
+    "output": "ERR_PNPM_META_FETCH_FAIL  GET https://registry.npmjs.org/@effect%2Fai-openai: request to registry.npmjs.org failed, reason: getaddrinfo ENOTFOUND registry.npmjs.org"
   }
 }
 ```

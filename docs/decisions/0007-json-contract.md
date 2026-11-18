@@ -1,4 +1,4 @@
-# 0006 — `--json` is a versioned contract, and every error says what to run instead
+# 0007 — `--json` is a versioned contract, and every error says what to run instead
 
 Date: 2026-11-18. Status: accepted.
 

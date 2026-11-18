@@ -43,6 +43,8 @@ import {
   effectVersion,
   efforgeVersion,
   isEffectLockstep,
+  pnpmVersion,
+  pnpmWildcardOverrides,
   versions,
 } from "../versions.ts"
 import {
@@ -116,7 +118,20 @@ export interface AddResult {
   readonly replacedScripts: string[]
   /** The project's stack after this run. */
   readonly stack: StackConfig
+  /** The root `packageManager`, when this run raised it so pnpm honours the Effect overrides. */
+  readonly packageManager: { readonly from: string; readonly to: string } | null
+  /** Things left for you to do by hand, one line each. */
+  readonly notes: string[]
 }
+
+/**
+ * `add` has just changed dependencies, so the lockfile must be rewritten. With `CI` set (CI, and many
+ * agent sandboxes) pnpm installs with a frozen lockfile by default and fails with OUTDATED_LOCKFILE.
+ */
+const INSTALL_ARGS = ["install", "--no-frozen-lockfile"]
+
+const DASHBOARD = "apps/web/src/routes/app/index.tsx"
+const WIDGETS = "apps/web/src/components/widgets.tsx"
 
 export type AddError =
   | NotAnEfforgeProject
@@ -491,6 +506,26 @@ export const addAddons = (
           else out.delete(file)
         }
     }
+    // 3b. dashboards from efforge 0.2.0 with a database or auth don't render the add-on widgets:
+    // replace one that is still what efforge generated, else say what to add
+    const notes: string[] = []
+    if (seams.has(WIDGETS)) {
+      const existing = yield* read(DASHBOARD)
+      if (existing !== undefined && !existing.includes("widgets") && !out.has(DASHBOARD)) {
+        const generated = (yield* generate(stack, addons)).get(DASHBOARD)
+        if (generated?.includes("{widgets}")) {
+          if (opts.overwrite || manifest.files[DASHBOARD] === hash(existing)) {
+            out.set(DASHBOARD, generated)
+            written.add(DASHBOARD)
+            hashes[DASHBOARD] = hash(generated)
+          } else
+            notes.push(
+              `${DASHBOARD} doesn't render the add-on widgets, so their demo won't show on /app. Add \`import { widgets } from "@/components/widgets"\` and put {widgets} in the page.`,
+            )
+        }
+      }
+    }
+
     const transformed = new Set<string>()
     for (const file of seams) {
       // seam files are re-edited by transforms on every add, never hash-checked
@@ -599,11 +634,39 @@ export const addAddons = (
           Object.fromEntries(Object.entries(catalog).toSorted(([a], [b]) => byName(a, b))),
         )
       for (const [name, version] of Object.entries(effectOverrides(effect)))
-        if (!doc.hasIn(["overrides", name])) doc.setIn(["overrides", name], version)
+        // an unscoped `effect` key (written by hand) already covers the scoped one
+        if (
+          !doc.hasIn(["overrides", name]) &&
+          !(name.startsWith("effect@") && doc.hasIn(["overrides", "effect"]))
+        )
+          doc.setIn(["overrides", name], version)
       const next = doc.toString()
       if (next !== text) {
         out.set("pnpm-workspace.yaml", next)
         written.add("pnpm-workspace.yaml")
+      }
+    }
+
+    // 5b. pnpm before 12.17 accepts the wildcard overrides and ignores them, which leaves a 0.2.0
+    // project on mismatched Effect packages: raise `packageManager` to the generated pin, never lower it
+    let packageManager: AddResult["packageManager"] = null
+    {
+      const text = out.get("package.json") ?? (yield* read("package.json"))
+      let pkg: Record<string, unknown> | undefined
+      try {
+        pkg = text === undefined ? undefined : (JSON.parse(text) as Record<string, unknown>)
+      } catch {} // not JSON: leave it alone (step 4 reports it when an add-on needs it)
+      const from = typeof pkg?.packageManager === "string" ? pkg.packageManager : undefined
+      const pinned = from === undefined ? undefined : /^pnpm@(\d+\.\d+\.\d+)/.exec(from)?.[1]
+      if (text !== undefined && pinned !== undefined && newer(pnpmWildcardOverrides, pinned)) {
+        const to = `pnpm@${pnpmVersion}`
+        const indent = /^([ \t]+)"/m.exec(text)?.[1] ?? "  "
+        out.set(
+          "package.json",
+          `${JSON.stringify({ ...pkg, packageManager: to }, null, indent)}${text.endsWith("\n") ? "\n" : ""}`,
+        )
+        written.add("package.json")
+        packageManager = { from: from as string, to }
       }
     }
 
@@ -667,6 +730,8 @@ export const addAddons = (
       ),
       envVars,
       replacedScripts,
+      packageManager,
+      notes,
     }
     if (opts.dryRun) return result
 
@@ -678,7 +743,7 @@ export const addAddons = (
       yield* fs.writeFileString(abs, content).pipe(io(rel))
     }
     if ((out.size > 0 || removed.size > 0) && opts.install !== false) {
-      yield* exec("pnpm", ["install"], dir)
+      yield* exec("pnpm", INSTALL_ARGS, dir)
       // add-ons may add or replace routes
       yield* generateRouteTree(dir)
     }
@@ -975,7 +1040,7 @@ export const addHandler = (input: {
       if (!input.install || input.dryRun || !changes) return
       if (installs)
         yield* io.task("Installing dependencies (pnpm install)", (log) =>
-          exec("pnpm", ["install"], dir, log),
+          exec("pnpm", INSTALL_ARGS, dir, log),
         )
       // add-ons may add or replace routes; without an install, `pnpm typecheck` regenerates it later
       if (installs || installed) yield* io.step("Generating the route tree", generateRouteTree(dir))
@@ -985,7 +1050,10 @@ export const addHandler = (input: {
     const alchemy =
       manifest.stack.infra === "alchemy" || result.added.some((a) => a.id === "infra/alchemy")
     const steps: Step[] = [
-      ...(changes && !installs && (depsChanged || !installed) ? [{ command: "pnpm install" }] : []),
+      // changed dependencies need the lockfile rewritten, which pnpm refuses by default when CI is set
+      ...(changes && !installs && (depsChanged || !installed)
+        ? [{ command: depsChanged ? `pnpm ${INSTALL_ARGS.join(" ")}` : "pnpm install" }]
+        : []),
       ...(database === "postgres"
         ? [
             { command: "docker compose up -d --wait", note: "local Postgres" },
@@ -994,15 +1062,18 @@ export const addHandler = (input: {
         : []),
       ...(database === "d1" && !alchemy ? [{ command: "pnpm db:migrate", note: "local D1" }] : []),
     ]
-    if (result.removed.length > 0)
-      yield* io.warn(
-        `${input.dryRun ? "Would remove" : "Removed"} ${result.removed.join(", ")}: the new add-ons replace it.`,
-      )
-    if (result.replacedScripts.length > 0)
-      yield* io.warn(
-        `${input.dryRun ? "Would replace" : "Replaced"} existing package scripts:\n${result.replacedScripts.map((x) => `  ${x}`).join("\n")}`,
-      )
+    const replacementWarnings = Effect.gen(function* () {
+      if (result.removed.length > 0)
+        yield* io.warn(
+          `${input.dryRun ? "Would remove" : "Removed"} ${result.removed.join(", ")}: the new add-ons replace it.`,
+        )
+      if (result.replacedScripts.length > 0)
+        yield* io.warn(
+          `${input.dryRun ? "Would replace" : "Replaced"} existing package scripts:\n${result.replacedScripts.map((x) => `  ${x}`).join("\n")}`,
+        )
+    })
     if (input.json) {
+      yield* replacementWarnings
       yield* finish
       return yield* printSuccess({
         dryRun: input.dryRun,
@@ -1017,6 +1088,8 @@ export const addHandler = (input: {
         ].toSorted(),
         removed: result.removed,
         replacedScripts: result.replacedScripts,
+        packageManager: result.packageManager,
+        notes: result.notes,
         installed: installs,
         env: result.envVars,
         nextSteps: steps.map((s) => Object.assign({}, s, { cwd: dir })),
@@ -1043,6 +1116,12 @@ export const addHandler = (input: {
       ].join("\n"),
       `${input.dryRun ? "Would change" : "Changed"}: ${result.added.map((a) => a.title).join(", ") || "stack"}`,
     )
+    yield* replacementWarnings
+    if (result.packageManager !== null)
+      yield* io.info(
+        `${input.dryRun ? "Would raise" : "Raised"} packageManager from ${result.packageManager.from} to ${result.packageManager.to}: older pnpm ignores the overrides that keep Effect's packages on one version.`,
+      )
+    for (const note of result.notes) yield* io.warn(note)
     if (input.dryRun) return yield* io.outro(pc.dim("dry run: nothing written"))
 
     yield* finish

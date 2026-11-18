@@ -87,6 +87,16 @@ it.each([
   expect(err.split("\n").length).toBeLessThanOrEqual(3)
 })
 
+it("--json: an invalid value for a global flag is one JSON error too, not a log line", async () => {
+  await cli(["zz", "--yes", "--dry-run", "--json", "--log-level=nope"])
+  expect(process.exitCode).toBe(1)
+  expect(stderr).toEqual([])
+  const out = JSON.parse(stdout.join("\n"))
+  expect(out.error.code).toBe("InvalidFlagValue")
+  expect(out.error.fix).toBe("npx create-efforge zz --yes --dry-run --json")
+  expect(out.error.message).toContain("--log-level")
+})
+
 it("a valid command still runs, and --help still prints the help", async () => {
   await cli(["list", "--json"])
   expect(process.exitCode).toBeUndefined()

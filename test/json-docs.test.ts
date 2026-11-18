@@ -106,7 +106,7 @@ const scenarios: Record<string, Scenario> = {
   PnpmMissing: { fail: (c) => (c === "pnpm --version" ? "pnpm: not found" : undefined) },
   SetupIncomplete: {
     fail: (c) =>
-      c === "pnpm install"
+      c.startsWith("pnpm install")
         ? "ERR_PNPM_META_FETCH_FAIL  GET https://registry.npmjs.org/effect: request to registry.npmjs.org failed, reason: getaddrinfo ENOTFOUND registry.npmjs.org"
         : undefined,
   },
@@ -147,8 +147,8 @@ const scenarios: Record<string, Scenario> = {
       mkdirSync(join(work, "my-app/node_modules"))
     },
     fail: (c) =>
-      c === "pnpm install"
-        ? "ERR_PNPM_OUTDATED_LOCKFILE  Cannot install with a frozen lockfile"
+      c.startsWith("pnpm install")
+        ? "ERR_PNPM_META_FETCH_FAIL  GET https://registry.npmjs.org/@effect%2Fai-openai: request to registry.npmjs.org failed, reason: getaddrinfo ENOTFOUND registry.npmjs.org"
         : undefined,
   },
   InternalError: { templates: "/nonexistent/templates" },

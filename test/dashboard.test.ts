@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { NodeFileSystem, NodeServices } from "@effect/platform-node"
@@ -83,4 +83,43 @@ it("adding realtime later shows it on an auth + database dashboard", async () =>
   } finally {
     rmSync(tmp, { recursive: true, force: true })
   }
+})
+
+// A 0.2.0 dashboard with a database or auth doesn't render the widgets (test/fixtures/v0.2.0).
+const v020 = new URL("fixtures/v0.2.0/d1-effect-sql-auth", import.meta.url).pathname
+
+const addRealtimeTo020 = async (edit?: (dashboard: string) => string) => {
+  const tmp = mkdtempSync(join(tmpdir(), "efforge-dashboard-"))
+  const dir = join(tmp, "old")
+  cpSync(v020, dir, { recursive: true })
+  if (edit !== undefined)
+    writeFileSync(join(dir, DASHBOARD), edit(readFileSync(join(dir, DASHBOARD), "utf8")))
+  try {
+    const result = await Effect.runPromise(
+      addAddons(dir, ["realtime"], { overwrite: false, dryRun: false, install: false }).pipe(
+        Effect.provide(NodeServices.layer),
+      ),
+    )
+    return { result, dashboard: readFileSync(join(dir, DASHBOARD), "utf8") }
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
+  }
+}
+
+it("add realtime on a 0.2.0 project replaces a dashboard that is still what efforge generated", async () => {
+  expect(rendersWidgets(readFileSync(join(v020, DASHBOARD), "utf8"))).toBe(false)
+  const { result, dashboard } = await addRealtimeTo020()
+  expect(rendersWidgets(dashboard)).toBe(true)
+  expect(result.written).toContain(DASHBOARD)
+  expect(result.notes).toEqual([])
+})
+
+it("add realtime on a 0.2.0 project leaves an edited dashboard alone and says what to add", async () => {
+  const mine = (s: string) => s.replace("Dashboard</h1>", "My dashboard</h1>")
+  const { result, dashboard } = await addRealtimeTo020(mine)
+  expect(dashboard).toBe(mine(readFileSync(join(v020, DASHBOARD), "utf8")))
+  expect(result.written).not.toContain(DASHBOARD)
+  expect(result.notes).toHaveLength(1)
+  expect(result.notes[0]).toContain(DASHBOARD)
+  expect(result.notes[0]).toContain('import { widgets } from "@/components/widgets"')
 })

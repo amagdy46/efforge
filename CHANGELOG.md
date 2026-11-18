@@ -16,7 +16,7 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 
 ### Changed
 
-- The `--json` output changed shape (see [ADR 0006](docs/decisions/0006-json-contract.md)): `list --json` is an object with `addons`, `add --json` reports `created` and `changed`, `nextSteps` entries are objects, and some error codes were renamed or split (`UnrecognizedOption` is now `UnknownFlag`).
+- The `--json` output changed shape (see [ADR 0007](docs/decisions/0007-json-contract.md)): `list --json` is an object with `addons`, `add --json` reports `created` and `changed`, `nextSteps` entries are objects, and some error codes were renamed or split (`UnrecognizedOption` is now `UnknownFlag`).
 - `efforge add` with no ids prints a short error listing the add-ons the project can still add, not the help.
 - `CI` set to any value other than `0` or `false` counts as no terminal: a needed prompt fails at once and names the flag.
 - Hints and errors say `npx create-efforge`, never `efforge` alone, so every printed command works when copied.
@@ -25,33 +25,50 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 
 - `npx create-efforge lst` no longer creates a project called "lst". A first argument one typo away from `list`, `add` or `create` is refused, with the corrected command.
 - Output without a terminal no longer starts with a section header (`◇ Data`) before an error.
+- When `add` leaves the install to you after changing dependencies, its next step is `pnpm install --no-frozen-lockfile`, which works with `CI` set, like the install `add` runs itself.
 
 ## 0.2.1 (2026-11-18)
 
 `npm create efforge` starts again, and new projects with a database or realtime build again. Generated projects now use Effect 4.1.4.
 
-If you created a project with 0.2.0 and `pnpm build` fails with `failed to resolve import "effect/..."`, two Effect versions are installed side by side. Copy the `overrides` block from a new project's `pnpm-workspace.yaml` into yours, with each version set to your catalog's `effect`, set `packageManager` to `pnpm@12.21.0` (the wildcard entries need pnpm 12.17 or later), and run `pnpm install`. Any `efforge add` run with 0.2.1 also writes those overrides.
+If you created a project with 0.2.0 and `pnpm build` fails with `failed to resolve import "effect/..."`, two Effect versions are installed side by side. Any `efforge add` run with 0.2.1 repairs it. To repair it by hand:
+
+- In the root `package.json`, set `"packageManager": "pnpm@12.21.0"` (the overrides need pnpm 12.17 or later).
+- In `pnpm-workspace.yaml`, add the overrides below under `overrides:`, set to your catalog's `effect` (4.0.5 for 0.2.0), then run `pnpm install`.
+
+```yaml
+  effect@>=4.0.0-0: 4.0.5
+  "@effect/ai-*": 4.0.5
+  "@effect/atom-*": 4.0.5
+  "@effect/openapi-generator": 4.0.5
+  "@effect/opentelemetry": 4.0.5
+  "@effect/platform-*": 4.0.5
+  "@effect/sql-*": 4.0.5
+  "@effect/vitest": 4.0.5
+```
 
 ### Added
 
 - `pnpm smoke:pack` packs the CLI, installs the tarball with npm in an empty directory, runs it through npm, npx and pnpm dlx, then creates the default stack, builds it, adds email and builds again. Releases run it on the tarball they publish.
 - CI runs daily and on demand without the pnpm cache, runs the packed-tarball smoke test and the `add` e2e case, and actually runs the e2e matrix. The name filter matched no test before, so no stack had run in CI.
-- `scripts/bump.ts` checks pins against `@effect/tsgo`'s supported versions and the tools Vite+ bundles, and exits 1 when they disagree.
+- `scripts/bump.ts` checks pins against `@effect/tsgo`'s supported versions and the tools Vite+ bundles, and exits 1 when they disagree. `--write` leaves a pin that check holds (vitest stays on the version Vite+ bundles) and prints why.
 
 ### Changed
 
 - Generated projects use Effect 4.1.4, effect-cf 0.59.0, better-auth 1.7.25, Vite+ 1.7.0, `@effect/tsgo` 0.70.0, Alchemy 2.0.0-beta.87 and the official Drizzle `1.0.0-rc.5`, and pin pnpm 12.21.0.
 - The Alchemy stack imports the Cloudflare provider from `@alchemy.run/cloudflare`, where Alchemy moved it.
-- `efforge add --json` output includes `nextSteps`, the commands left to run.
+- `efforge add --json` output includes `nextSteps`, the commands left to run, `packageManager` and `notes`.
+- `efforge add` raises the root `packageManager` to pnpm 12.21.0 when it is older than 12.17, which ignores the overrides that hold Effect's packages at one version, and says so. It never lowers it.
 
 ### Fixed
 
 - `npm create efforge` and `pnpm dlx create-efforge` no longer crash on start. The CLI ships as one bundled file with no dependencies, so nothing is resolved when you install it.
-- Projects with a database, and projects with realtime but no database, build again. Effect's packages are released together, and libraries such as drizzle-orm and effect-cf asked for them with open ranges, which installed Effect 4.1 next to 4.0. Generated projects now pin every Effect package to one version with `overrides` in `pnpm-workspace.yaml`, and `efforge add` adds those overrides to older projects.
-- The realtime demo shows on `/app` with every database and auth choice. The ORM and auth dashboards now render the add-on widgets.
+- Projects with a database, and projects with realtime but no database, build again. Effect's packages are released together, and libraries such as drizzle-orm and effect-cf asked for them with open ranges, which installed Effect 4.1 next to 4.0. Generated projects now pin every Effect 4 package to one version with `overrides` in `pnpm-workspace.yaml`, and `efforge add` adds those overrides to older projects. Libraries that depend on Effect 3, such as uploadthing, keep their own copy.
+- The realtime demo shows on `/app` with every database and auth choice. The ORM and auth dashboards now render the add-on widgets. `efforge add realtime` on an older project updates its dashboard if you haven't edited it, and otherwise prints the two lines to add. If you created a 0.2.0 project with realtime and a database or auth, nothing prompts the repair: add `import { widgets } from "@/components/widgets"` to `apps/web/src/routes/app/index.tsx` and put `{widgets}` in the page.
 - `pnpm lint` and `pnpm check` load the Effect rules again. They run through `effect-tsgo vp`, because Vite+ 1.7 lints types with its own bundled tsrs.
 - `efforge add` no longer leaves a `pnpm-lock.yaml` in a project that was never installed, so it no longer warns about uncommitted changes it caused. `create` no longer writes one into the current directory either.
 - `efforge add` on a project that was never installed skips the route tree and tells you to run `pnpm install`.
+- `efforge add` installs when `CI` is set (CI, and many agent sandboxes). pnpm freezes the lockfile there by default and refused to add the new dependencies with `ERR_PNPM_OUTDATED_LOCKFILE`; `add` now runs `pnpm install --no-frozen-lockfile`.
 - A mistyped or invalid flag prints a short error that names the closest flag, instead of the full help. With `--json` it is one `{"error": {"code", "message"}}` object on stdout. `efforge add` with no ids says what to pass.
 - Docs and error messages no longer say "v0.1".
 
