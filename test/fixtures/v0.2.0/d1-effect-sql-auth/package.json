@@ -1,0 +1,25 @@
+{
+  "name": "old-db-monorepo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "vp lint",
+    "format": "vp fmt",
+    "check": "vp check",
+    "prepare": "effect-tsgo patch --typescript --oxlint",
+    "db:migrate": "pnpm --filter @repo/db db:migrate"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "packageManager": "pnpm@12.4.2"
+}
