@@ -154,10 +154,31 @@ const checkRegionsOnly = (dir: string): number => {
   return checked
 }
 
+/**
+ * The README and AGENTS.md tell people to run `pnpm db:generate` after a schema change: on a fresh
+ * project it must exit 0 and write nothing, or the committed Drizzle snapshots are stale.
+ */
+const checkDbGenerate = (dir: string) => {
+  const db = join(dir, "packages/db")
+  const files = () =>
+    filesUnder(db)
+      .filter((f) => !f.includes("node_modules"))
+      .map((f) => `${f}\n${readFileSync(f, "utf8")}`)
+      .join("\n")
+  const before = files()
+  const r = spawnSync("pnpm db:generate", { cwd: dir, shell: true, encoding: "utf8" })
+  const out = `${r.stdout}\n${r.stderr}`
+  if (r.status !== 0) throw new Error(`pnpm db:generate exited ${r.status}\n${out}`)
+  if (!/No schema changes/.test(out))
+    throw new Error(`pnpm db:generate wanted a migration:\n${out}`)
+  if (files() !== before) throw new Error("pnpm db:generate changed files in packages/db")
+}
+
 /** Generates `config` into a tmp dir, installs, then runs the generated project's full gate: typecheck, check, test, build. */
 const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
   Effect.gen(function* () {
     const dir = yield* generateStack(config)
+    if (config.orm === "drizzle") yield* Effect.try(() => checkDbGenerate(dir))
     yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
     // a minimal stack's card files may have nothing outside their regions; auth and database ones do
     yield* Effect.try(() => checkRegionsOnly(dir))
@@ -388,6 +409,7 @@ describe("add on a real project", () => {
           install: true,
         })
         yield* Effect.try(() => checkEffectLockstep(dir))
+        yield* Effect.try(() => checkDbGenerate(dir))
         yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
         rmSync(dir, { recursive: true, force: true })
       }).pipe(Effect.provide(NodeServices.layer)),

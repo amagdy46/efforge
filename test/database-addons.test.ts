@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from "node:fs"
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect, it } from "@effect/vitest"
 import { Effect, Path } from "effect"
@@ -92,4 +93,18 @@ it("no database means no packages/db", async () => {
   const tree = await gen({ database: "none", orm: "none" })
   expect([...tree.keys()].some((f) => f.startsWith("packages/db/"))).toBe(false)
   expect(text(tree, "apps/web/src/server/layers.ts")).not.toContain("DatabaseLayer")
+})
+
+it("every committed Drizzle snapshot is the version the pinned drizzle-kit writes", () => {
+  // drizzle-kit 1.0.0-rc.5 refuses an older Postgres snapshot ("run drizzle-kit up"), which broke
+  // `pnpm db:generate` on a fresh project; the e2e matrix runs db:generate on every Drizzle stack
+  const want: Record<string, number> = { postgres: 9, sqlite: 7 }
+  const found = readdirSync(new URL("../templates", import.meta.url), { recursive: true })
+    .map(String)
+    .filter((f) => f.endsWith("snapshot.json"))
+  expect(found.length).toBeGreaterThanOrEqual(8)
+  for (const f of found) {
+    const s = JSON.parse(readFileSync(new URL(`../templates/${f}`, import.meta.url), "utf8"))
+    expect(s.version, f).toBe(String(want[s.dialect]))
+  }
 })
