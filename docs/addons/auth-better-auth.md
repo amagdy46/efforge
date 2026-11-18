@@ -51,7 +51,7 @@ Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`. It has one m
 
 ## Files it writes
 
-`efforge add` writes these files. A file marked *replaces* is one efforge generated before; it is replaced only if you have not edited it, and otherwise `add` changes nothing and shows the diff.
+`efforge add` writes these files. A file marked *replaces* is one efforge generated before; it is replaced only if you have not edited it, and otherwise `add` changes nothing and shows the diff. A file marked *only if missing* is written only where the project lacks it.
 
 | File | Only with |
 | --- | --- |

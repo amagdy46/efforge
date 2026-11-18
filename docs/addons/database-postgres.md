@@ -38,7 +38,7 @@ None: this add-on adds no service of its own.
 
 ## Files it writes
 
-`efforge add` writes these files. A file marked *replaces* is one efforge generated before; it is replaced only if you have not edited it, and otherwise `add` changes nothing and shows the diff.
+`efforge add` writes these files. A file marked *replaces* is one efforge generated before; it is replaced only if you have not edited it, and otherwise `add` changes nothing and shows the diff. A file marked *only if missing* is written only where the project lacks it.
 
 - `docker-compose.yml`
 - `packages/db/package.json`

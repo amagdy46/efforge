@@ -408,9 +408,17 @@ const page = (m: AddonManifest, dir: string, existing: ReadonlySet<string>): str
   if (files.length === 0) lines.push("None.")
   else {
     lines.push(
-      replaced.length === 0
-        ? "`efforge add` writes these files."
-        : "`efforge add` writes these files. A file marked *replaces* is one efforge generated before; it is replaced only if you have not edited it, and otherwise `add` changes nothing and shows the diff.",
+      [
+        "`efforge add` writes these files.",
+        ...(replaced.length === 0
+          ? []
+          : [
+              "A file marked *replaces* is one efforge generated before; it is replaced only if you have not edited it, and otherwise `add` changes nothing and shows the diff.",
+            ]),
+        ...(files.some((f) => f.ifAbsent === true)
+          ? ["A file marked *only if missing* is written only where the project lacks it."]
+          : []),
+      ].join(" "),
       "",
     )
     const byTarget = new Map<string, Array<When | undefined>>()

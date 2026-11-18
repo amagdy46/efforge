@@ -34,7 +34,7 @@ export class Notes extends Context.Service<
 >()("@repo/core/Notes") {}
 ```
 
-An **Effect** is a description of work that has not run yet. `Effect.Effect<Note, NotesUnavailable>` means: when it runs, it succeeds with a `Note` or fails with a `NotesUnavailable`. Failures are part of the type, so the compiler knows how `insert` can fail.
+An **Effect** is a description of work that has not run yet. `Effect.Effect<Note, NotesUnavailable>` means: when it runs, it succeeds with a `Note` or fails with a `NotesUnavailable`. Failures are part of the type, so the compiler knows how `insert` can fail. `list` is itself an Effect, which reads the notes each time it runs; `insert` is a function that returns one.
 
 `Notes` is a **service**: a named interface that code asks for instead of importing an implementation. `Context.Service` declares one. Its first type is the service itself and its second is the interface; the string at the end is the service's name. The empty `()` in between is part of how Effect spells it.
 
@@ -56,7 +56,7 @@ export const createNote = (
   })
 ```
 
-`Effect.gen` reads like `async` code, with `yield*` for `await`. `yield* Notes` asks for the service. The third type, `Notes`, records that need: `createNote` cannot run until something provides `Notes`.
+`Effect.gen` reads like `async` code, with `yield*` for `await`. `yield* Notes` asks for the service, and `yield* new InvalidNote(...)` fails with that error. The return type has a third part this time, the services the Effect needs: `createNote` cannot run until something provides `Notes`.
 
 `InvalidNote` and `NotesUnavailable` are **tagged errors**: classes with a `_tag` field, so code can handle each kind of failure by name, for example with `Effect.catchTag("InvalidNote", ...)`.
 
@@ -105,7 +105,7 @@ export const AppLayer = Layer.mergeAll(
 export const DatabaseLayer = NotesLive.pipe(Layer.provideMerge(DatabaseLive))
 ```
 
-`Layer.provideMerge(DatabaseLive)` gives `NotesLive` the `Database` it needs and keeps `Database` in the result, so the app gets both services. In `layers.ts`, `Layer.provide(WorkerEnvLive)` does the same for `DatabaseLayer`'s own need, the Worker's bindings, without adding a service; the next section explains `WorkerEnvLive`.
+`Layer.provideMerge(DatabaseLive)` gives `NotesLive` the `Database` it needs and keeps `Database` in the result, so the app gets both services. In `layers.ts`, `Layer.provide(WorkerEnvLive)` gives `DatabaseLayer` what it needs in turn, the Worker's bindings, and unlike `provideMerge` leaves them out of the result. The next section explains `WorkerEnvLive`.
 
 `AppLayer` provides every service the app has. `efforge add` adds layers before the `/* efforge:layers */` marker, so keep the `Layer.mergeAll(...)` shape. To change how a service works, change the layer listed here; code that asks for `Notes` stays the same.
 
@@ -166,12 +166,12 @@ What this prevents: `cloudflare:workers` exists only inside workerd, Cloudflare'
 
 ### One file runs your Effects: `runtime.ts`
 
-A **server function** is a TanStack Start function that runs on the server; the browser calls it like an ordinary async function. A **runtime** runs Effects: it builds the layers an Effect needs, runs it, and closes what the layers opened. Every server function hands its Effect to `runtime.runPromise`, from `apps/web/src/server/runtime.ts`, which returns a Promise.
+A **server function** is a TanStack Start function that runs on the server; the browser calls it like an ordinary async function. A **runtime** runs Effects: it builds the layers an Effect needs, runs it, and closes what the layers opened. Every server function hands its Effect to `runtime.runPromise`, from `apps/web/src/server/runtime.ts`, directly or through a helper; it returns a Promise.
 
-When the runtime builds `AppLayer` depends on the database, and only there:
+When the runtime builds `AppLayer` depends on one thing, the database:
 
-- **Postgres** (the default): for each call, closed when the call ends. A Postgres connection is a socket, and a Worker may not use a socket that another request opened. Hyperdrive pools the real connections, so a new client per call is cheap.
-- **D1, or no database**: once per isolate, then reused. An **isolate** is one running copy of your Worker; it serves many requests. These layers hold bindings, not connections, and a binding works in any request.
+- **Postgres** (the default): it builds `AppLayer` for each call and closes it when the call ends. A Postgres connection is a socket, and a Worker may not use a socket that another request opened. Hyperdrive pools the real connections, so a new client per call is cheap.
+- **D1, or no database**: it builds `AppLayer` once per isolate and reuses it. An **isolate** is one running copy of your Worker; it serves many requests. These layers hold bindings, not connections, and a binding works in any request.
 
 The Postgres runtime:
 
