@@ -1,13 +1,30 @@
+import { ExternalLink } from "lucide-react"
 import { type SubmitEvent, useState } from "react"
+import { FailureNote } from "@/components/demo"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { useRoom } from "@/lib/use-room"
+import { Label } from "@/components/ui/label"
+import { region } from "@/lib/snippet"
+import { type RoomStatus, useRoom } from "@/lib/use-room"
+import { useServerCall } from "@/lib/use-server-call"
+import { cn } from "@/lib/utils"
+import { announce } from "@/server/realtime-demo"
+import program from "../../../../packages/core/src/realtime.ts?raw"
+import serverFn from "../server/realtime-demo.ts?raw"
+import hook from "../lib/use-room.ts?raw"
+import type { Capability } from "./types"
 
-/** Open this page in two tabs: messages sent in one appear in the other, through a Durable Object. */
-export function RealtimeDemo() {
+const statusText: Record<RoomStatus, string> = {
+  connecting: "Connecting",
+  open: "Connected",
+  closed: "Disconnected, retrying",
+}
+
+/** Open the dashboard in two tabs: messages sent in one appear in the other, through a Durable Object. */
+function RealtimeDemo() {
   const { messages, status, send } = useRoom("demo")
   const [text, setText] = useState("")
+  const server = useServerCall(announce)
 
   const submit = (event: SubmitEvent) => {
     event.preventDefault()
@@ -17,24 +34,109 @@ export function RealtimeDemo() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Realtime room</CardTitle>
-        <CardDescription>Connection: {status}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <ul className="max-h-40 space-y-1 overflow-y-auto text-sm">
-          {messages.map((message) => (
-            <li key={message.id}>{message.text}</li>
-          ))}
-        </ul>
-        <form onSubmit={submit} className="flex gap-2">
-          <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Say hi" />
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-sm font-medium">
+          Realtime room <code className="font-mono font-normal">demo</code>
+        </h4>
+        <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
+          <span
+            aria-hidden
+            className={cn(
+              "size-2 rounded-full",
+              status === "open" ? "bg-primary" : "bg-muted-foreground/50",
+            )}
+          />
+          {statusText[status]}
+        </p>
+      </div>
+      <ul
+        aria-label="Messages"
+        aria-live="polite"
+        className="h-36 space-y-1 overflow-y-auto rounded-md border bg-background p-3 text-sm"
+      >
+        {messages.length === 0 ? (
+          <li className="text-muted-foreground">
+            No messages yet. Say something, or send one from the server.
+          </li>
+        ) : (
+          messages.map((message) => (
+            <li key={message.id} className="break-words">
+              {message.text}
+            </li>
+          ))
+        )}
+      </ul>
+      <form onSubmit={submit} className="space-y-2">
+        <Label htmlFor="realtime-text">Message</Label>
+        <div className="flex gap-2">
+          <Input
+            id="realtime-text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Say hi"
+          />
           <Button type="submit" disabled={status !== "open"}>
             Send
           </Button>
-        </form>
-      </CardContent>
-    </Card>
+        </div>
+      </form>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={server.state.status === "running"}
+          onClick={() =>
+            void server.run({
+              data: { text: `From the server, ${new Date().toLocaleTimeString()}` },
+            })
+          }
+        >
+          Send from the server
+        </Button>
+        <a
+          href="/app#realtime"
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline"
+        >
+          Open a second tab <ExternalLink aria-hidden className="size-3.5" />
+        </a>
+        {server.state.status === "done" ? (
+          <p className="basis-full text-xs text-muted-foreground">
+            The Realtime service broadcast it to {server.state.value}{" "}
+            {server.state.value === 1 ? "client" : "clients"} in the room.
+          </p>
+        ) : null}
+        {server.state.status === "failed" ? (
+          <div className="basis-full">
+            <FailureNote error={server.state.error} />
+          </div>
+        ) : null}
+      </div>
+    </div>
   )
+}
+
+export const realtime: Capability = {
+  id: "realtime",
+  title: "Realtime",
+  summary:
+    "WebSocket rooms on a hibernating Durable Object, behind the Realtime service; the server can broadcast into any room.",
+  layer: { name: "RealtimeLive", provides: ["Realtime"], needs: ["ROOM Durable Object"] },
+  code: [
+    { path: "packages/core/src/realtime.ts", source: region(program, "card") },
+    { path: "apps/web/src/server/realtime-demo.ts", source: region(serverFn, "card") },
+    { path: "apps/web/src/lib/use-room.ts", source: region(hook, "card") },
+  ],
+  files: [
+    ["Service and program", "packages/core/src/realtime.ts"],
+    ["Room (Durable Object)", "apps/web/src/realtime/Room.ts"],
+  ],
+  test: {
+    path: "packages/core/test/realtime.test.ts",
+    name: "refuses a message over the size limit with MessageTooLarge",
+  },
+  agents: "Realtime",
+  Demo: RealtimeDemo,
 }

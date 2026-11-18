@@ -25,6 +25,7 @@ export function useRoom(roomId: string) {
     let retry: ReturnType<typeof setTimeout> | undefined
     let ping: ReturnType<typeof setInterval> | undefined
 
+    // #region card
     const connect = () => {
       setStatus("connecting")
       const scheme = location.protocol === "https:" ? "wss" : "ws"
@@ -49,6 +50,7 @@ export function useRoom(roomId: string) {
         if (!closed) retry = setTimeout(connect, reconnectDelay(attempt++))
       })
     }
+    // #endregion
     connect()
 
     return () => {

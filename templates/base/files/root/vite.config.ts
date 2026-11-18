@@ -31,6 +31,11 @@ export default defineConfig({
       "no-nested-ternary": "error",
       // every tsconfig sets jsx: react-jsx, so React is never imported for JSX
       "react/react-in-jsx-scope": "off",
+      // Effect's tagged values are matched on `_tag` (Data.TaggedEnum, Data.TaggedError)
+      "no-underscore-dangle": ["error", { allow: ["_tag"] }],
+      // TypeScript checks default imports; this rule cannot see the default export of Vite's
+      // `?raw` modules, which capability cards use to show source files
+      "import/default": "off",
       // exact pins make "unstable" Effect APIs safe; this flags it.effect itself
       "effecttsgo/unstable-api-usage": "off",
       // bindings reach code through effect-cf layers; cloudflare.ts is the one file that reads env

@@ -24,10 +24,6 @@
       "target": "packages/core/src/index.ts"
     },
     {
-      "path": "files/core/test/core.test.ts",
-      "target": "packages/core/test/core.test.ts"
-    },
-    {
       "path": "files/core/tsconfig.json",
       "target": "packages/core/tsconfig.json"
     },
@@ -112,10 +108,6 @@
       "target": "apps/web/src/components/ui/sonner.tsx"
     },
     {
-      "path": "files/web/src/components/widgets.tsx",
-      "target": "apps/web/src/components/widgets.tsx"
-    },
-    {
       "path": "files/web/src/lib/utils.ts",
       "target": "apps/web/src/lib/utils.ts"
     },
@@ -166,6 +158,82 @@
     {
       "path": "files/web/vite.config.ts",
       "target": "apps/web/vite.config.ts"
+    },
+    {
+      "path": "files/nvmrc",
+      "target": ".nvmrc"
+    },
+    {
+      "path": "files/core/src/greeting.ts",
+      "target": "packages/core/src/greeting.ts"
+    },
+    {
+      "path": "files/core/test/greeting.test.ts",
+      "target": "packages/core/test/greeting.test.ts"
+    },
+    {
+      "path": "files/web/src/components/demo.tsx",
+      "target": "apps/web/src/components/demo.tsx"
+    },
+    {
+      "path": "files/web/src/components/code-block.tsx",
+      "target": "apps/web/src/components/code-block.tsx"
+    },
+    {
+      "path": "files/web/src/components/capability-card.tsx",
+      "target": "apps/web/src/components/capability-card.tsx"
+    },
+    {
+      "path": "files/web/src/components/layer-graph.tsx",
+      "target": "apps/web/src/components/layer-graph.tsx"
+    },
+    {
+      "path": "files/web/src/components/app-shell.tsx",
+      "target": "apps/web/src/components/app-shell.tsx"
+    },
+    {
+      "path": "files/web/src/lib/project.ts",
+      "target": "apps/web/src/lib/project.ts"
+    },
+    {
+      "path": "files/web/src/lib/snippet.ts",
+      "target": "apps/web/src/lib/snippet.ts"
+    },
+    {
+      "path": "files/web/src/lib/highlight.ts",
+      "target": "apps/web/src/lib/highlight.ts"
+    },
+    {
+      "path": "files/web/src/lib/stack.ts",
+      "target": "apps/web/src/lib/stack.ts"
+    },
+    {
+      "path": "files/web/src/lib/use-server-call.ts",
+      "target": "apps/web/src/lib/use-server-call.ts"
+    },
+    {
+      "path": "files/web/src/lib/layer-graph.ts",
+      "target": "apps/web/src/lib/layer-graph.ts"
+    },
+    {
+      "path": "files/web/src/server/outcome.ts",
+      "target": "apps/web/src/server/outcome.ts"
+    },
+    {
+      "path": "files/web/src/server/stack.ts",
+      "target": "apps/web/src/server/stack.ts"
+    },
+    {
+      "path": "files/web/src/capabilities/types.ts",
+      "target": "apps/web/src/capabilities/types.ts"
+    },
+    {
+      "path": "files/web/src/capabilities/registry.ts",
+      "target": "apps/web/src/capabilities/registry.ts"
+    },
+    {
+      "path": "files/web/src/capabilities/runtime.tsx",
+      "target": "apps/web/src/capabilities/runtime.tsx"
     }
   ],
   "dependencies": {

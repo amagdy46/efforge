@@ -52,8 +52,10 @@ it("every auth x database x orm combination generates the server, UI and schema"
       ])
         expect(tree.has(file), `${where}: ${file}`).toBe(true)
       expect(tree.has("apps/web/src/routeTree.gen.ts"), where).toBe(false)
-      // the notes list on /app survives the dashboard overlay
-      expect(text(tree, "apps/web/src/routes/app/index.tsx"), where).toContain("listNotes")
+      // the auth and database cards both reach the dashboard
+      expect(text(tree, "apps/web/src/capabilities/registry.ts"), where).toMatch(
+        /\[\s*runtime,\s+database,\s+auth\b/,
+      )
       const layers = text(tree, "apps/web/src/server/layers.ts")
       expect(layers, where).toContain("AuthLive")
       expect(text(tree, "apps/web/src/server/routes.ts"), where).toContain("authRoute")

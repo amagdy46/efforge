@@ -12,5 +12,8 @@
     "check": "effect-tsgo vp check",
     "prepare": "effect-tsgo patch --typescript --oxlint"
   },
+  "engines": {
+    "node": "^24.11.0 || >=26.0.0"
+  },
   "packageManager": "pnpm@12.21.0"
 }

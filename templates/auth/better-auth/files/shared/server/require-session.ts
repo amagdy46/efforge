@@ -3,6 +3,7 @@ import { createMiddleware } from "@tanstack/react-start"
 import { Effect } from "effect"
 import { runtime } from "./runtime"
 
+// #region card
 /**
  * Server-function middleware: rejects the call unless someone is signed in. Add it with
  * `createServerFn(...).middleware([requireSession])`; `efforge` extras (browser, workflows, AI)
@@ -18,3 +19,4 @@ export const requireSession = createMiddleware({ type: "function" }).server(({ n
     )
     .then((session) => next({ context: { session } })),
 )
+// #endregion

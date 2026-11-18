@@ -142,7 +142,6 @@ const browserFlow = (config: StackConfig): Effect.Effect<void, unknown> =>
     const baseURL = `http://localhost:${port}`
     const dev = yield* Effect.try(() => {
       sh(dir, `DATABASE_URL=${databaseUrl} pnpm db:migrate`)
-      sh(dir, `sed -i 's|http://localhost:5173|${baseURL}|' .dev.vars`)
       return spawn(
         "pnpm",
         ["--filter", "web", "exec", "vite", "dev", "--port", port, "--strictPort"],

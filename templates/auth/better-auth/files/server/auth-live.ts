@@ -21,7 +21,11 @@ const BetterAuthLive = Layer.effect(
     return makeAuth({
       database,
       secret: Redacted.value(secret),
-      baseURL: Option.getOrUndefined(Option.filter(baseURL, (url) => url !== "")),
+      // in `pnpm dev` the origin comes from each request, so sign-in works on whatever port Vite
+      // picks; a deployed Worker uses BETTER_AUTH_URL when it is set
+      baseURL: import.meta.env.DEV
+        ? undefined
+        : Option.getOrUndefined(Option.filter(baseURL, (url) => url !== "")),
     })
   }),
 ).pipe(Layer.provide(AuthDatabaseLayer), Layer.provide(WorkerEnvLive))
