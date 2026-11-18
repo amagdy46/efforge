@@ -1,5 +1,5 @@
 # Keep this tag in step with the `playwright` version in package.json: the image ships matching browsers.
-FROM mcr.microsoft.com/playwright:v1.64.1-noble
+FROM mcr.microsoft.com/playwright:v1.65.1-noble
 
 WORKDIR /app
 # package-lock.json pins the whole dependency tree: `npm ci` fails instead of drifting when it

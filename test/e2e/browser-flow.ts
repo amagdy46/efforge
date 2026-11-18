@@ -41,6 +41,8 @@ export const orgsFlow = async (baseURL: string): Promise<void> => {
     await annPage.waitForURL(/\/app$/)
     await expectVisible(annPage, "Dashboard")
     await expectVisible(annPage, "Notes")
+    // add-on widgets render on the database + auth dashboard too (the stack includes realtime)
+    await expectVisible(annPage, "Realtime room")
     await annPage
       .getByRole("button", { name: "Switch organization" })
       .getByText("Acme Inc")

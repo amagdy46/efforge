@@ -80,7 +80,7 @@ The workspace pins exact versions in a pnpm `catalog:`, runs `dev`, `build`, `ty
 
 ## Status
 
-v0.1: Cloudflare is the only runtime, add-ons can be added but not removed, and the CLI's options may still change. Drizzle is pinned to a release candidate and Alchemy support uses a beta. With `--auth=none`, the AI demo endpoint isn't gated; add auth or remove it before deploying. Details and known gaps: [docs/limits.md](https://github.com/amagdy46/efforge/blob/main/docs/limits.md).
+Early: Cloudflare is the only runtime, add-ons can be added but not removed yet, and the CLI's options may still change. Drizzle is pinned to a release candidate and Alchemy support uses a beta. With `--auth=none`, the AI demo endpoint isn't gated; add auth or remove it before deploying. Details and known gaps: [docs/limits.md](https://github.com/amagdy46/efforge/blob/main/docs/limits.md).
 
 ## Docs
 

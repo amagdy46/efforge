@@ -97,6 +97,64 @@ export const applyBumps = (
   return { source: out, applied }
 }
 
+/**
+ * Pure: the supported-components table from @effect/tsgo's README (between the
+ * `supported-components` markers), keyed by our package names.
+ */
+export const parseTsgoSupport = (readme: string): Record<string, ReadonlyArray<string>> => {
+  const start = readme.indexOf("<!-- supported-components:start -->")
+  const end = readme.indexOf("<!-- supported-components:end -->")
+  if (start === -1 || end === -1) return {}
+  const names: Record<string, string> = {
+    TypeScript: "typescript",
+    Oxlint: "oxlint",
+    "oxlint-tsgolint": "oxlint-tsgolint",
+  }
+  const out: Record<string, ReadonlyArray<string>> = {}
+  for (const line of readme.slice(start, end).split("\n")) {
+    const [, component, versions] = /^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|/.exec(line) ?? []
+    const pkg = component === undefined ? undefined : names[component]
+    if (pkg !== undefined && versions !== undefined)
+      out[pkg] = [...versions.matchAll(/`([^`]+)`/g)].map((m) => m[1] as string)
+  }
+  return out
+}
+
+/**
+ * Pure: pins that break the lint toolchain. ADR 0001: @effect/tsgo only patches the TypeScript,
+ * Oxlint and oxlint-tsgolint versions in its table, and Effect rules go quiet (or fail to load)
+ * outside it. vite-plus bundles its own oxlint and vitest; a different vitest pin installs two
+ * copies, and a different oxlint pin is not the one `vp lint` runs.
+ */
+export const checkToolchain = (
+  pins: Readonly<Record<string, string>>,
+  tsgoSupport: Readonly<Record<string, ReadonlyArray<string>>>,
+  vitePlusDependencies: Readonly<Record<string, string>>,
+): string[] => {
+  const problems: string[] = []
+  const tsgo = `@effect/tsgo ${pins["@effect/tsgo"] ?? "?"}`
+  for (const pkg of ["typescript", "oxlint", "oxlint-tsgolint"]) {
+    const supported = tsgoSupport[pkg]
+    const pin = pins[pkg]
+    if (supported === undefined) problems.push(`${tsgo}: no supported versions listed for ${pkg}`)
+    else if (pin !== undefined && !supported.includes(pin))
+      problems.push(`${pkg} ${pin} is not supported by ${tsgo} (${supported.join(", ")})`)
+  }
+  for (const pkg of ["oxlint", "vitest"]) {
+    const bundled = vitePlusDependencies[pkg]?.replace(/^=/, "")
+    const pin = pins[pkg]
+    if (bundled !== undefined && pin !== undefined && bundled !== pin)
+      problems.push(`${pkg} ${pin} differs from vite-plus ${pins["vite-plus"] ?? "?"}'s ${bundled}`)
+  }
+  return problems
+}
+
+/** One field of one published version; `npm view --json` sometimes wraps it in an array. */
+const npmView = async <A>(spec: string, field: string): Promise<A> => {
+  const value = JSON.parse((await run("npm", ["view", spec, field, "--json"])).stdout) as A | A[]
+  return (Array.isArray(value) ? value.at(-1) : value) as A
+}
+
 const latestOf = async (pkg: string): Promise<string | undefined> => {
   try {
     const { stdout } = await run("npm", ["view", pkg, "dist-tags.latest"])
@@ -127,6 +185,18 @@ if (import.meta.main) {
   const latest = await mapLimit(entries, 8, ([pkg]) => latestOf(pkg))
   const lines = diffPins(entries.map(([pkg, pin], i) => ({ pkg, pin, latest: latest[i] })))
   console.log(formatReport(lines))
+  const pins = (pin: string) => versions[pin] as string
+  const problems = checkToolchain(
+    versions,
+    parseTsgoSupport(await npmView<string>(`@effect/tsgo@${pins("@effect/tsgo")}`, "readme")),
+    await npmView<Record<string, string>>(`vite-plus@${pins("vite-plus")}`, "dependencies"),
+  )
+  console.log(
+    problems.length === 0
+      ? "\nlint toolchain: pins fit @effect/tsgo's supported table and vite-plus's bundle"
+      : `\nlint toolchain problems:\n${problems.map((p) => `  ${p}`).join("\n")}`,
+  )
+  if (problems.length > 0) process.exitCode = 1
   if (write) {
     const file = new URL("../src/versions.ts", import.meta.url)
     const { source, applied } = applyBumps(readFileSync(file, "utf8"), lines)

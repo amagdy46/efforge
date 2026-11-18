@@ -1,4 +1,4 @@
-# 0004 — Brand assets generated from one source file
+# 0006 — Brand assets generated from one source file
 
 Date: 2026-11-18. Status: accepted.
 

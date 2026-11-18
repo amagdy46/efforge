@@ -89,3 +89,26 @@ vitest per peer set. Fix: `overrides: { vite: "catalog:" }` in the generated
 `pnpm-workspace.yaml` (from `templates/base`) so every `vite` is the catalog one. Tests
 still run via plain `vitest`; the record's test-running decision is unchanged. `dedupePeers`
 alone did not fix it.
+
+## Vite+ 1.7 and `@effect/tsgo` 0.70 (added 2026-11-18)
+
+`vite-plus` 1.7.0 runs Oxlint's type-aware rules on the `tsrs` build it
+bundles: its `lint()` sets `OXLINT_TSGOLINT_PATH` to `tsrs/bin/tsrs-lint`.
+The `oxlint-tsgolint` that `effect-tsgo patch --oxlint` patches is no longer
+used, so `vp lint` stopped with `unknown rule:
+effecttsgo/any-unknown-in-error-context` on every stack.
+
+The generated root scripts are now `lint` = `effect-tsgo vp lint` and `check`
+= `effect-tsgo vp check`, tsgo's documented way to run Vite+ with the
+Effect-patched Oxlint binding and tsgolint. Verified on the default stack: a
+floating `Effect.log(...)` inside `Effect.gen` fails `pnpm lint` with
+`effecttsgo(floating-effect)`, while plain `vp lint` still dies on the unknown
+rule. `prepare` keeps `patch --typescript --oxlint`: the TypeScript patch
+gives `tsc` the Effect diagnostics, and the Oxlint patch adds the config
+types. `format` stays `vp fmt`.
+
+Pins: vite-plus 1.7.0 bundles vitest 5.1.0, oxlint 1.94.0 and vite-plus-core
+8.3.8000, so `vitest` is pinned to 5.1.0 (not the newer 5.1.1) and `vite` to
+8.3.8. `@effect/tsgo` 0.70.0 supports TypeScript 7.0.2, Oxlint 1.91–1.94 and
+oxlint-tsgolint 7.0.2005–2007; `scripts/bump.ts` checks this table and the
+vite-plus bundle against the pins.

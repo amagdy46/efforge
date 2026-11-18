@@ -23,7 +23,13 @@ import {
   type UnknownTransform,
 } from "../transforms/index.ts"
 import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
-import { efforgeVersion, versions } from "../versions.ts"
+import {
+  effectOverrides,
+  effectVersion,
+  efforgeVersion,
+  isEffectLockstep,
+  versions,
+} from "../versions.ts"
 import { PnpmMissing, TemplatesDir } from "./create.ts"
 
 export class NotAnEfforgeProject extends Schema.TaggedError<NotAnEfforgeProject>()(
@@ -166,7 +172,7 @@ const parseId = (raw: string): Effect.Effect<{ slot: SlotDef; option: string }, 
       ? id.split("/", 2)
       : [undefined, id]
   const unknown = (message: string) => Effect.fail(new UnknownAddon({ id: raw, message }))
-  if (option === "none") return unknown(`Removing an add-on isn't supported in v0.1 ("${raw}").`)
+  if (option === "none") return unknown(`Removing an add-on isn't supported yet ("${raw}").`)
   const candidates = slots.filter(
     (s) => (slotPart === undefined || s.id === slotPart) && s.options.some((o) => o.id === option),
   )
@@ -213,7 +219,7 @@ const applyIds = (
           slot.id,
           option,
           [current],
-          `${slot.id} is already "${current}"; swapping an existing choice isn't supported in v0.1. Create a new project to use a different ${slot.id}.`,
+          `${slot.id} is already "${current}"; swapping an existing choice isn't supported yet. Create a new project to use a different ${slot.id}.`,
         )
     }
     const valid = yield* validate(next).pipe(
@@ -525,18 +531,25 @@ export const addAddons = (
       written.add(target)
     }
 
-    // 5. pnpm catalog
-    if (used.size > 0) {
+    // 5. pnpm catalog, and the overrides that hold every Effect package at the project's `effect`
+    // version (added to projects made before efforge wrote them)
+    {
       const text = (yield* read("pnpm-workspace.yaml")) ?? "packages:\n  - apps/*\n  - packages/*\n"
       const doc = parseDocument(text)
       const catalog = {
         ...(doc.getIn(["catalog"]) as { toJSON(): Record<string, string> } | null)?.toJSON(),
       }
-      for (const name of used) catalog[name] ??= versions[name] as string
-      doc.setIn(
-        ["catalog"],
-        Object.fromEntries(Object.entries(catalog).toSorted(([a], [b]) => byName(a, b))),
-      )
+      const effect = catalog.effect ?? effectVersion
+      // a new Effect package joins at the project's `effect` version, not at efforge's newest pin
+      for (const name of used)
+        catalog[name] ??= isEffectLockstep(name) ? effect : (versions[name] as string)
+      if (used.size > 0)
+        doc.setIn(
+          ["catalog"],
+          Object.fromEntries(Object.entries(catalog).toSorted(([a], [b]) => byName(a, b))),
+        )
+      for (const [name, version] of Object.entries(effectOverrides(effect)))
+        if (!doc.hasIn(["overrides", name])) doc.setIn(["overrides", name], version)
       const next = doc.toString()
       if (next !== text) {
         out.set("pnpm-workspace.yaml", next)
@@ -703,6 +716,7 @@ export const addHandler = (input: {
 }) =>
   Effect.gen(function* () {
     const path = yield* Path.Path
+    const fs = yield* FileSystem.FileSystem
     const live = yield* PromptIO
     const dir = path.resolve(input.cwd)
     // --json keeps stdout to the one JSON document: steps still run, silently
@@ -722,8 +736,7 @@ export const addHandler = (input: {
       )
     const opts = { overwrite: input.overwrite, install: false }
     // checked before anything is written: install and the route tree both need pnpm
-    if (input.install && !input.dryRun && !(yield* has("pnpm", dir)))
-      return yield* new PnpmMissing()
+    if (input.install && !input.dryRun && !(yield* has("pnpm"))) return yield* new PnpmMissing()
     // plan first (in memory): the dirty-tree warning only matters when something will change
     const plan = yield* addAddons(dir, input.ids, { ...opts, dryRun: true })
     const changes = plan.written.length + plan.transformed.length + plan.removed.length > 0
@@ -743,18 +756,34 @@ export const addHandler = (input: {
     const depsChanged = result.written.some(
       (f) => f.endsWith("package.json") || f === "pnpm-workspace.yaml",
     )
+    // a project created with --no-install has no node_modules yet, so no route-tree generator
+    const installed = yield* fs
+      .exists(path.join(dir, "node_modules"))
+      .pipe(Effect.orElseSucceed(() => false))
+    const installs = input.install && changes && depsChanged
     const finish = Effect.gen(function* () {
       if (!input.install || input.dryRun || !changes) return
-      if (depsChanged)
+      if (installs)
         yield* io.task("Installing dependencies (pnpm install)", (log) =>
           exec("pnpm", ["install"], dir, log),
         )
-      // add-ons may add or replace routes
-      yield* io.step("Generating the route tree", generateRouteTree(dir))
+      // add-ons may add or replace routes; without an install, `pnpm typecheck` regenerates it later
+      if (installs || installed) yield* io.step("Generating the route tree", generateRouteTree(dir))
     })
+    // a new database needs its tables before the app (or sign-up) can use it
+    const database = result.added.find((a) => a.id.startsWith("database/"))?.id.split("/")[1]
+    const alchemy =
+      manifest.stack.infra === "alchemy" || result.added.some((a) => a.id === "infra/alchemy")
+    const commands = [
+      ...(changes && !installs && (depsChanged || !installed) ? ["pnpm install"] : []),
+      ...(database === "postgres" ? ["docker compose up -d --wait", "pnpm db:migrate"] : []),
+      ...(database === "d1" && !alchemy ? ["pnpm db:migrate"] : []),
+    ]
     if (input.json) {
       yield* finish
-      return yield* Console.log(JSON.stringify({ dryRun: input.dryRun, ...result }, null, 2))
+      return yield* Console.log(
+        JSON.stringify({ dryRun: input.dryRun, ...result, nextSteps: commands }, null, 2),
+      )
     }
 
     const changed = result.written.length + result.transformed.length + result.removed.length > 0
@@ -787,15 +816,6 @@ export const addHandler = (input: {
     if (input.dryRun) return yield* io.outro(pc.dim("dry run: nothing written"))
 
     yield* finish
-    // a new database needs its tables before the app (or sign-up) can use it
-    const database = result.added.find((a) => a.id.startsWith("database/"))?.id.split("/")[1]
-    const alchemy =
-      manifest.stack.infra === "alchemy" || result.added.some((a) => a.id === "infra/alchemy")
-    const commands = [
-      ...(input.install || !depsChanged ? [] : ["pnpm install"]),
-      ...(database === "postgres" ? ["docker compose up -d --wait", "pnpm db:migrate"] : []),
-      ...(database === "d1" && !alchemy ? ["pnpm db:migrate"] : []),
-    ]
     const width = Math.max(0, ...result.envVars.map((x) => x.name.length))
     const room = Math.max(30, (process.stdout.columns || 80) - 14)
     const steps = [

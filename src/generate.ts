@@ -1,5 +1,5 @@
 import { Effect, FileSystem, Path, Schema } from "effect"
-import { parse, stringify } from "yaml"
+import { parseDocument } from "yaml"
 import type { LoadedAddon, When } from "./addon.ts"
 import { addonIdsFor } from "./addon.ts"
 import { hash, renderManifest } from "./manifest.ts"
@@ -11,7 +11,7 @@ import {
   type UnknownTransform,
 } from "./transforms/index.ts"
 import type { Tree } from "./tree.ts"
-import { efforgeVersion, versions } from "./versions.ts"
+import { effectOverrides, effectVersion, efforgeVersion, versions } from "./versions.ts"
 
 export class GenerateError extends Schema.TaggedError<GenerateError>()("GenerateError", {
   reason: Schema.Literals([
@@ -192,12 +192,15 @@ export const generate = (
     // final (named) content and `add` sees an unedited README/wrangler.jsonc as unchanged.
     const out = new Map(applyProjectName(tree, config.name))
 
-    const workspace = out.get("pnpm-workspace.yaml")
-    const { packages = DEFAULT_PACKAGES, ...rest } =
-      workspace === undefined ? {} : ((parse(workspace) as { packages?: string[] } | null) ?? {})
+    // keep the template's other keys and comments (e.g. `allowBuilds`); `catalog` is always
+    // computed, and `overrides` always holds every Effect package at the `effect` pin
+    const workspace = parseDocument(out.get("pnpm-workspace.yaml") ?? "")
+    if (!workspace.has("packages")) workspace.set("packages", DEFAULT_PACKAGES)
+    for (const [name, version] of Object.entries(effectOverrides(effectVersion)))
+      workspace.setIn(["overrides", name], version)
     const catalog = Object.fromEntries([...used].toSorted().map((n) => [n, versions[n] as string]))
-    // keep the template's other keys (e.g. `allowBuilds`); `catalog` is always computed
-    out.set("pnpm-workspace.yaml", stringify({ packages, ...rest, catalog }))
+    workspace.set("catalog", catalog)
+    out.set("pnpm-workspace.yaml", workspace.toString())
 
     if (env.size > 0)
       out.set(

@@ -2,6 +2,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { expect, it } from "@effect/vitest"
 import { Effect, type FileSystem, Path } from "effect"
 import { type LoadedAddon, loadAddons } from "../src/addon.ts"
+import { versions } from "../src/versions.ts"
 import { generate } from "../src/generate.ts"
 import { withDefaults } from "../src/stack.ts"
 import { runTransform } from "../src/transforms/index.ts"
@@ -52,7 +53,9 @@ it("the minimal stack has the seam files and wrangler.jsonc", async () => {
   expect(app.scripts.typecheck).toMatch(/^tsr generate && /)
   expect(app.scripts.postinstall).toBe("tsr generate")
   expect(app.dependencies["@tanstack/react-start"]).toBe("catalog:")
-  expect(tree.get("pnpm-workspace.yaml")).toContain('"@tanstack/react-start": 1.169.3')
+  expect(tree.get("pnpm-workspace.yaml")).toContain(
+    `"@tanstack/react-start": ${versions["@tanstack/react-start"]}`,
+  )
 })
 
 it("no wrangler.jsonc when infra is alchemy", async () => {
@@ -109,7 +112,11 @@ it("the minimal stack lints with Vite+, not Biome, and ships agent instructions"
   expect(tree.has("biome.json")).toBe(false)
   expect(tree.has("vite.config.ts")).toBe(true)
   const root = JSON.parse(tree.get("package.json") as string)
-  expect(root.scripts).toMatchObject({ lint: "vp lint", format: "vp fmt", check: "vp check" })
+  expect(root.scripts).toMatchObject({
+    lint: "effect-tsgo vp lint",
+    format: "vp fmt",
+    check: "effect-tsgo vp check",
+  })
   expect(root.devDependencies["vite-plus"]).toBe("catalog:")
   expect(root.devDependencies["@biomejs/biome"]).toBeUndefined()
   const agents = tree.get("AGENTS.md") as string

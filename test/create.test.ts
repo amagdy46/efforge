@@ -241,3 +241,22 @@ it("without git, format names the files so a parent repo's ignore rules cannot h
   ])
   expect(calls[3]).toContain("package.json")
 })
+
+it("the pnpm and git checks run in the temp dir, not where create was started", async () => {
+  const calls: string[] = []
+  const cwds: Array<string | undefined> = []
+  await runWith(["app", "-y", ...stackFlags]).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        NodeServices.layer,
+        scriptedPromptIO([]).layer,
+        Layer.succeed(TemplatesDir, fixtures),
+        recordingSpawner(calls, cwds),
+      ),
+    ),
+    Effect.runPromise,
+  )
+  expect(calls.slice(0, 2)).toEqual(["pnpm --version", "git --version"])
+  expect(cwds.slice(0, 2)).toEqual([tmpdir(), tmpdir()])
+  expect(process.cwd()).not.toBe(tmpdir())
+})

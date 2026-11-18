@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { NodeFileSystem, NodeServices } from "@effect/platform-node"
 import { describe, it } from "@effect/vitest"
 import { Effect, FileSystem, Path } from "effect"
@@ -9,6 +9,8 @@ import { generate } from "../../src/generate.ts"
 import { ROUTE_TREE_COMMAND } from "../../src/routeTree.ts"
 import { type StackConfig, withDefaults } from "../../src/stack.ts"
 import type { Tree } from "../../src/tree.ts"
+import { isEffectLockstep } from "../../src/versions.ts"
+import { parse, parseAllDocuments } from "yaml"
 
 const templates = new URL("../../templates", import.meta.url).pathname
 // Under the repo (gitignored), not os.tmpdir(): /tmp is often a small tmpfs.
@@ -35,6 +37,60 @@ const sh = (cwd: string, command: string) => {
   if (r.status !== 0) throw new Error(`\`${command}\` exited ${r.status}\n${r.stdout}\n${r.stderr}`)
 }
 
+/**
+ * Unmet peers inside third-party packages that efforge can't fix from a template. Upstream as of
+ * 2026-11-18: @alchemy.run/cloudflare-runtime depends on `unenv: ^2.0.0-rc.24` (now rc.25) and on
+ * @cloudflare/unenv-preset, which peers on exactly 2.0.0-rc.24. The stack still passes its gate.
+ */
+const knownUpstreamPeer = (peer: string, parents: ReadonlyArray<{ name: string }>) =>
+  peer === "unenv" &&
+  parents.some((p) => p.name === "@alchemy.run/cloudflare-runtime") &&
+  parents.at(-1)?.name === "@cloudflare/unenv-preset"
+
+/**
+ * What the drift guard promises, checked against the real install: every package released with
+ * `effect` resolved to the catalog's `effect` version (not only the ones the project names), and
+ * pnpm reports no unmet peers.
+ */
+const checkEffectLockstep = (dir: string) => {
+  const read = (file: string) => parse(readFileSync(`${dir}/${file}`, "utf8"))
+  const effect = (read("pnpm-workspace.yaml") as { catalog: Record<string, string> }).catalog.effect
+  // pnpm 12 writes the lockfile as several YAML documents; packages live in one of them
+  const keys = parseAllDocuments(readFileSync(`${dir}/pnpm-lock.yaml`, "utf8")).flatMap((doc) =>
+    Object.keys((doc.toJS() as { packages?: Record<string, unknown> } | null)?.packages ?? {}),
+  )
+  if (!keys.some((key) => key.startsWith("effect@")))
+    throw new Error("pnpm-lock.yaml lists no effect package; the check would prove nothing")
+  const drifted = keys.filter((key) => {
+    const at = key.lastIndexOf("@")
+    return isEffectLockstep(key.slice(0, at)) && key.slice(at + 1) !== effect
+  })
+  if (drifted.length > 0)
+    throw new Error(`Effect packages not at effect ${effect}: ${drifted.join(", ")}`)
+  // optional peers outside their range are warnings (alchemy's capnp-es asks for typescript 5 or
+  // 6); a required peer, or any Effect package, out of range is a failure
+  const peers = spawnSync("pnpm", ["peers", "check", "--json"], { cwd: dir, encoding: "utf8" })
+  type Issue = {
+    optional: boolean
+    wantedRange?: string
+    foundVersion?: string
+    parents: Array<{ name: string }>
+  }
+  const report = JSON.parse(peers.stdout) as Record<
+    string,
+    { bad: Record<string, Issue[]>; missing: Record<string, Issue[]> }
+  >
+  const unmet = Object.entries(report).flatMap(([project, r]) =>
+    [...Object.entries(r.bad), ...Object.entries(r.missing)].flatMap(([peer, issues]) =>
+      issues
+        .filter((i) => !i.optional || isEffectLockstep(peer))
+        .filter((i) => !knownUpstreamPeer(peer, i.parents))
+        .map((i) => `${project}: ${peer} ${i.foundVersion ?? "missing"}, wanted ${i.wantedRange}`),
+    ),
+  )
+  if (unmet.length > 0) throw new Error(`unmet peers:\n${unmet.join("\n")}`)
+}
+
 /** Generates `config` into a tmp dir and installs it, ready for the checks `create` runs next. */
 const generateStack = (config: StackConfig): Effect.Effect<string, unknown> =>
   Effect.gen(function* () {
@@ -44,6 +100,7 @@ const generateStack = (config: StackConfig): Effect.Effect<string, unknown> =>
     yield* writeTree(dir, tree)
     yield* Effect.try(() => {
       sh(dir, "pnpm install --no-frozen-lockfile")
+      checkEffectLockstep(dir)
       // what `create` runs after installing: git init (own repo root, so a parent's ignore rules
       // don't apply), generate the route tree, then format
       sh(dir, "git init -q")
@@ -285,6 +342,7 @@ describe("add on a real project", () => {
           dryRun: false,
           install: true,
         })
+        yield* Effect.try(() => checkEffectLockstep(dir))
         yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
         rmSync(dir, { recursive: true, force: true })
       }).pipe(Effect.provide(NodeServices.layer)),
@@ -294,7 +352,7 @@ describe("add on a real project", () => {
 
 describe.skipIf(process.env.EFFORGE_E2E_BROWSER !== "1")("browser flow", () => {
   it.effect(
-    "pg-drizzle-orgs: sign up, create org, invite, accept, both members visible",
+    "pg-drizzle-orgs + realtime: sign up, create org, see the widgets, invite, accept, both members visible",
     () =>
       browserFlow(
         withDefaults({
@@ -303,6 +361,7 @@ describe.skipIf(process.env.EFFORGE_E2E_BROWSER !== "1")("browser flow", () => {
           orm: "drizzle",
           auth: "better-auth-orgs",
           infra: "none",
+          extras: ["realtime"],
         }),
       ),
     { timeout: 15 * 60 * 1000 },
