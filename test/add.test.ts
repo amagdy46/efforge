@@ -8,6 +8,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs"
+import { execFileSync } from "node:child_process"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
@@ -18,6 +19,7 @@ import { runWith } from "../src/cli.ts"
 import { addAddons } from "../src/commands/add.ts"
 import { TemplatesDir } from "../src/commands/create.ts"
 import { unifiedDiff } from "../src/diff.ts"
+import { has } from "../src/exec.ts"
 import { generate } from "../src/generate.ts"
 import { hash } from "../src/manifest.ts"
 import { scriptedPromptIO } from "../src/prompts/navigable.ts"
@@ -25,6 +27,15 @@ import { ROUTE_TREE_COMMAND } from "../src/routeTree.ts"
 import { withDefaults } from "../src/stack.ts"
 import { writeTree } from "../src/write.ts"
 import { recordingSpawner } from "./recordingSpawner.ts"
+
+const spawnSyncFails = (cmd: string) => {
+  try {
+    execFileSync(cmd, ["--version"], { cwd: tmpdir(), stdio: "ignore" })
+    return false
+  } catch {
+    return true
+  }
+}
 
 const fixtures = new URL("./fixtures/templates", import.meta.url).pathname
 const env = Layer.mergeAll(NodeServices.layer, Layer.succeed(TemplatesDir, fixtures))
@@ -291,4 +302,58 @@ it("rejects add-on targets that escape the project", async () => {
     expect(existsSync(join(tmp, "outside.ts"))).toBe(false)
     expect(existsSync("/tmp/efforge-abs-outside.ts")).toBe(false)
   }
+})
+
+const addRecorded = async (args: string[]) => {
+  const calls: string[] = []
+  const cwds: Array<string | undefined> = []
+  const logs: string[] = []
+  vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => void logs.push(a.join(" ")))
+  await runWith(["add", ...args, "--json", "--cwd", dir]).pipe(
+    Effect.provide(Layer.mergeAll(env, scriptedPromptIO([]).layer, recordingSpawner(calls, cwds))),
+    Effect.runPromise,
+  )
+  vi.restoreAllMocks()
+  return { calls, cwds, out: JSON.parse(logs.join("\n")) }
+}
+
+it("add checks for pnpm outside the project, so pnpm can't write a lockfile into it", async () => {
+  const { calls, cwds } = await addRecorded(["email"])
+  expect(calls[0]).toBe("pnpm --version")
+  expect(cwds[0]).toBe(tmpdir())
+  // everything else runs in the project
+  expect(cwds.slice(1).every((c) => c === dir)).toBe(true)
+})
+
+it.skipIf(spawnSyncFails("pnpm"))(
+  "the pnpm check leaves a project with a packageManager field untouched",
+  async () => {
+    const version = execFileSync("pnpm", ["--version"], { cwd: tmpdir(), encoding: "utf8" }).trim()
+    put("package.json", JSON.stringify({ name: "app", packageManager: `pnpm@${version}` }))
+    const cwd = process.cwd()
+    process.chdir(dir)
+    try {
+      expect(await Effect.runPromise(has("pnpm").pipe(Effect.provide(NodeServices.layer)))).toBe(
+        true,
+      )
+    } finally {
+      process.chdir(cwd)
+    }
+    expect(existsSync(join(dir, "pnpm-lock.yaml"))).toBe(false)
+  },
+)
+
+it("on a never-installed project, add skips the route tree and says to run pnpm install", async () => {
+  // ai/effect-ai-byok changes no dependencies in the fixtures, so nothing triggers an install
+  const { calls, out } = await addRecorded(["ai/effect-ai-byok"])
+  expect(out.written.length).toBeGreaterThan(0)
+  expect(calls).toEqual(["pnpm --version"])
+  expect(out.nextSteps).toEqual(["pnpm install"])
+})
+
+it("on an installed project, add regenerates the route tree and needs no install", async () => {
+  mkdirSync(join(dir, "node_modules"))
+  const { calls, out } = await addRecorded(["ai/effect-ai-byok"])
+  expect(calls).toEqual(["pnpm --version", ROUTE_TREE_COMMAND])
+  expect(out.nextSteps).toEqual([])
 })

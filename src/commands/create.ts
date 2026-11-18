@@ -135,8 +135,8 @@ export const create = (opts: CreateOptions) =>
         yield* io.warn(
           `Node ${process.version} isn't supported by the generated project (Vite+ needs Node 24.11+ or 26+).`,
         )
-      if (opts.install && !(yield* has("pnpm", process.cwd()))) return yield* new PnpmMissing()
-      if (git && !(yield* has("git", process.cwd()))) {
+      if (opts.install && !(yield* has("pnpm"))) return yield* new PnpmMissing()
+      if (git && !(yield* has("git"))) {
         yield* io.warn("git isn't installed: skipping git init and the initial commit.")
         git = false
       }

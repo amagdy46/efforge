@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os"
 import { Effect, Schema, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 
@@ -47,9 +48,13 @@ export const exec = (
   )
 }
 
-/** True when `cmd --version` runs; used to check for pnpm and git before writing anything. */
-export const has = (cmd: string, cwd: string) =>
-  exec(cmd, ["--version"], cwd).pipe(
+/**
+ * True when `cmd --version` runs; used to check for pnpm and git before writing anything.
+ * Runs in the OS temp dir, not the project: in a directory whose package.json names a
+ * `packageManager`, pnpm 12 writes a pnpm-lock.yaml even for `--version`.
+ */
+export const has = (cmd: string) =>
+  exec(cmd, ["--version"], tmpdir()).pipe(
     Effect.as(true),
     Effect.catchTag("CommandFailed", () => Effect.succeed(false)),
   )
