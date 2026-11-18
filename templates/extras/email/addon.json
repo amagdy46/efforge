@@ -1,7 +1,7 @@
 {
   "id": "extras/email",
   "title": "Email",
-  "description": "Transactional email: a Mailer service on Cloudflare Email Service, printed to the console in development, plus invitation emails with organizations.",
+  "description": "Transactional email: a Mailer service on Cloudflare Email Service, printed to the console in development, a dashboard card, plus invitation emails with organizations.",
   "files": [
     {
       "path": "files/core-mailer.ts",
@@ -19,8 +19,29 @@
           "better-auth-orgs"
         ]
       }
+    },
+    {
+      "path": "files/mailer-in-memory.ts",
+      "target": "packages/core/test/mailer-in-memory.ts"
+    },
+    {
+      "path": "files/mailer.test.ts",
+      "target": "packages/core/test/mailer.test.ts"
     }
   ],
+  "card": {
+    "export": "email",
+    "files": [
+      {
+        "path": "files/card/email.tsx",
+        "target": "apps/web/src/capabilities/email.tsx"
+      },
+      {
+        "path": "files/card/email-demo.ts",
+        "target": "apps/web/src/server/email-demo.ts"
+      }
+    ]
+  },
   "dependencies": {},
   "devDependencies": {},
   "envVars": [
@@ -163,7 +184,19 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "email",
-        "content": "## Email\n\n- Send mail through the `Mailer` service from `@repo/core` (`send({ to, subject, text, html? })`); do not use the `EMAIL` binding directly. Always send a `text` body.\n- `apps/web/src/server/mailer.ts` picks the transport from `MAIL_TRANSPORT`: `console` (set in `.dev.vars`) prints the message to the dev server log, anything else sends through Cloudflare Email Service with the `EMAIL` `send_email` binding. `MAIL_FROM` must be an address on a domain enabled for sending: `wrangler email sending enable <domain>`.\n- Transactional mail only (invitations, receipts, password resets); use a dedicated platform for marketing or bulk sends."
+        "content": "## Email\n\n- Send mail through the `Mailer` service from `@repo/core` (`send({ to, subject, text, html? })`); do not use the `EMAIL` binding directly. Always send a `text` body. `sendTestEmail` in `packages/core/src/mailer.ts` is a program that uses it.\n- `MailerLive` in `apps/web/src/server/mailer.ts` picks the transport from `MAIL_TRANSPORT`: `console` (set for local development) prints the message to the dev server log, anything else sends through Cloudflare Email Service with the `EMAIL` `send_email` binding. `MAIL_FROM` must be an address on a domain enabled for sending: `wrangler email sending enable <domain>`. The dashboard card's server functions are in `apps/web/src/server/email-demo.ts`.\n- Test with `MailerInMemory` from `packages/core/test/mailer-in-memory.ts`, which records messages in `SentMail` instead of sending them, as `mailer.test.ts` does.\n- Transactional mail only (invitations, receipts, password resets); use a dedicated platform for marketing or bulk sends.\n- On auth stacks efforge chains `.middleware([requireSession])` on the card's server functions in `email-demo.ts`; gate any server function you add that sends mail the same way."
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "email-without-auth",
+        "content": "### Email without auth\n\n- While this project has no auth, the test email server function in `apps/web/src/server/email-demo.ts` is open: with `MAIL_TRANSPORT=cloudflare`, anyone who can reach the app can send mail from your domain. Add auth (`efforge add auth/better-auth`, which guards it) or remove the demo before deploying."
+      },
+      "when": {
+        "auth": [
+          "none"
+        ]
       }
     },
     {

@@ -1,5 +1,5 @@
 import { Mailer, MailerConfigError, MailerError } from "@repo/core/mailer"
-import { Config, Effect, Layer, Option } from "effect"
+import { Config, Effect, Layer } from "effect"
 import { Email, WorkerConfig } from "effect-cf"
 import { WorkerEnvLive } from "./cloudflare"
 
@@ -7,16 +7,20 @@ import { WorkerEnvLive } from "./cloudflare"
 class EmailBinding extends Email.Tag<EmailBinding>()("EmailBinding") {}
 
 /** Prints each message instead of sending it, so invitations and receipts are visible in `pnpm dev`. */
-const ConsoleMailer = (from: string) =>
-  Layer.succeed(
+const ConsoleMailer = (sender: string) => {
+  const from = sender === "" ? "noreply@localhost" : sender
+  return Layer.succeed(
     Mailer,
     Mailer.of({
+      transport: "console",
+      from,
       send: (message) =>
         Effect.log(
           `[mail] from ${from} to ${message.to}\nSubject: ${message.subject}\n\n${message.text}`,
         ),
     }),
   )
+}
 
 /** Sends through Cloudflare Email Service. `from` must be an address on a domain onboarded to Email Sending. */
 const CloudflareMailer = (from: string) =>
@@ -25,34 +29,47 @@ const CloudflareMailer = (from: string) =>
     Effect.gen(function* () {
       const email = yield* EmailBinding
       return Mailer.of({
+        transport: "cloudflare",
+        from,
         send: ({ to, subject, text, html }) =>
           email.send({ from, to, subject, text, ...(html === undefined ? {} : { html }) }).pipe(
             Effect.asVoid,
-            Effect.mapError((cause) => new MailerError({ operation: "send", cause })),
+            Effect.mapError(
+              (cause) =>
+                new MailerError({
+                  operation: "send",
+                  message: "Cloudflare Email Service did not send the message.",
+                  cause,
+                }),
+            ),
           ),
       })
     }),
   ).pipe(Layer.provide(EmailBinding.layer({ binding: "EMAIL" })))
 
+/** The Cloudflare transport cannot send without a sender. */
+const missingFrom = () =>
+  new MailerConfigError({
+    setting: "MAIL_FROM",
+    message:
+      "MAIL_FROM is not set. Set it to an address on a domain enabled for Cloudflare Email Sending (wrangler email sending enable <domain>), or set MAIL_TRANSPORT=console to print emails instead.",
+  })
+
+// #region card
 /**
- * `Mailer`, chosen by MAIL_TRANSPORT: `console` (local development, prints the message) or
- * `cloudflare` (the default). The Cloudflare transport needs MAIL_FROM, checked when the layer is built.
+ * `Mailer`, chosen by MAIL_TRANSPORT: `console` prints each message to the
+ * server log; `cloudflare` (the default) sends it from MAIL_FROM.
  */
 export const MailerLive = Layer.unwrap(
   Effect.gen(function* () {
     const provider = yield* WorkerConfig.provider
-    const transport = Option.getOrElse(
-      yield* Config.option(Config.String("MAIL_TRANSPORT")).parse(provider),
-      () => "cloudflare",
-    )
-    const from = yield* Config.option(Config.String("MAIL_FROM")).parse(provider)
-    if (transport === "console")
-      return ConsoleMailer(Option.getOrElse(from, () => "noreply@localhost"))
-    if (Option.isNone(from) || from.value === "")
-      return yield* new MailerConfigError({
-        message:
-          "MAIL_FROM is not set. Set it to an address on a domain enabled for Cloudflare Email Sending (wrangler email sending enable <domain>), or set MAIL_TRANSPORT=console to print emails instead.",
-      })
-    return CloudflareMailer(from.value)
+    const read = (name: string, fallback: string) =>
+      Config.String(name).pipe(Config.withDefault(fallback)).parse(provider)
+    const transport = yield* read("MAIL_TRANSPORT", "cloudflare")
+    const from = yield* read("MAIL_FROM", "")
+    if (transport === "console") return ConsoleMailer(from)
+    if (from === "") return yield* missingFrom()
+    return CloudflareMailer(from)
   }),
 ).pipe(Layer.provide(WorkerEnvLive))
+// #endregion
