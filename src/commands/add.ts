@@ -8,14 +8,16 @@ import { type AddonLoadError, type AddonManifest, addonIdsFor, loadAddons } from
 import { cardTransforms, presentCardTransforms, REGISTRY_FILE } from "../cards.ts"
 import { unifiedDiff } from "../diff.ts"
 import { type CommandFailed, exec, has } from "../exec.ts"
-import { GenerateError, generate, isComputed, matches } from "../generate.ts"
+import { GenerateError, generate, isComputed, matches, rootScripts } from "../generate.ts"
 import { introLine } from "../intro.ts"
 import { EfforgeManifest, hash, renderManifest } from "../manifest.ts"
 import { applyProjectName } from "../projectName.ts"
+import { fillReadme, README_FILE, readmeRegions } from "../readme.ts"
 import { generateRouteTree } from "../routeTree.ts"
 import { IncompatibleStack, validate } from "../rules.ts"
 import { type SlotDef, slots } from "../slots.ts"
 import { type StackConfig, toCommand } from "../stack.ts"
+import { AGENTS_FILE } from "../transforms/appendAgentsSection.ts"
 import { WRANGLER_FILE } from "../transforms/addWranglerBinding.ts"
 import {
   runTransform,
@@ -71,11 +73,7 @@ export interface AddResult {
   /** Generated files the add-on replaces (e.g. wrangler.jsonc for infra/alchemy). */
   readonly removed: string[]
   /** Add-ons this run added, for the summary and next steps. */
-  readonly added: ReadonlyArray<{
-    readonly id: string
-    readonly title: string
-    readonly docs?: string
-  }>
+  readonly added: ReadonlyArray<AddedAddon>
   /** Env vars this run added to `.env.example`. */
   readonly envVars: ReadonlyArray<{ readonly name: string; readonly description: string }>
   /** `<package.json>: <script>` entries whose existing command an add-on replaced. */
@@ -84,6 +82,18 @@ export interface AddResult {
   readonly packageManager: { readonly from: string; readonly to: string } | null
   /** Things left for you to do by hand, one line each. */
   readonly notes: string[]
+}
+
+/** An add-on this run added, and where to read about it. */
+export interface AddedAddon {
+  readonly id: string
+  readonly title: string
+  /** Its page in efforge's docs. */
+  readonly docs?: string
+  /** Its dashboard card module, when the project has it. */
+  readonly card?: string
+  /** Headings of the AGENTS.md sections this run added for it. */
+  readonly agents?: ReadonlyArray<string>
 }
 
 /**
@@ -649,6 +659,31 @@ export const addAddons = (
       written.add(".env.example")
     }
 
+    // 6b. the README's marked regions describe the new stack; a README without them is the user's
+    if (newIds.length > 0) {
+      const readme = out.get(README_FILE) ?? (yield* read(README_FILE))
+      if (readme !== undefined) {
+        const filled = fillReadme(
+          readme,
+          readmeRegions({
+            stack,
+            addons,
+            scripts: rootScripts(out.get("package.json") ?? (yield* read("package.json"))),
+            devVars: out.has(".dev.vars") || (yield* read(".dev.vars")) !== undefined,
+          }),
+        )
+        if (filled === undefined)
+          notes.push(
+            `${README_FILE} has no efforge:readme markers (made before efforge 0.3, or rewritten), so it was left as it is.`,
+          )
+        else if (filled !== readme) {
+          out.set(README_FILE, filled)
+          if (!written.has(README_FILE)) transformed.add(README_FILE)
+        }
+        if (filled !== undefined) seams.add(README_FILE)
+      }
+    }
+
     // 7. efforge.jsonc
     if (newIds.length > 0) {
       out.set(
@@ -667,17 +702,40 @@ export const addAddons = (
       written.add("efforge.jsonc")
     }
 
+    // where to read about each new add-on: its card, the AGENTS.md sections this run added, its docs
+    const addedAddon = (m: AddonManifest): AddedAddon => {
+      const entry: { -readonly [K in keyof AddedAddon]: AddedAddon[K] } = {
+        id: m.id,
+        title: m.title,
+      }
+      if (m.docs !== undefined) entry.docs = m.docs
+      const card = m.card?.files[0]
+      if (
+        card !== undefined &&
+        switchedOn(m.id, card.when) &&
+        (out.has(card.target) || disk.get(card.target) !== undefined)
+      )
+        entry.card = card.target
+      const agentsBefore = disk.get(AGENTS_FILE) ?? ""
+      const agentsAfter = out.get(AGENTS_FILE) ?? agentsBefore
+      const agents = m.transforms
+        .filter((t) => t.name === "appendAgentsSection" && switchedOn(m.id, t.when))
+        .filter((t) => {
+          const marker = `<!-- efforge:section:${t.args.id ?? ""} -->`
+          return !agentsBefore.includes(marker) && agentsAfter.includes(marker)
+        })
+        .flatMap((t) => /^#{2,3} (.+)$/m.exec(t.args.content ?? "")?.[1] ?? [])
+      if (agents.length > 0) entry.agents = agents
+      return entry
+    }
+
     const result: AddResult = {
       written: [...written].toSorted(),
       created: [...written].filter((f) => disk.has(f) && disk.get(f) === undefined).toSorted(),
       transformed: [...transformed].toSorted(),
       skipped: skipped.toSorted(),
       removed: [...removed].toSorted(),
-      added: fresh.map(({ manifest: m }) =>
-        m.docs === undefined
-          ? { id: m.id, title: m.title }
-          : { id: m.id, title: m.title, docs: m.docs },
-      ),
+      added: fresh.map(({ manifest: m }) => addedAddon(m)),
       envVars,
       replacedScripts,
       packageManager,
@@ -779,6 +837,16 @@ const wrap = (text: string, width: number): string[] => {
 }
 
 const list = (files: ReadonlyArray<string>, mark: string) => files.map((f) => `${mark} ${f}`)
+
+/** An added add-on's title, then where its card, AGENTS.md sections and docs are. */
+const addedLines = (a: AddedAddon): string[] => {
+  const facts: Array<[string, string]> = []
+  if (a.card !== undefined) facts.push(["card", `${a.card} ${pc.dim("(on /app)")}`])
+  if (a.agents !== undefined) facts.push(["AGENTS.md", a.agents.map((h) => `"${h}"`).join(", ")])
+  if (a.docs !== undefined) facts.push(["docs", a.docs])
+  if (facts.length === 0) return []
+  return [`\n${pc.bold(a.title)}`, ...facts.map(([k, v]) => `  ${pc.dim(k.padEnd(9))} ${v}`)]
+}
 
 export const addHandler = (input: {
   ids: ReadonlyArray<string>
@@ -911,11 +979,9 @@ export const addHandler = (input: {
             ),
           ]
         : []),
-      ...result.added
-        .filter((a) => a.docs !== undefined)
-        .map((a) => `${a.title}: ${pc.dim(a.docs as string)}`),
+      ...result.added.flatMap(addedLines),
     ]
-    if (steps.length > 0) yield* io.note(steps.join("\n"), "Next steps")
+    if (steps.length > 0) yield* io.note(steps.join("\n").replace(/^\n/, ""), "Next steps")
     yield* io.outro(`${pc.green("Done.")} ${pc.dim("Review the changes with")} git diff`)
   }).pipe(
     Effect.catch((e) =>

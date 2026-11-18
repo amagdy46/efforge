@@ -1,0 +1,241 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { NodeServices } from "@effect/platform-node"
+import { afterEach, beforeEach, expect, it } from "@effect/vitest"
+import { Effect, type Layer } from "effect"
+import { loadAddons } from "../src/addon.ts"
+import { addAddons } from "../src/commands/add.ts"
+import { defaultTemplatesDir } from "../src/commands/create.ts"
+import { generate } from "../src/generate.ts"
+import { capabilities, fillReadme, README_REGIONS, readmeRegions } from "../src/readme.ts"
+import { slots } from "../src/slots.ts"
+import { type StackConfig, withDefaults } from "../src/stack.ts"
+import { writeTree } from "../src/write.ts"
+import { repo } from "../scripts/brand/source.ts"
+
+// Against the real templates/: the README regions, the AGENTS.md sections and the docs links.
+
+const run = <A, E>(eff: Effect.Effect<A, E, Layer.Success<typeof NodeServices.layer>>) =>
+  Effect.runPromise(eff.pipe(Effect.provide(NodeServices.layer)))
+
+const addons = () => run(loadAddons(defaultTemplatesDir))
+const generated = (config: StackConfig) =>
+  run(
+    Effect.gen(function* () {
+      return yield* generate(config, yield* loadAddons(defaultTemplatesDir))
+    }),
+  )
+
+const minimal = withDefaults({ name: "app", database: "none", orm: "none", auth: "none" })
+const pg = withDefaults({ name: "app" })
+const house = withDefaults({
+  name: "app",
+  infra: "alchemy",
+  ai: "effect-ai-byok",
+  extras: ["workflows", "realtime", "browser", "storage", "email"],
+})
+const d1 = withDefaults({
+  name: "app",
+  database: "d1",
+  orm: "effect-sql",
+  auth: "better-auth",
+  extras: ["storage", "email"],
+})
+
+/** The text of region `id` in `readme`. */
+const region = (readme: string, id: string) => {
+  const start = readme.indexOf(`<!-- efforge:readme:${id} -->`)
+  const end = readme.indexOf(`<!-- /efforge:readme:${id} -->`)
+  expect(start, id).toBeGreaterThan(-1)
+  expect(end, id).toBeGreaterThan(start)
+  return readme.slice(start, end)
+}
+
+let tmp: string
+let dir: string
+beforeEach(() => {
+  tmp = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "efforge-readme-"))
+  dir = join(tmp, "app")
+})
+afterEach(() => rmSync(tmp, { recursive: true, force: true }))
+
+const readme = () => readFileSync(join(dir, "README.md"), "utf8")
+const opts = { overwrite: false, dryRun: false, install: false }
+
+for (const [name, config] of [
+  ["minimal", minimal],
+  ["pg", pg],
+  ["d1", d1],
+  ["house", house],
+] as const)
+  it(`${name}: every region is filled from the stack, and the scripts table matches package.json`, async () => {
+    const tree = await generated(config)
+    const text = tree.get("README.md") as string
+    for (const id of README_REGIONS) expect(region(text, id).trim().length, id).toBeGreaterThan(60)
+    const scripts = Object.keys(JSON.parse(tree.get("package.json") as string).scripts)
+    const rows = [...region(text, "scripts").matchAll(/^\| `pnpm (?:run )?([\w:]+)`/gm)].map(
+      (m) => m[1],
+    )
+    expect(rows.length).toBeGreaterThan(5)
+    for (const row of rows) expect(scripts, row).toContain(row)
+    for (const script of scripts.filter((s) => s !== "prepare"))
+      expect(rows, script).toContain(script)
+    // the README is a seam: `add` rewrites it, so efforge.jsonc does not hash it
+    expect(tree.get("efforge.jsonc")).not.toContain('"README.md"')
+  })
+
+it("the run steps are the ones each stack needs", async () => {
+  const steps = async (c: StackConfig) =>
+    region((await generated(c)).get("README.md") as string, "run")
+  expect(await steps(minimal)).not.toContain("db:migrate")
+  const postgres = await steps(pg)
+  expect(postgres.indexOf("docker compose up -d --wait")).toBeLessThan(
+    postgres.indexOf("pnpm db:migrate"),
+  )
+  expect(postgres).toContain(".dev.vars")
+  expect(await steps(d1)).toContain("pnpm db:migrate")
+  const alchemy = await steps(house)
+  expect(alchemy).toContain("cp .dev.vars .env")
+  expect(alchemy.indexOf("cp .dev.vars .env")).toBeLessThan(alchemy.indexOf("pnpm dev"))
+  // alchemy dev migrates a local D1 itself; db:migrate needs a wrangler.jsonc
+  expect(await steps({ ...d1, infra: "alchemy" })).not.toContain("db:migrate")
+})
+
+it("deploy follows the infra: wrangler resources and secrets, or Alchemy stages", async () => {
+  const deploy = async (c: StackConfig) =>
+    region((await generated(c)).get("README.md") as string, "deploy")
+  const wrangler = await deploy(d1)
+  expect(wrangler).toContain("pnpm exec wrangler d1 create app")
+  expect(wrangler).toContain("pnpm db:migrate --remote")
+  expect(wrangler).toContain("pnpm exec wrangler email sending enable")
+  expect(wrangler).toContain("pnpm exec wrangler secret bulk .env.production")
+  expect(wrangler).toContain("pnpm run deploy")
+  expect(wrangler).not.toContain("alchemy")
+  expect(await deploy(pg)).toContain("pnpm exec wrangler hyperdrive create app")
+  expect(await deploy(minimal)).not.toContain("secret bulk")
+  const alchemy = await deploy(house)
+  expect(alchemy).toContain("pnpm run deploy --stage prod --env-file .env.production")
+  expect(alchemy).toContain("Hyperdrive")
+  expect(alchemy).toContain("R2 bucket")
+  expect(alchemy).not.toContain("wrangler.jsonc")
+})
+
+it("every capability names a service and a layer that exist in the generated code", async () => {
+  const loaded = await addons()
+  for (const config of [pg, d1, house, { ...house, auth: "better-auth" as const }]) {
+    const tree = await generated(config)
+    const found = capabilities(config, loaded)
+    // database, auth, ai and each extra
+    expect(found.length).toBe(2 + (config.ai === "none" ? 0 : 1) + config.extras.length)
+    for (const c of found) {
+      expect(c.service, c.title).toBeDefined()
+      expect(c.layer, c.title).toBeDefined()
+      expect(tree.get(c.service?.file ?? ""), c.title).toMatch(
+        new RegExp(`class ${c.service?.name}\\b`),
+      )
+      expect(tree.get(c.layer?.file ?? ""), c.title).toMatch(
+        new RegExp(`export const ${c.layer?.name}\\b`),
+      )
+      if (c.card !== undefined) expect(tree.has(c.card), c.card).toBe(true)
+    }
+  }
+})
+
+it("add rewrites the regions to match the new stack and keeps the user's text", async () => {
+  await run(writeTree(dir, await generated(pg)))
+  const mine = readme()
+    .replace("## Run it\n", "## Run it\n\nOur team runs this on a shared VM.\n")
+    .replace("## Add more", "## Our notes\n\nAsk Sam before deploying.\n\n## Add more")
+    .replace("# app\n", "# Our app\n")
+  writeFileSync(join(dir, "README.md"), mine)
+
+  const result = await run(addAddons(dir, ["email"], opts))
+  expect(result.transformed).toContain("README.md")
+  const after = readme()
+  expect(after).toContain("Our team runs this on a shared VM.")
+  expect(after).toContain("## Our notes\n\nAsk Sam before deploying.")
+  expect(after.split("\n")[0]).toBe("# Our app")
+  expect(region(after, "capabilities")).toContain("**Email**")
+  expect(region(after, "capabilities")).toContain("`MAIL_FROM`")
+  expect(region(after, "deploy")).toContain("wrangler email sending enable")
+  expect(region(after, "about")).toContain("Email")
+  // outside the regions, nothing but the regions changed
+  const strip = (t: string) =>
+    t.replace(/(<!-- efforge:readme:(\w+) -->)[\s\S]*?(<!-- \/efforge:readme:\2 -->)/g, "$1$3")
+  expect(strip(after)).toBe(strip(mine))
+  // it equals what create writes for that stack, user text aside
+  const fresh = (await generated({ ...pg, extras: ["email"] })).get("README.md") as string
+  for (const id of README_REGIONS) expect(region(after, id)).toBe(region(fresh, id))
+})
+
+it("a README without markers is left alone, and add says so in one line", async () => {
+  await run(writeTree(dir, await generated(pg)))
+  writeFileSync(join(dir, "README.md"), "# Ours\n\nWe wrote this.\n")
+  const result = await run(addAddons(dir, ["email"], opts))
+  expect(readme()).toBe("# Ours\n\nWe wrote this.\n")
+  expect(result.transformed).not.toContain("README.md")
+  expect(result.written).not.toContain("README.md")
+  expect(result.notes.filter((n) => n.includes("README.md"))).toHaveLength(1)
+})
+
+it("a region whose markers the user deleted keeps their text", async () => {
+  await run(writeTree(dir, await generated(pg)))
+  const deploy = region(readme(), "deploy")
+  const mine = readme().replace(
+    `${deploy}<!-- /efforge:readme:deploy -->`,
+    "We deploy with our own pipeline.",
+  )
+  writeFileSync(join(dir, "README.md"), mine)
+  await run(addAddons(dir, ["storage"], opts))
+  expect(readme()).toContain("We deploy with our own pipeline.")
+  expect(readme()).not.toContain("efforge:readme:deploy")
+  expect(region(readme(), "capabilities")).toContain("**Storage**")
+})
+
+it("fillReadme ignores an unclosed region and returns undefined without markers", async () => {
+  const regions = readmeRegions({ stack: pg, addons: await addons(), scripts: {}, devVars: false })
+  expect(fillReadme("# x\n", regions)).toBeUndefined()
+  const half = "<!-- efforge:readme:about -->\nmine\n"
+  expect(fillReadme(half, regions)).toBeUndefined()
+})
+
+it("add tells where each new add-on's card, AGENTS.md sections and docs are", async () => {
+  await run(writeTree(dir, await generated(minimal)))
+  const result = await run(addAddons(dir, ["database/d1", "orm/drizzle", "realtime"], opts))
+  const byId = new Map(result.added.map((a) => [a.id, a]))
+  expect(byId.get("orm/drizzle")?.card).toBe("apps/web/src/capabilities/database.tsx")
+  expect(byId.get("orm/drizzle")?.agents).toEqual(["Queries and migrations (Drizzle)"])
+  expect(byId.get("database/d1")?.agents).toEqual(["Database (Cloudflare D1)"])
+  expect(byId.get("extras/realtime")?.card).toBe("apps/web/src/capabilities/realtime.tsx")
+  expect(byId.get("extras/realtime")?.docs).toBe(
+    `${repo.url}/blob/main/docs/addons/extras-realtime.md`,
+  )
+  const agents = readFileSync(join(dir, "AGENTS.md"), "utf8")
+  expect(agents).toContain("## Queries and migrations (Drizzle)")
+  expect(agents).toContain("pnpm db:migrate --remote")
+})
+
+it("every add-on links its page in efforge's docs", async () => {
+  const loaded = await addons()
+  for (const slot of slots)
+    for (const option of slot.options.filter((o) => o.id !== "none")) {
+      const m = loaded.get(`${slot.id}/${option.id}`)?.manifest
+      expect(m?.docs, m?.id).toBe(`${repo.url}/blob/main/docs/addons/${slot.id}-${option.id}.md`)
+    }
+})
+
+it("the ORM, database and Alchemy add-ons each bring an AGENTS.md section", async () => {
+  const agents = async (c: StackConfig) => (await generated(c)).get("AGENTS.md") as string
+  const h = await agents(house)
+  expect(h).toContain("## Database (Postgres)")
+  expect(h).toContain("## Queries and migrations (Drizzle)")
+  expect(h).toContain("## Infrastructure (Alchemy)")
+  expect(h).toContain("There is no `wrangler.jsonc`")
+  expect(h).not.toContain("`HYPERDRIVE` is declared in `wrangler.jsonc`")
+  const s = await agents(d1)
+  expect(s).toContain("## Database (Cloudflare D1)")
+  expect(s).toContain("## Queries and migrations (Effect SQL)")
+  expect(s).not.toContain("Infrastructure (Alchemy)")
+  expect((await agents(minimal)).match(/efforge:section:/g)).toBeNull()
+})

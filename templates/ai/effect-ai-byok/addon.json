@@ -2,6 +2,7 @@
   "id": "ai/effect-ai-byok",
   "title": "Effect AI (bring your own key)",
   "description": "An Llm service on Effect AI with Anthropic, OpenAI, OpenRouter and Ollama providers; keys come from the environment, or are saved encrypted per organization when auth has organizations.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/ai-effect-ai-byok.md",
   "files": [
     {
       "path": "files/core/llm.ts",

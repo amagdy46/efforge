@@ -2,6 +2,7 @@
   "id": "extras/storage",
   "title": "Storage",
   "description": "Object storage: a Storage service on R2 with Worker-served signed download URLs.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-storage.md",
   "files": [
     {
       "path": "files/storage-security.ts",

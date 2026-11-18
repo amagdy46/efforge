@@ -2,6 +2,7 @@
   "id": "runtime/cloudflare",
   "title": "Cloudflare Workers",
   "description": "Runs the app on Cloudflare Workers via @cloudflare/vite-plugin.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/runtime-cloudflare.md",
   "files": [
     {
       "path": "files/server.ts",
@@ -39,6 +40,9 @@
     ]
   },
   "devDependencies": {
+    ".": [
+      "wrangler"
+    ],
     "apps/web": [
       "@cloudflare/vite-plugin",
       "@cloudflare/workers-types",
@@ -48,5 +52,10 @@
   "envVars": [],
   "requires": [],
   "conflicts": [],
-  "transforms": []
+  "transforms": [],
+  "scripts": {
+    ".": {
+      "deploy": "pnpm --filter web run deploy"
+    }
+  }
 }

@@ -15,12 +15,11 @@ Rules for AI agents (and humans) working in this repo. Read this before changing
   `// #region card` ... `// #endregion` block of a file (`?region=card`, cut at build time by
   `apps/web/regions.ts`). That block is public, in the browser bundle: never mark a secret. Keep the
   markers when you edit such a file. With auth, card server functions require `requireSession`.
-- The dashboard is a starter surface. To remove it: replace `routes/app/index.tsx` with your page,
-  delete `capabilities/`, `components/{capability-card,code-block,layer-graph}.tsx`,
-  `lib/{highlight,layer-graph}.ts` and the cards' server files, then run `pnpm check`.
+- The dashboard is a starter surface. To remove it: replace `routes/app/index.tsx` with your page, delete `capabilities/`, `components/{capability-card,code-block,layer-graph}.tsx`, `lib/{highlight,layer-graph}.ts` and the server files the cards import, make `getStack` in `server/stack.ts` return `cards: []`, then run `pnpm check`.
 - `apps/web/src/server/outcome.ts`: `runOutcome` runs an Effect for a server function and returns
   its tagged error as data (`{ ok: false, error: { _tag, message } }`), so the UI can match on it.
 - `efforge.jsonc`: the stack choices. `efforge add` reads it; leave it alone.
+- `README.md`: `efforge add` rewrites the text between each pair of `efforge:readme` markers; write anywhere else.
 
 ## Effect
 
@@ -66,8 +65,8 @@ Rules for AI agents (and humans) working in this repo. Read this before changing
   })
   ```
 
-  `packages/core/test` has one such test per capability. A service with one fixed answer can use
-  `Layer.succeed(Auth, Auth.of({ ... }))`. `it.effect` already gives each test a `TestClock`.
+  With a database, `packages/core/test/notes.test.ts` is this test in full. A service with one
+  fixed answer can use `Layer.succeed(Auth, Auth.of({ ... }))`. `it.effect` already gives each test a `TestClock`.
 
 - Where a fake would behave differently from the platform (D1, R2, Durable Objects, Workflows),
   check the behaviour under `pnpm dev` too: it runs your Worker in workerd with local bindings.

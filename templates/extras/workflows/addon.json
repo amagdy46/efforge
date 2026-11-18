@@ -2,6 +2,7 @@
   "id": "extras/workflows",
   "title": "Workflows",
   "description": "Durable background jobs: a Jobs service on Cloudflare Workflows, with an example workflow and server functions.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-workflows.md",
   "files": [
     {
       "path": "files/core-jobs.ts",

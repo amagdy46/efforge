@@ -2,6 +2,7 @@
   "id": "database/d1",
   "title": "Cloudflare D1",
   "description": "A D1 binding (SQLite on Cloudflare) and the `@repo/db` package.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/database-d1.md",
   "files": [
     {
       "path": "files/package.json",
@@ -89,23 +90,30 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "database",
-        "content": "## Database\n\nCloudflare D1, queried through Drizzle.\n\n- Tables live in `packages/db/src/schema.ts`; queries go through the `Database` service from `@repo/core`.\n- Change the schema, then run `pnpm --filter @repo/db db:generate` to write a migration to `packages/db/drizzle/`, then `pnpm db:migrate` (flattens them into `packages/db/migrations/` and applies them locally).\n- Never edit files under `packages/db/drizzle/` or `packages/db/migrations/` by hand; they are generated."
+        "content": "## Database (Cloudflare D1)\n\n- The Worker reaches D1 only through the `DB` binding (`packages/db/src/layer.ts`, through effect-cf). D1 is SQLite: write SQLite SQL, and keep each query small (a Worker request has a time limit)."
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "database-wrangler",
+        "content": "- `DB` is declared under `d1_databases` in `wrangler.jsonc`. `pnpm db:migrate` applies `packages/db/migrations/` to the local D1 in `.wrangler/state` (shared with `pnpm dev`; delete it to start empty), and `pnpm db:migrate --remote` to the deployed one."
       },
       "when": {
-        "orm": [
-          "drizzle"
+        "infra": [
+          "none"
         ]
       }
     },
     {
       "name": "appendAgentsSection",
       "args": {
-        "id": "database",
-        "content": "## Database\n\nCloudflare D1, queried through effect-sql.\n\n- Migrations are plain SQL files in `packages/db/migrations/`, named `NNNN_name.sql` and applied in order by `pnpm db:migrate` (wrangler, local D1).\n- Add a new file for every schema change; never edit one that has already been applied.\n- Queries go through the `Database` service from `@repo/core`."
+        "id": "database-alchemy",
+        "content": "- `infra/alchemy.run.ts` declares the D1 database. `pnpm dev` applies the migrations to a local D1 under `.alchemy/`, and `pnpm run deploy` to the stage's database; `pnpm db:migrate` is not used with Alchemy."
       },
       "when": {
-        "orm": [
-          "effect-sql"
+        "infra": [
+          "alchemy"
         ]
       }
     }

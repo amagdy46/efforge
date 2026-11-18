@@ -2,6 +2,7 @@
   "id": "extras/email",
   "title": "Email",
   "description": "Transactional email: a Mailer service on Cloudflare Email Service, printed to the console in development, plus invitation emails with organizations.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-email.md",
   "files": [
     {
       "path": "files/core-mailer.ts",

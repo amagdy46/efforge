@@ -5,6 +5,7 @@ import { addonIdsFor } from "./addon.ts"
 import { presentCardTransforms } from "./cards.ts"
 import { hash, renderManifest } from "./manifest.ts"
 import { applyProjectName } from "./projectName.ts"
+import { fillReadme, README_FILE, readmeRegions } from "./readme.ts"
 import { SlotId, type StackConfig, toCommand } from "./stack.ts"
 import {
   runTransform,
@@ -59,6 +60,16 @@ export const isComputed = (target: string) =>
 
 /** Packages of the generated monorepo (`@repo/*`) link via `workspace:*`; they have no pinned version. */
 const isWorkspace = (name: string) => name.startsWith("@repo/")
+
+/** The `scripts` of a package.json, or none when it is missing or not JSON. */
+export const rootScripts = (text: string | undefined): Record<string, string> => {
+  try {
+    const pkg = JSON.parse(text ?? "{}") as { scripts?: Record<string, string> }
+    return pkg.scripts ?? {}
+  } catch {
+    return {}
+  }
+}
 
 const DEFAULT_PACKAGES = ["apps/*", "packages/*"]
 
@@ -199,6 +210,25 @@ export const generate = (
     // Built-in post-step, after transforms and before hashing, so manifest hashes cover the
     // final (named) content and `add` sees an unedited README/wrangler.jsonc as unchanged.
     const out = new Map(applyProjectName(tree, config.name))
+
+    // the README's marked regions describe the final stack; `add` rewrites them, so the README is a
+    // seam, never hash-checked
+    const readme = out.get(README_FILE)
+    if (readme !== undefined) {
+      const filled = fillReadme(
+        readme,
+        readmeRegions({
+          stack: config,
+          addons,
+          scripts: rootScripts(out.get("package.json")),
+          devVars: out.has(".dev.vars"),
+        }),
+      )
+      if (filled !== undefined) {
+        out.set(README_FILE, filled)
+        seams.add(README_FILE)
+      }
+    }
 
     // keep the template's other keys and comments (e.g. `allowBuilds`); `catalog` is always
     // computed, and `overrides` always holds every Effect package at the `effect` pin

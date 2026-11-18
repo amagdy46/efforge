@@ -2,6 +2,7 @@
   "id": "auth/better-auth-orgs",
   "title": "Better Auth with organizations",
   "description": "Email and password sign-in with Better Auth, plus organizations: an org switcher, member management and invite links.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/auth-better-auth-orgs.md",
   "files": [
     {
       "path": "files/core/Auth.ts",

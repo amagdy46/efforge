@@ -103,7 +103,8 @@ it("names the project: package.json, wrangler.jsonc and README heading, with con
   expect(tree.get("wrangler.jsonc")).toContain('"name": "spoorline"')
   expect((tree.get("README.md") as string).split("\n")[0]).toBe("# spoorline")
   const manifest = JSON.parse((tree.get("efforge.jsonc") as string).replace(/^\/\/.*\n/, ""))
-  expect(manifest.files["README.md"]).toBe(hash(tree.get("README.md") as string))
+  // the README's regions are rewritten by `add`, so it is a seam: never hash-checked
+  expect(manifest.files["README.md"]).toBeUndefined()
   expect(manifest.files["wrangler.jsonc"]).toBe(hash(tree.get("wrangler.jsonc") as string))
 })
 

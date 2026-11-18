@@ -2,6 +2,7 @@
   "id": "auth/better-auth",
   "title": "Better Auth",
   "description": "Email and password sign-in with Better Auth, a guarded /app and a user menu.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/auth-better-auth.md",
   "files": [
     {
       "path": "files/core/Auth.ts",

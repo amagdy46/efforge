@@ -129,12 +129,13 @@ it("the name prompt rejects an occupied directory and asks again", async () => {
 })
 
 it("next steps follow the stack", () => {
-  const steps = (o: Partial<Parameters<typeof withDefaults>[0]>) =>
+  const steps = (o: Partial<Parameters<typeof withDefaults>[0]>, devVars = true) =>
     plain(
       nextSteps(withDefaults({ name: "app", ...o }), {
         dirName: "app",
         inPlace: false,
         installed: true,
+        devVars,
       }),
     )
   const pg = steps({ database: "postgres" })
@@ -146,7 +147,12 @@ it("next steps follow the stack", () => {
   expect(d1).not.toContain("docker")
   const none = steps({ database: "none", orm: "none", auth: "none" })
   expect(none).not.toContain("db:migrate")
-  expect(steps({ infra: "alchemy" })).toContain("cp .env.example .env")
+  // alchemy dev reads .env: the development values efforge wrote to .dev.vars, not the examples
+  expect(steps({ infra: "alchemy" })).toContain("cp .dev.vars .env")
+  expect(steps({ infra: "alchemy", database: "d1", orm: "effect-sql" })).not.toContain("db:migrate")
+  expect(
+    steps({ infra: "alchemy", database: "none", orm: "none", auth: "none" }, false),
+  ).not.toContain("cp ")
 })
 
 const noDbProject = () =>

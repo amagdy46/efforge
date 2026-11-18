@@ -8,6 +8,7 @@ import { generate } from "../generate.ts"
 import { askStack, DEFAULT_NAME, type StackFlags } from "../prompts/flow.ts"
 import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
 import { projectDirName } from "../projectName.ts"
+import { renderSteps, type RunStep, runSteps } from "../readme.ts"
 import { introLine } from "../intro.ts"
 import { generateRouteTree } from "../routeTree.ts"
 import { slots } from "../slots.ts"
@@ -73,34 +74,28 @@ const nodeSupported = (version: string): boolean => {
   return (major === 24 && minor >= 11) || major >= 26
 }
 
-/** What to run after `create`, for this stack. */
+/** What to run after `create`, for this stack: the README's "Run it", from the same source. */
 export const nextSteps = (
   stack: StackConfig,
-  o: { readonly dirName: string; readonly inPlace: boolean; readonly installed: boolean },
+  o: {
+    readonly dirName: string
+    readonly inPlace: boolean
+    readonly installed: boolean
+    readonly devVars: boolean
+  },
 ): string => {
-  const steps: Array<[string, string?]> = []
-  if (!o.inPlace) steps.push([`cd ${o.dirName}`])
-  if (!o.installed) steps.push(["pnpm install"])
-  if (stack.infra === "alchemy") {
-    steps.push(["cp .env.example .env", "local values for Alchemy"])
-    // D1 migrations still need wrangler.jsonc under Alchemy (a known gap, docs/limits.md)
-    if (stack.database === "postgres") {
-      steps.push(["docker compose up -d --wait", "local Postgres"])
-      steps.push(["pnpm db:migrate"])
-    }
-    steps.push(["pnpm dev", "alchemy dev; deploying: see infra/README.md"])
-  } else {
-    if (stack.database === "postgres") steps.push(["docker compose up -d --wait", "local Postgres"])
-    if (stack.database !== "none")
-      steps.push(["pnpm db:migrate", stack.database === "d1" ? "local D1" : undefined])
-    steps.push(["pnpm dev", "http://localhost:5173"])
-  }
-  const width = Math.max(...steps.map(([c]) => c.length))
-  return steps
-    .map(
-      ([c, note]) =>
-        `  ${pc.cyan(c)}${note === undefined ? "" : `  ${" ".repeat(width - c.length)}${pc.dim(`# ${note}`)}`}`,
-    )
+  const steps: RunStep[] = [
+    ...(o.inPlace ? [] : [{ command: `cd ${o.dirName}` }]),
+    ...(o.installed ? [] : [{ command: "pnpm install" }]),
+    ...runSteps(stack, o),
+  ]
+  return renderSteps(steps)
+    .map((line) => {
+      const at = line.indexOf("  # ")
+      return at === -1
+        ? `  ${pc.cyan(line)}`
+        : `  ${pc.cyan(line.slice(0, at))}${pc.dim(line.slice(at))}`
+    })
     .join("\n")
 }
 
@@ -279,7 +274,15 @@ export const create = (opts: CreateOptions) =>
       yield* Console.log(JSON.stringify({ stack, command, files }, null, 2))
       return
     }
-    yield* io.note(nextSteps(stack, { dirName, inPlace, installed: opts.install }), "Next steps")
+    yield* io.note(
+      nextSteps(stack, {
+        dirName,
+        inPlace,
+        installed: opts.install,
+        devVars: tree.has(".dev.vars"),
+      }),
+      "Next steps",
+    )
     yield* io.outro(
       `${pc.green("Done.")} ${pc.dim("Add more later:")} npx create-efforge list\n   ${pc.dim("Same stack again:")} ${command}`,
     )

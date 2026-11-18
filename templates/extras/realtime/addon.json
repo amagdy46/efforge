@@ -2,6 +2,7 @@
   "id": "extras/realtime",
   "title": "Realtime",
   "description": "WebSockets: a Realtime service, a hibernating Room Durable Object, a useRoom hook and a dashboard card.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-realtime.md",
   "files": [
     {
       "path": "files/core-realtime.ts",
