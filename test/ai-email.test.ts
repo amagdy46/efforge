@@ -69,7 +69,7 @@ it("ai without orgs: key from the environment, no credential table or settings p
 })
 
 it("server functions are gated behind requireSession exactly when auth is present", async () => {
-  const gated = ["run-browser", "example-job", "ai"]
+  const gated = ["run-browser", "workflows-demo", "ai"]
   const withAuth = await gen({ ...orgs, ai: "effect-ai-byok", extras: ["browser", "workflows"] })
   for (const file of gated) {
     const body = text(withAuth, `apps/web/src/server/${file}.ts`)

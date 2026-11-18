@@ -1,7 +1,7 @@
 {
   "id": "extras/workflows",
   "title": "Workflows",
-  "description": "Durable background jobs: a Jobs service on Cloudflare Workflows, with an example workflow and server functions.",
+  "description": "Durable background jobs: a Jobs service on Cloudflare Workflows, an example workflow and a dashboard card that follows a run's steps.",
   "files": [
     {
       "path": "files/core-jobs.ts",
@@ -16,10 +16,27 @@
       "target": "apps/web/src/server/jobs.ts"
     },
     {
-      "path": "files/example-job.ts",
-      "target": "apps/web/src/server/example-job.ts"
+      "path": "files/jobs-in-memory.ts",
+      "target": "packages/core/test/jobs-in-memory.ts"
+    },
+    {
+      "path": "files/jobs.test.ts",
+      "target": "packages/core/test/jobs.test.ts"
     }
   ],
+  "card": {
+    "export": "workflows",
+    "files": [
+      {
+        "path": "files/card/workflows.tsx",
+        "target": "apps/web/src/capabilities/workflows.tsx"
+      },
+      {
+        "path": "files/card/workflows-demo.ts",
+        "target": "apps/web/src/server/workflows-demo.ts"
+      }
+    ]
+  },
   "dependencies": {},
   "devDependencies": {},
   "envVars": [],
@@ -77,18 +94,10 @@
       }
     },
     {
-      "name": "addServerFnMiddleware",
+      "name": "appendAgentsSection",
       "args": {
-        "file": "apps/web/src/server/example-job.ts",
-        "middleware": "requireSession",
-        "import": "requireSession",
-        "from": "./require-session"
-      },
-      "when": {
-        "auth": [
-          "better-auth",
-          "better-auth-orgs"
-        ]
+        "id": "workflows",
+        "content": "## Workflows\n\n- `Jobs` (`packages/core/src/jobs.ts`) starts durable jobs and reads their status and events; `JobsLive` (`apps/web/src/server/jobs.ts`) runs them on Cloudflare Workflows. Each workflow is a class in `apps/web/src/workflows/` (the example is `Example.ts`, bound as `EXAMPLE_WORKFLOW` and exported from `apps/web/src/server.ts`).\n- To add a workflow: a class beside `Example.ts`, its payload in `JobPayloads`, its client in `make` in `server/jobs.ts`, a binding for it, and its export from `src/server.ts`.\n- Put side effects inside `Workflow.step(...)`: a step that succeeded is not run again, but code outside a step runs again each time the run resumes. Wait with `Workflow.sleep`, not `Effect.sleep` or `setTimeout`. Fail with `WorkflowStepNonRetryableError` when a retry cannot help.\n- Test code that starts jobs with `JobsInMemory` from `packages/core/test/jobs-in-memory.ts` (see `jobs.test.ts`); it needs no Cloudflare.\n- `pnpm dev` runs workflows locally; their state lives in `.wrangler/state`. The dashboard card's server functions (`apps/web/src/server/workflows-demo.ts`) require a session when the project has auth; without auth anyone who can reach the app can start runs."
       }
     }
   ]
