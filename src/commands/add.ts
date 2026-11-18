@@ -811,9 +811,10 @@ export const addFailure = (
     case "TransformAnchorMissing":
       return {
         code: "TransformAnchorMissing",
-        message: `Couldn't find ${String(e.anchor)} in ${String(e.file)}. Nothing was written. Add this by hand, then re-run:\n${String(e.snippet)}`,
+        message: `Couldn't find ${String(e.anchor)} in ${String(e.file)}. Nothing was written. Add the snippet by hand, then re-run.`,
         fix: null,
         details: { file: String(e.file), anchor: String(e.anchor), snippet: String(e.snippet) },
+        more: String(e.snippet),
       }
     case "CommandFailed": {
       const output = String(e.output).trim()

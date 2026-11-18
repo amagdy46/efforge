@@ -52,7 +52,7 @@
     {
       "name": "DATABASE_URL",
       "example": "postgres://postgres:postgres@localhost:5432/app",
-      "description": "Used by `pnpm db:migrate` and drizzle-kit; the running app connects through the HYPERDRIVE binding."
+      "description": "Used by `pnpm db:migrate` and drizzle-kit, read from the shell; unset, they use the docker-compose database. The running app connects through the HYPERDRIVE binding."
     }
   ],
   "requires": [],

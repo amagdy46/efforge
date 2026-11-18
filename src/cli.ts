@@ -45,6 +45,8 @@ export const root = Command.make("create-efforge", createConfig, createHandler).
   ]),
 )
 
+const commands = ["create", "add", "list"]
+
 // --- Parse errors ----------------------------------------------------------------
 // Effect's runner prints the whole help on stdout for a mistyped flag, which breaks --json and
 // buries the one line that matters. So the arguments are parsed first by the same command tree
@@ -117,6 +119,16 @@ const parseFix = (args: ReadonlyArray<string>, e: CliError.NonShowHelpErrors): s
       return dropFlag(args, e.option)
     }
     case "UnexpectedArgument": {
+      // `create my app`: the words were meant as one name
+      const pos = positionals(args)
+      const words = pos[0]?.[1] === "create" ? pos.slice(1) : pos
+      const [name] = words
+      if (name !== undefined && !commands.includes(name[1])) {
+        const rest = new Set(words.slice(1).map(([i]) => i))
+        return args.flatMap((t, i) =>
+          i === name[0] ? [words.map(([, w]) => w).join("-")] : rest.has(i) ? [] : [t],
+        )
+      }
       let out = [...args]
       for (const extra of e.arguments) {
         const at = out.lastIndexOf(extra)
@@ -160,8 +172,6 @@ const reportParseError = (args: ReadonlyArray<string>, error: CliError.ShowHelp)
 // --- Mistyped commands -------------------------------------------------------------
 // The root command takes a project name, so `create-efforge lst --json` would create a project
 // called "lst". A first argument one deletion or one swap away from a command is refused instead.
-
-const commands = ["create", "add", "list"]
 
 const nearMiss = (typed: string, command: string): boolean => {
   if (typed === command || typed.length < 2) return false
