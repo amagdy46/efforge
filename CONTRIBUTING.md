@@ -6,7 +6,7 @@ Needs Node 24.11+ or 26+ (not 25) and pnpm 12.
 pnpm install
 pnpm typecheck && pnpm lint && pnpm test && pnpm build
 pnpm test:e2e                        # every stack in the matrix; slow
-pnpm test:e2e -t "stacks build minimal$"
+pnpm test:e2e -t "stacks build > minimal$"   # vitest 5.1 joins names with " > "
 node src/bin.ts my-app --dry-run     # run the CLI from source
 node scripts/bump.ts [--write]       # pins vs npm latest
 ```

@@ -10,7 +10,7 @@ import { ROUTE_TREE_COMMAND } from "../../src/routeTree.ts"
 import { type StackConfig, withDefaults } from "../../src/stack.ts"
 import type { Tree } from "../../src/tree.ts"
 import { isEffectLockstep } from "../../src/versions.ts"
-import { parse } from "yaml"
+import { parse, parseAllDocuments } from "yaml"
 
 const templates = new URL("../../templates", import.meta.url).pathname
 // Under the repo (gitignored), not os.tmpdir(): /tmp is often a small tmpfs.
@@ -45,8 +45,13 @@ const sh = (cwd: string, command: string) => {
 const checkEffectLockstep = (dir: string) => {
   const read = (file: string) => parse(readFileSync(`${dir}/${file}`, "utf8"))
   const effect = (read("pnpm-workspace.yaml") as { catalog: Record<string, string> }).catalog.effect
-  const lock = read("pnpm-lock.yaml") as { packages?: Record<string, unknown> }
-  const drifted = Object.keys(lock.packages ?? {}).filter((key) => {
+  // pnpm 12 writes the lockfile as several YAML documents; packages live in one of them
+  const keys = parseAllDocuments(readFileSync(`${dir}/pnpm-lock.yaml`, "utf8")).flatMap((doc) =>
+    Object.keys((doc.toJS() as { packages?: Record<string, unknown> } | null)?.packages ?? {}),
+  )
+  if (!keys.some((key) => key.startsWith("effect@")))
+    throw new Error("pnpm-lock.yaml lists no effect package; the check would prove nothing")
+  const drifted = keys.filter((key) => {
     const at = key.lastIndexOf("@")
     return isEffectLockstep(key.slice(0, at)) && key.slice(at + 1) !== effect
   })
