@@ -309,6 +309,20 @@
   ],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "Text generation through Effect AI. Call `generateText(prompt)` on the `Llm` service; the layer talks to Anthropic, OpenAI, OpenRouter or Ollama. Keys come from the environment, or, with organizations, each organization saves its own key, stored encrypted.",
+    "service": {
+      "name": "Llm",
+      "file": "packages/core/src/llm.ts",
+      "errors": [
+        "LlmError",
+        "LlmNotConfigured"
+      ]
+    },
+    "limits": [
+      "With `auth=none`, the demo server function in `apps/web/src/server/ai.ts` is not gated: anyone who can reach the app can spend the configured key. Add auth or remove the demo before deploying."
+    ]
+  },
   "transforms": [
     {
       "name": "addExport",

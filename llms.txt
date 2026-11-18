@@ -1,0 +1,24 @@
+# efforge
+
+> efforge (`npm create efforge`) creates a full-stack TypeScript app on Cloudflare Workers: TanStack Start on the front, Effect on the server, with a database, auth, email, storage and AI already wired as Effect services. `efforge add` wires another capability into an existing project with AST edits, and refuses to overwrite files you changed.
+
+Coding agents: run the CLI with `--json` and no prompts. Needs create-efforge 0.3.0 or later: every document then carries `contract: 1`, and one without it comes from an older CLI that this contract doesn't describe (`npx -y create-efforge@latest --version --json` checks). Every run prints one JSON document; on failure, `error.fix` is either a command that does what you asked or `null`, never a different capability; when there are several ways out, `error.alternatives` lists them as complete commands to choose from.
+
+```sh
+npx -y create-efforge@latest --version --json
+npx -y create-efforge@latest create my-app --json --database=d1 --auth=better-auth
+npx -y create-efforge@latest list --json --cwd my-app
+npx -y create-efforge@latest add email --json --cwd my-app
+```
+
+## Docs
+
+- [Agent skill](https://raw.githubusercontent.com/amagdy46/efforge/main/skills/efforge/SKILL.md): when to use efforge, the exact commands, what each error means, how to verify the result
+- [JSON contract](https://raw.githubusercontent.com/amagdy46/efforge/main/docs/json.md): every field of the `--json` output and every error code, with real examples
+- [CLI reference](https://raw.githubusercontent.com/amagdy46/efforge/main/docs/cli.md): every flag, compatibility rules, `add` in detail
+- [Status and limits](https://raw.githubusercontent.com/amagdy46/efforge/main/docs/limits.md): what isn't supported yet, and what is stable
+
+## Optional
+
+- [README](https://raw.githubusercontent.com/amagdy46/efforge/main/README.md): what a generated project contains, for people
+- [Changelog](https://raw.githubusercontent.com/amagdy46/efforge/main/CHANGELOG.md)

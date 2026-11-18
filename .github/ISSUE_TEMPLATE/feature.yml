@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest an add-on, a flag or a change to the generated project.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do
+      description: The task, and where efforge gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+      description: The change you would like. For an add-on, say which service it adds and which Cloudflare binding or provider it uses.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: Workarounds, or other tools that do this.

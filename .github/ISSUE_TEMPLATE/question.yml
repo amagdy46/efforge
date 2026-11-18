@@ -1,0 +1,15 @@
+name: Question
+description: Ask how to do something with efforge or a project it generated.
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The docs may already answer it: [docs/README.md](https://github.com/amagdy46/efforge/blob/main/docs/README.md).
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What you want to do, what you tried, and the efforge version.
+    validations:
+      required: true

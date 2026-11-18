@@ -3,7 +3,7 @@ import { parseDocument } from "yaml"
 import type { LoadedAddon, When } from "./addon.ts"
 import { addonIdsFor } from "./addon.ts"
 import { presentCardTransforms } from "./cards.ts"
-import { hash, renderManifest } from "./manifest.ts"
+import { hash, manifestSchemaUrl, renderManifest } from "./manifest.ts"
 import { applyProjectName } from "./projectName.ts"
 import { fillReadme, README_FILE, readmeRegions } from "./readme.ts"
 import { SlotId, type StackConfig, toCommand } from "./stack.ts"
@@ -254,7 +254,13 @@ export const generate = (
     )
     out.set(
       "efforge.jsonc",
-      renderManifest({ efforgeVersion, stack: config, command: toCommand(config), files }),
+      renderManifest({
+        $schema: manifestSchemaUrl(),
+        efforgeVersion,
+        stack: config,
+        command: toCommand(config),
+        files,
+      }),
     )
 
     return new Map([...out].toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))

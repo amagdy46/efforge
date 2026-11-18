@@ -36,6 +36,17 @@
   ],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "File storage on R2. The `Storage` service puts, gets and deletes objects, and signs download URLs that the Worker serves. Signatures use `STORAGE_SIGNING_SECRET`; the app does not start without it.",
+    "service": {
+      "name": "Storage",
+      "file": "packages/core/src/storage.ts",
+      "errors": [
+        "StorageError",
+        "StorageConfigError"
+      ]
+    }
+  },
   "transforms": [
     {
       "name": "addExport",

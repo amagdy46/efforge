@@ -187,6 +187,17 @@
   "envVars": [],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "Drizzle 1.0 for queries and migrations. The `Database` service hands you a Drizzle client whose queries are Effects, so `yield* db.select().from(note)` works inside `Effect.gen`. `DatabaseLayer` in `packages/db` builds the client from the database binding. It comes with a `note` table and a notes demo on `/app`.",
+    "service": {
+      "name": "Database",
+      "file": "packages/core/src/Database.ts",
+      "errors": []
+    },
+    "limits": [
+      "`drizzle-orm` and `drizzle-kit` are pinned to a 1.0 release candidate, the version under Dependencies ([why](../decisions/0002-drizzle-rc-pin.md))."
+    ]
+  },
   "transforms": [
     {
       "name": "addImport",

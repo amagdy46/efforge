@@ -79,7 +79,12 @@ it("--json reports errors as JSON on stdout", async () => {
   const logs: string[] = []
   vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => void logs.push(a.join(" ")))
   await cli(["app", "--json", "--dry-run", "--database=nope"])
-  expect(JSON.parse(logs.join("\n")).error.code).toBe("IncompatibleStack")
+  expect(JSON.parse(logs.join("\n")).error).toMatchObject({
+    code: "UnknownValue",
+    flag: "--database",
+    value: "nope",
+    fix: "npx -y create-efforge app --json --dry-run --database=none",
+  })
   expect(process.exitCode).toBe(1)
 })
 
@@ -173,11 +178,14 @@ it.effect("add: auth or ORM without a database says to add them together", () =>
       Effect.flip,
     )
     expect(e._tag).toBe("IncompatibleStack")
-    expect((e as { reason?: string }).reason).toContain("efforge add database/d1 orm/drizzle")
+    expect((e as { reason?: string }).reason).toContain("needs a database")
+    // each way out is a database to add with it; which one is the caller's choice
+    expect((e as { ways?: string[][] }).ways).toEqual([["database/postgres"], ["database/d1"]])
     const db = yield* addAddons(dir, ["database/d1"], { overwrite: false, dryRun: true }).pipe(
       Effect.flip,
     )
-    expect((db as { reason?: string }).reason).toContain("orm/drizzle")
+    expect((db as { reason?: string }).reason).toContain("needs an ORM")
+    expect((db as { ways?: string[][] }).ways).toEqual([["orm/drizzle"], ["orm/effect-sql"]])
   }).pipe(Effect.provide(env)),
 )
 
@@ -186,7 +194,7 @@ it.effect("add: unknown ids get a did-you-mean, ids are case-insensitive", () =>
     const dir = yield* noDbProject()
     const e = yield* addAddons(dir, ["emial"], { overwrite: false, dryRun: true }).pipe(Effect.flip)
     expect(e._tag).toBe("UnknownAddon")
-    expect((e as { message?: string }).message).toContain("Did you mean email?")
+    expect((e as { message?: string }).message).toContain("Did you mean extras/email?")
     const ok = yield* addAddons(dir, ["Email"], { overwrite: false, dryRun: true })
     expect(ok.added.map((a) => a.id)).toEqual(["extras/email"])
   }).pipe(Effect.provide(env)),

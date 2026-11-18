@@ -1,5 +1,6 @@
 import type { LoadedAddon } from "./addon.ts"
 import { addonIdsFor } from "./addon.ts"
+import { INSTALL } from "./exec.ts"
 import { matches } from "./generate.ts"
 import { projectDirName } from "./projectName.ts"
 import type { StackConfig } from "./stack.ts"
@@ -35,18 +36,21 @@ export interface ReadmeInput {
   readonly devVars: boolean
 }
 
-export interface RunStep {
+/** One command to run after `create` or `add`, inside the project directory. */
+export interface Step {
   readonly command: string
   readonly note?: string
+  /** Runs until stopped (a dev server): start it in the background, don't wait for it. */
+  readonly longRunning?: true
 }
 
 /**
  * What to run after `pnpm install` to see the app, in order: one source for the steps `create`
  * prints and the README's "Run it". With Alchemy, `alchemy dev` reads local values from `.env`.
  */
-export const runSteps = (stack: StackConfig, o: { readonly devVars: boolean }): RunStep[] => {
+export const runSteps = (stack: StackConfig, o: { readonly devVars: boolean }): Step[] => {
   const alchemy = stack.infra === "alchemy"
-  const steps: RunStep[] = []
+  const steps: Step[] = []
   if (alchemy && o.devVars) steps.push({ command: "cp .dev.vars .env", note: "local values" })
   if (stack.database === "postgres") {
     steps.push({ command: "docker compose up -d --wait", note: "local Postgres" })
@@ -58,12 +62,19 @@ export const runSteps = (stack: StackConfig, o: { readonly devVars: boolean }): 
   steps.push({
     command: "pnpm dev",
     note: alchemy ? "http://localhost:1337" : "http://localhost:5173",
+    longRunning: true,
   })
   return steps
 }
 
+/** What to run after `create`: the install when it was skipped, then {@link runSteps}. */
+export const planSteps = (
+  stack: StackConfig,
+  o: { readonly installed: boolean; readonly devVars: boolean },
+): Step[] => [...(o.installed ? [] : [{ command: INSTALL }]), ...runSteps(stack, o)]
+
 /** `command  # note` lines, the notes aligned. */
-export const renderSteps = (steps: ReadonlyArray<RunStep>): string[] => {
+export const renderSteps = (steps: ReadonlyArray<Step>): string[] => {
   const width = Math.max(...steps.map((s) => s.command.length))
   return steps.map((s) =>
     s.note === undefined ? s.command : `${s.command.padEnd(width)}  # ${s.note}`,
