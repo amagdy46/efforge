@@ -68,7 +68,9 @@ it.each(Object.keys(sources))("every command in %s runs", { timeout: 120_000 }, 
         Effect.runPromise,
       )
       vi.restoreAllMocks()
-      expect(process.exitCode ?? 0, `${line}\n${stdout.join("\n")}`).toBe(0)
+      // 2 is upgrade --check or doctor reporting what it found (docs/json.md, exit codes)
+      const found = process.exitCode === 2 && /\b(?:upgrade|doctor)\b/.test(line)
+      expect(found ? 0 : (process.exitCode ?? 0), `${line}\n${stdout.join("\n")}`).toBe(0)
       if (line.includes("--json")) expect(JSON.parse(stdout.join("\n")).ok, line).toBe(true)
     }
   } finally {

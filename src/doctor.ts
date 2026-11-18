@@ -853,9 +853,12 @@ const layersCheck: Check = {
           message: `${LAYERS} is missing: it composes the app's layers.`,
           fix: null,
         }
+      // inside `AppLayer = Layer.mergeAll(...)`, not the imports above it
       const flat = text.replace(/\s+/g, "")
+      const at = flat.indexOf("AppLayer=Layer.mergeAll(")
+      const call = at < 0 ? "" : flat.slice(at)
       const lacking = wanted.filter(
-        ({ t }) => !flat.includes((t.args.layer as string).replace(/\s+/g, "")),
+        ({ t }) => !call.includes((t.args.layer as string).replace(/\s+/g, "")),
       )
       if (lacking.length > 0)
         return {
@@ -892,7 +895,7 @@ const upgradeCheck: Check = {
       )
       if (report === undefined)
         return skipped(`Couldn't render efforge ${efforgeVersion}'s templates for this stack.`)
-      const made = `made with efforge ${manifest.efforgeVersion}`
+      const made = `Made with efforge ${manifest.efforgeVersion}`
       if (!report.drifted)
         return ok(
           `${made}; nothing to do to match efforge ${efforgeVersion}${report.project.status === "ahead" ? " (the project is newer than this CLI)" : ""}.`,

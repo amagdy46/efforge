@@ -1,0 +1,420 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/create-efforge/schemas/upgrade.schema.json",
+  "type": "object",
+  "properties": {
+    "efforge": {
+      "type": "string",
+      "description": "The CLI version that printed this."
+    },
+    "contract": {
+      "type": "number",
+      "enum": [
+        1
+      ],
+      "description": "The version of this contract. It changes only when a field is renamed, removed or changes meaning."
+    },
+    "ok": {
+      "type": "boolean",
+      "enum": [
+        true
+      ]
+    },
+    "check": {
+      "type": "boolean",
+      "enum": [
+        true
+      ],
+      "description": "A report; nothing was changed. (A later `upgrade` that applies changes will say false.)"
+    },
+    "directory": {
+      "type": "string"
+    },
+    "stack": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "runtime": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "cloudflare"
+              ]
+            }
+          ]
+        },
+        "database": {
+          "type": "string",
+          "enum": [
+            "postgres",
+            "d1",
+            "none"
+          ]
+        },
+        "orm": {
+          "type": "string",
+          "enum": [
+            "drizzle",
+            "effect-sql",
+            "none"
+          ]
+        },
+        "auth": {
+          "type": "string",
+          "enum": [
+            "better-auth-orgs",
+            "better-auth",
+            "none"
+          ]
+        },
+        "infra": {
+          "type": "string",
+          "enum": [
+            "none",
+            "alchemy"
+          ]
+        },
+        "ai": {
+          "type": "string",
+          "enum": [
+            "none",
+            "effect-ai-byok"
+          ]
+        },
+        "extras": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "workflows",
+              "realtime",
+              "browser",
+              "storage",
+              "email"
+            ]
+          }
+        }
+      },
+      "required": [
+        "name",
+        "runtime",
+        "database",
+        "orm",
+        "auth",
+        "infra",
+        "ai",
+        "extras"
+      ],
+      "additionalProperties": true
+    },
+    "efforgeVersion": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "type": "string",
+          "description": "The efforge version that made the project."
+        },
+        "cli": {
+          "type": "string",
+          "description": "This CLI's version, the one compared against."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "same",
+            "behind",
+            "ahead"
+          ]
+        }
+      },
+      "required": [
+        "project",
+        "cli",
+        "status"
+      ],
+      "additionalProperties": true
+    },
+    "drifted": {
+      "type": "boolean",
+      "description": "True when a guard is missing or `--patch` would change something; then the exit code is 2. Files you edited never count."
+    },
+    "pins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "efforge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "This efforge's pin, or null when it doesn't manage the package."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "same",
+              "behind",
+              "ahead",
+              "unmanaged"
+            ]
+          },
+          "where": {
+            "type": "string",
+            "description": "`catalog`, `packageManager`, or the package.json that pins it exactly."
+          },
+          "set": {
+            "type": "string",
+            "description": "The set it moves with (see `sets`)."
+          }
+        },
+        "required": [
+          "name",
+          "project",
+          "efforge",
+          "status",
+          "where"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "sets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          },
+          "packages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "split": {
+            "type": "boolean",
+            "description": "Some members are at efforge's pin and others aren't."
+          }
+        },
+        "required": [
+          "id",
+          "why",
+          "packages",
+          "split"
+        ],
+        "additionalProperties": true
+      },
+      "description": "Sets of pins that move together, when one of them differs."
+    },
+    "guards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "effect-overrides",
+              "package-manager"
+            ]
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "ok",
+          "message"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "current",
+              "refresh",
+              "review",
+              "yours",
+              "deleted",
+              "dropped",
+              "new",
+              "differs"
+            ]
+          },
+          "diff": {
+            "type": "string",
+            "description": "With --diff: a git diff, yours -> efforge's today."
+          }
+        },
+        "required": [
+          "path",
+          "status"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "seams": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "diff": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "missing",
+          "diff"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "scripts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "yours": {
+            "type": "string"
+          },
+          "efforge": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "name",
+          "yours",
+          "efforge"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "lines": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "byAdd": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "description"
+        ],
+        "additionalProperties": true
+      },
+      "description": "What to do, in order, ending with the project's gate."
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "patch": {
+      "type": "string",
+      "description": "With --patch: every change except files you edited, as a git patch."
+    }
+  },
+  "required": [
+    "efforge",
+    "contract",
+    "ok",
+    "check",
+    "directory",
+    "stack",
+    "efforgeVersion",
+    "drifted",
+    "pins",
+    "sets",
+    "guards",
+    "files",
+    "seams",
+    "scripts",
+    "steps",
+    "warnings"
+  ],
+  "additionalProperties": true,
+  "title": "efforge upgrade --check --json"
+}

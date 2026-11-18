@@ -1,8 +1,8 @@
 # `--json`: the contract for scripts and coding agents
 
-`create`, `add` and `list` take `--json`. With it, a run prints exactly one JSON document on stdout and nothing else, whether it succeeds or fails. Nothing goes to stderr either, except what a child process prints when it crashes outright. Progress is not printed; warnings and skipped steps go into the document. `--json` never prompts: on `create` it implies `--yes`.
+`create`, `add`, `list`, `upgrade --check` and `doctor` take `--json`. With it, a run prints exactly one JSON document on stdout and nothing else, whether it succeeds or fails. Nothing goes to stderr either, except what a child process prints when it crashes outright. Progress is not printed; warnings and skipped steps go into the document. `--json` never prompts: on `create` it implies `--yes`.
 
-This page is the contract. Every example on it is the real output of the command above it, checked by `test/json-docs.test.ts` (paths shortened to `/home/me/projects`, long `files` and `addons` lists cut to their first three items) and matches its schema. JSON Schemas for the documents ship in the package under `schemas/` ([create](../schemas/create.schema.json), [add](../schemas/add.schema.json), [list](../schemas/list.schema.json), [error](../schemas/error.schema.json)).
+This page is the contract. Every example on it is the real output of the command above it, checked by `test/json-docs.test.ts` (paths shortened to `/home/me/projects`, long `files`, `addons` and `pins` lists cut to their first three items) and matches its schema. JSON Schemas for the documents ship in the package under `schemas/` ([create](../schemas/create.schema.json), [add](../schemas/add.schema.json), [list](../schemas/list.schema.json), [upgrade](../schemas/upgrade.schema.json), [doctor](../schemas/doctor.schema.json), [error](../schemas/error.schema.json)).
 
 Run efforge as `npx -y create-efforge ...` (create-efforge 0.3.0 or later; a document without `contract` comes from an older CLI). Under `npm create efforge`, npm prints its own lines on stdout before efforge's.
 
@@ -44,6 +44,7 @@ A `fix` is either a command that does what you were trying to do, or `null` with
 |---|---|
 | `0` | Success. Also answering No at the confirmation prompt (never under `--json`). |
 | `1` | Any error, including a mistyped flag. With `--json`, the document says which. |
+| `2` | `upgrade --check` found the project drifted, or `doctor` found a failing check. The command itself worked: under `--json` the document has `ok: true`, and `drifted` or `status` says what it found. CI can gate on it. |
 | `130` | Stopped: Ctrl-C, SIGTERM, or a tool's timeout. With `--json`, `create` and `add` print an [`Interrupted`](#interrupted) document saying what was written and how to finish. |
 
 A signal in the first fraction of a second, before efforge has started, can end the run with no document and exit `130` (SIGINT) or `143` (SIGTERM). Nothing has been written at that point; run the same command again.
@@ -51,6 +52,8 @@ A signal in the first fraction of a second, before efforge has started, can end 
 ## Not part of the contract
 
 `--help`, `--completions` and `--wizard` print text for people, with or without `--json`. `--version --json` prints the envelope alone (`{ efforge, contract, ok: true }`), which is the cheapest way to check which CLI and contract you have.
+
+`upgrade --check --patch` without `--json` prints a git patch, not text for people; it is meant for `git apply`.
 
 ## `create`
 
@@ -466,6 +469,413 @@ npx -y create-efforge list --json --cwd my-app
 }
 ```
 
+## `upgrade --check`
+
+Compares the project with what this efforge generates for its stack, and changes nothing. `drifted` is true, and the exit code `2`, when a guard is missing or efforge has a change to make that keeps your edits (the changes `--patch` prints); a file you edited, deleted or keep differently from the template never counts, so a project can always get back to `0`. `efforgeVersion` compares the version that made the project with this CLI; it is context, not drift (`add` never changes it).
+
+- `pins`: every pin in the pnpm catalog, plus `packageManager` and the exact pins of a package with its own Docker build: `same`, `behind` or `ahead` of this efforge's pin, or `unmanaged` (efforge doesn't pin it; `efforge` is null). `set` names the group it moves with, and `sets` lists each group with a member that differs, with `why` and `split: true` when only some members moved.
+- `guards`: `effect-overrides` (every Effect package held at the catalog's `effect`, [ADR 0005](decisions/0005-effect-lockstep-overrides.md)) and `package-manager` (a pnpm that honours those overrides, 12.17.0 or later). These are what broke 0.2.0 projects.
+- `files`: each generated file by `status`. efforge.jsonc keeps a hash of what efforge wrote, not the content, so efforge can say who changed a file but can't merge. `current`: as efforge would write it today. `refresh`: unchanged since efforge wrote it, and the template moved on: safe to replace. `review`: you changed it and so did the template. `yours`: you changed it, the template didn't. `deleted`: efforge wrote it and it's gone. `dropped`: efforge no longer generates it. `new`: efforge generates it today and the project doesn't have it. `differs`: a file efforge edits in place (`layers.ts`, `AGENTS.md`) and so keeps no hash for, which differs from today's template. With `--diff`, each file that isn't current has `diff`: a git diff from yours to efforge's today.
+- `seams`: files missing what efforge's transforms or templates add today (an `AGENTS.md` section, a binding, a dependency, `engines`), with `missing` (one line each) and `diff`, the exact lines.
+- `scripts`: package.json scripts that differ from today's template; efforge can't tell whose change that is.
+- `steps`: what to do, in order, ending with the project's gate. Each has an `id` (`patch`, `effect-overrides`, `package-manager`, `pins`, `seam`, `refresh`, `new`, `manifest`, `scripts`, `install`, `review`, `gate`), a `description`, and a `command` to run in `cwd`, or a `file` with the exact `lines` to put there, or the `files` it is about. `byAdd: true` marks what `efforge add` also does the next time it adds an add-on.
+- With `--patch`, `patch` is every change except the files you edited, as one git patch: the guard, the pins, the seams, the refreshed and new files, and their hashes in efforge.jsonc. Without `--json`, `--patch` prints only the patch, so `npx -y create-efforge upgrade --check --patch | git apply` makes those steps at once; `git apply` refuses if any file changed since.
+
+Here, `my-app` was made by this efforge; it has nothing to do.
+
+<!-- example: upgrade -->
+
+```sh
+npx -y create-efforge upgrade --check --json --cwd my-app
+```
+
+```json
+{
+  "efforge": "0.2.1",
+  "contract": 1,
+  "ok": true,
+  "check": true,
+  "directory": "/home/me/projects/my-app",
+  "stack": {
+    "name": "my-app",
+    "runtime": "cloudflare",
+    "database": "d1",
+    "orm": "drizzle",
+    "auth": "better-auth",
+    "infra": "none",
+    "ai": "none",
+    "extras": []
+  },
+  "efforgeVersion": {
+    "project": "0.2.1",
+    "cli": "0.2.1",
+    "status": "same"
+  },
+  "drifted": false,
+  "pins": [
+    {
+      "name": "@cloudflare/vite-plugin",
+      "project": "1.70.0",
+      "efforge": "1.70.0",
+      "status": "same",
+      "where": "catalog"
+    },
+    {
+      "name": "@cloudflare/workers-types",
+      "project": "5.20261118.1",
+      "efforge": "5.20261118.1",
+      "status": "same",
+      "where": "catalog"
+    },
+    {
+      "name": "@effect/sql-d1",
+      "project": "4.1.4",
+      "efforge": "4.1.4",
+      "status": "same",
+      "where": "catalog",
+      "set": "effect"
+    }
+  ],
+  "sets": [],
+  "guards": [
+    {
+      "id": "effect-overrides",
+      "ok": true,
+      "message": "Every Effect package is held at effect 4.1.4."
+    },
+    {
+      "id": "package-manager",
+      "ok": true,
+      "message": "packageManager pins pnpm 12.21.0, which honours the Effect overrides."
+    }
+  ],
+  "files": [
+    {
+      "path": ".gitignore",
+      "status": "current"
+    },
+    {
+      "path": ".nvmrc",
+      "status": "current"
+    },
+    {
+      "path": "CLAUDE.md",
+      "status": "current"
+    }
+  ],
+  "seams": [],
+  "scripts": [],
+  "steps": [],
+  "warnings": []
+}
+```
+
+Here, the catalog of `my-app` was moved back to effect 4.0.5, the Effect overrides were removed, and `packageManager` lowered to pnpm 12.4.2: what a 0.2.0 project looks like. Exit code `2`.
+
+<!-- example: upgrade-drifted -->
+
+```sh
+npx -y create-efforge upgrade --check --json --cwd my-app
+```
+
+```json
+{
+  "efforge": "0.2.1",
+  "contract": 1,
+  "ok": true,
+  "check": true,
+  "directory": "/home/me/projects/my-app",
+  "stack": {
+    "name": "my-app",
+    "runtime": "cloudflare",
+    "database": "d1",
+    "orm": "drizzle",
+    "auth": "better-auth",
+    "infra": "none",
+    "ai": "none",
+    "extras": []
+  },
+  "efforgeVersion": {
+    "project": "0.2.1",
+    "cli": "0.2.1",
+    "status": "same"
+  },
+  "drifted": true,
+  "pins": [
+    {
+      "name": "@cloudflare/vite-plugin",
+      "project": "1.70.0",
+      "efforge": "1.70.0",
+      "status": "same",
+      "where": "catalog"
+    },
+    {
+      "name": "@cloudflare/workers-types",
+      "project": "5.20261118.1",
+      "efforge": "5.20261118.1",
+      "status": "same",
+      "where": "catalog"
+    },
+    {
+      "name": "@effect/sql-d1",
+      "project": "4.0.5",
+      "efforge": "4.1.4",
+      "status": "behind",
+      "where": "catalog",
+      "set": "effect"
+    }
+  ],
+  "sets": [
+    {
+      "id": "effect",
+      "why": "Effect's packages are released together and only work at one shared version; the overrides in pnpm-workspace.yaml must match the catalog's effect (ADR 0005)",
+      "packages": [
+        "@effect/sql-d1",
+        "@effect/vitest",
+        "effect"
+      ],
+      "split": false
+    }
+  ],
+  "guards": [
+    {
+      "id": "effect-overrides",
+      "ok": false,
+      "message": "pnpm-workspace.yaml has no overrides holding Effect's packages at effect 4.0.5. A library that asks for a newer one then installs it next to the older effect and the build breaks, as 0.2.0 projects did when Effect 4.1 shipped.",
+      "missing": [
+        "effect@>=4.0.0-0",
+        "@effect/ai-*",
+        "@effect/atom-*",
+        "@effect/openapi-generator",
+        "@effect/opentelemetry",
+        "@effect/platform-*",
+        "@effect/sql-*",
+        "@effect/vitest"
+      ]
+    },
+    {
+      "id": "package-manager",
+      "ok": false,
+      "message": "packageManager pins pnpm 12.4.2, which accepts the Effect overrides and silently ignores them (they work from pnpm 12.17.0)."
+    }
+  ],
+  "files": [
+    {
+      "path": ".gitignore",
+      "status": "current"
+    },
+    {
+      "path": ".nvmrc",
+      "status": "current"
+    },
+    {
+      "path": "CLAUDE.md",
+      "status": "current"
+    }
+  ],
+  "seams": [],
+  "scripts": [],
+  "steps": [
+    {
+      "id": "patch",
+      "description": "Make every change below except installing and the files you edited in one go: a patch of 2 files, which git apply refuses if any of them changed since. Or do the steps by hand.",
+      "command": "npx -y create-efforge upgrade --check --patch | git apply",
+      "cwd": "/home/me/projects/my-app"
+    },
+    {
+      "id": "effect-overrides",
+      "description": "Hold every Effect package at effect 4.1.4: in pnpm-workspace.yaml, under overrides:, set these lines (keep `vite: \"catalog:\"`).",
+      "file": "pnpm-workspace.yaml",
+      "lines": "overrides:\n  \"effect@>=4.0.0-0\": 4.1.4\n  \"@effect/ai-*\": 4.1.4\n  \"@effect/atom-*\": 4.1.4\n  \"@effect/openapi-generator\": 4.1.4\n  \"@effect/opentelemetry\": 4.1.4\n  \"@effect/platform-*\": 4.1.4\n  \"@effect/sql-*\": 4.1.4\n  \"@effect/vitest\": 4.1.4"
+    },
+    {
+      "id": "package-manager",
+      "description": "Pin a pnpm that honours the overrides: in package.json, set packageManager. pnpm switches to it on its own.",
+      "file": "package.json",
+      "lines": "\"packageManager\": \"pnpm@12.21.0\"",
+      "byAdd": true
+    },
+    {
+      "id": "pins",
+      "description": "Move the catalog to the versions this efforge pins and tests together: in pnpm-workspace.yaml, under catalog:, set these lines. Each group moves as one (effect).",
+      "file": "pnpm-workspace.yaml",
+      "lines": "catalog:\n  # effect (move together)\n  \"@effect/sql-d1\": 4.1.4\n  \"@effect/vitest\": 4.1.4\n  effect: 4.1.4"
+    },
+    {
+      "id": "install",
+      "description": "Install what changed.",
+      "command": "pnpm install --no-frozen-lockfile",
+      "cwd": "/home/me/projects/my-app"
+    },
+    {
+      "id": "gate",
+      "description": "Check the project still passes its gate.",
+      "command": "pnpm typecheck && pnpm check && pnpm test && pnpm build",
+      "cwd": "/home/me/projects/my-app"
+    }
+  ],
+  "warnings": []
+}
+```
+
+## `doctor`
+
+Checks the checkout as it is now and says what is wrong. It changes nothing, and it needs no network unless you pass `--online` (to check peers when your pnpm differs from `packageManager`, or a database on another host). `status` is the worst check: `fail` (exit code `2`), then `warn`, then `ok`. `stack` is there when efforge.jsonc is valid.
+
+Each of `checks` has a stable `id`, a `status` (`ok`, `warn`, `fail`, `skipped`), a `message` with the reason, and `fix`: a shell command that fixes it, or `null` when the fix is an edit (then `details` has what to add). A check's `fix` is advice, not the `fix` of an error, so it may be any command. Never a secret's value: `env` reports names and whether each is `ok`, `missing`, `empty`, a `placeholder` or `undocumented` (not in `.env.example`).
+
+| `id` | Looks at |
+|---|---|
+| `node` | Node against `engines` (efforge's own range when the project has none). |
+| `pnpm` | pnpm on PATH, and `packageManager` new enough to honour the Effect overrides. |
+| `manifest` | efforge.jsonc against its schema. |
+| `install` | `node_modules` present and matching the package.json files and `pnpm-workspace.yaml`. |
+| `effect` | One Effect: every package released with `effect` resolved to the catalog's version, from the installed lockfile. |
+| `effect-guard` | The overrides that keep it so. |
+| `peers` | `pnpm peers check`; the upstream Alchemy `unenv` issue and optional peers out of range are known, not failures. |
+| `env` | Every env var the add-ons declare and the app's code reads, against `.dev.vars` (or `.env` with Alchemy) and `.env.example`. |
+| `bindings` | What the add-ons bind (D1, R2, Hyperdrive, Durable Objects, Workflows, email), against `wrangler.jsonc` or `infra/alchemy.run.ts`. |
+| `migrations` | D1 migrations not yet applied to the local database. |
+| `postgres` | Whether the local Postgres answers (nothing is started). |
+| `layers` | A layer in `layers.ts` for each add-on that adds one. |
+| `upgrade` | Whether `upgrade --check` has something to do. |
+
+New checks can appear without a change of contract; treat an unknown `id` like the others.
+
+Here, `my-app` was created with `--no-install`.
+
+<!-- example: doctor -->
+
+```sh
+npx -y create-efforge doctor --json --cwd my-app
+```
+
+```json
+{
+  "efforge": "0.2.1",
+  "contract": 1,
+  "ok": true,
+  "directory": "/home/me/projects/my-app",
+  "stack": {
+    "name": "my-app",
+    "runtime": "cloudflare",
+    "database": "d1",
+    "orm": "drizzle",
+    "auth": "better-auth",
+    "infra": "none",
+    "ai": "none",
+    "extras": []
+  },
+  "status": "fail",
+  "checks": [
+    {
+      "id": "node",
+      "status": "ok",
+      "message": "Node 24.11.1; package.json engines asks for ^24.11.0 || >=26.0.0.",
+      "fix": null
+    },
+    {
+      "id": "pnpm",
+      "status": "ok",
+      "message": "pnpm 12.21.0, as packageManager pins.",
+      "fix": null,
+      "details": {
+        "pnpm": "12.21.0",
+        "packageManager": "12.21.0"
+      }
+    },
+    {
+      "id": "manifest",
+      "status": "ok",
+      "message": "efforge.jsonc is valid: made with efforge 0.2.1.",
+      "fix": null
+    },
+    {
+      "id": "install",
+      "status": "fail",
+      "message": "Dependencies aren't installed (no node_modules).",
+      "fix": "cd my-app && pnpm install --no-frozen-lockfile"
+    },
+    {
+      "id": "effect",
+      "status": "skipped",
+      "message": "Nothing is installed or locked yet.",
+      "fix": null
+    },
+    {
+      "id": "effect-guard",
+      "status": "ok",
+      "message": "pnpm-workspace.yaml holds every Effect package at 4.1.4.",
+      "fix": null
+    },
+    {
+      "id": "peers",
+      "status": "skipped",
+      "message": "Nothing is installed yet.",
+      "fix": null
+    },
+    {
+      "id": "env",
+      "status": "ok",
+      "message": "2 env vars set in .dev.vars or documented as optional.",
+      "fix": null,
+      "details": {
+        "file": ".dev.vars",
+        "vars": [
+          {
+            "name": "BETTER_AUTH_SECRET",
+            "required": true,
+            "status": "ok"
+          },
+          {
+            "name": "BETTER_AUTH_URL",
+            "required": false,
+            "status": "missing"
+          }
+        ]
+      }
+    },
+    {
+      "id": "bindings",
+      "status": "ok",
+      "message": "wrangler.jsonc has the 1 binding this stack needs (d1_databases DB).",
+      "fix": null
+    },
+    {
+      "id": "migrations",
+      "status": "warn",
+      "message": "2 of 2 migrations aren't applied to the local D1 database (0001_init.sql, 0002_auth.sql), so pnpm dev runs against missing tables.",
+      "fix": "cd my-app && pnpm db:migrate",
+      "details": {
+        "pending": [
+          "0001_init.sql",
+          "0002_auth.sql"
+        ],
+        "applied": []
+      }
+    },
+    {
+      "id": "postgres",
+      "status": "skipped",
+      "message": "This stack doesn't use Postgres.",
+      "fix": null
+    },
+    {
+      "id": "layers",
+      "status": "ok",
+      "message": "AppLayer has a layer for each add-on (orm/drizzle, auth/better-auth).",
+      "fix": null
+    },
+    {
+      "id": "upgrade",
+      "status": "ok",
+      "message": "Made with efforge 0.2.1; nothing to do to match efforge 0.2.1.",
+      "fix": null
+    }
+  ]
+}
+```
+
 ## Error codes
 
 ### `UnknownFlag`
@@ -577,14 +987,16 @@ npx -y create-efforge lst --json
   "ok": false,
   "error": {
     "code": "UnknownCommand",
-    "message": "Unknown command lst. Did you mean list? The commands are create, add, list. To name a project lst, run npx -y create-efforge create lst.",
+    "message": "Unknown command lst. Did you mean list? The commands are create, add, list, upgrade, doctor. To name a project lst, run npx -y create-efforge create lst.",
     "fix": "npx -y create-efforge list --json",
     "command": "lst",
     "suggestion": "list",
     "commands": [
       "create",
       "add",
-      "list"
+      "list",
+      "upgrade",
+      "doctor"
     ]
   }
 }
@@ -611,14 +1023,16 @@ npx -y create-efforge app2 --json
   "ok": false,
   "error": {
     "code": "InsideProject",
-    "message": "This is inside the efforge project /home/me/projects/my-app, so efforge doesn't create a project here without the word create. The commands are create, add, list. To add to this project, run npx -y create-efforge add <id>; to create a project inside it anyway, run npx -y create-efforge create app2.",
+    "message": "This is inside the efforge project /home/me/projects/my-app, so efforge doesn't create a project here without the word create. The commands are create, add, list, upgrade, doctor. To add to this project, run npx -y create-efforge add <id>; to create a project inside it anyway, run npx -y create-efforge create app2.",
     "fix": null,
     "project": "/home/me/projects/my-app",
     "name": "app2",
     "commands": [
       "create",
       "add",
-      "list"
+      "list",
+      "upgrade",
+      "doctor"
     ]
   }
 }
@@ -1142,7 +1556,7 @@ npx -y create-efforge create my-app --json
 
 ### `NotAnEfforgeProject`
 
-`add` ran in a directory without `efforge.jsonc`, or the file isn't valid. `list --cwd` gets it only when the directory doesn't exist, isn't a directory, or its `efforge.jsonc` isn't valid; `list` in a directory without one succeeds with `project: false` (and `nearby`).
+`add`, `upgrade` or `doctor` ran in a directory without `efforge.jsonc`, or (`add`, `upgrade`) the file isn't valid; `doctor` reports an invalid one as its `manifest` check. `list --cwd` gets it only when the directory doesn't exist, isn't a directory, or its `efforge.jsonc` isn't valid; `list` in a directory without one succeeds with `project: false` (and `nearby`).
 
 Fields: `directory`, `reason`, and `project` when one was found nearby. `fix`: When a parent directory, or exactly one child directory, is an efforge project (also when `--cwd` names a file in one): the same command with `--cwd` pointing at it; otherwise none.
 
@@ -1457,6 +1871,32 @@ npx -y create-efforge add ai --json --cwd my-app
       }
     ],
     "warnings": []
+  }
+}
+```
+
+### `UpgradeNeedsCheck`
+
+`upgrade` without `--check`. Applying an upgrade isn't there yet; `--check` reports what differs and what to do.
+
+Fields: `command`, the same command with `--check`. `fix`: None: a report is not what was asked for.
+
+<!-- example: UpgradeNeedsCheck -->
+
+```sh
+npx -y create-efforge upgrade --json --cwd my-app
+```
+
+```json
+{
+  "efforge": "0.2.1",
+  "contract": 1,
+  "ok": false,
+  "error": {
+    "code": "UpgradeNeedsCheck",
+    "message": "efforge can't apply an upgrade yet; it can show what differs from efforge 0.2.1 and what to do about it. Run npx -y create-efforge upgrade --json --cwd my-app --check.",
+    "fix": null,
+    "command": "npx -y create-efforge upgrade --json --cwd my-app --check"
   }
 }
 ```

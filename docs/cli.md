@@ -38,9 +38,9 @@ efforge only prompts when stdin is a terminal and `CI` isn't set. Without one (C
 
 In CI or a pipe, each step prints one line instead of a spinner, and section headers are not printed. `NO_COLOR=1` turns colour off. Errors go to stderr, and end with `Try: <command>` when a command fixes them.
 
-Exit codes: `0` success (and answering No at the confirmation), `1` an error, `130` cancelled with Ctrl-C. Cancelling during setup leaves the files written so far and prints the commands that finish the job.
+Exit codes: `0` success (and answering No at the confirmation), `1` an error, `2` `upgrade --check` or `doctor` found something, `130` cancelled with Ctrl-C. Cancelling during setup leaves the files written so far and prints the commands that finish the job.
 
-`--json` makes `create`, `add` and `list` print exactly one JSON document on stdout, on success and on failure, and nothing else. It never prompts, and it still creates the project unless you add `--dry-run`. Errors carry a stable `code` and a `fix`: the command to run instead. The documents, every error code and the versioning rules are in [json.md](json.md); JSON Schemas ship in the package under `schemas/`. Under `npm create`, npm prints its own lines first; use `npx create-efforge ... --json`. Coding agents can learn all of this from one file: [skills/efforge/SKILL.md](../skills/efforge/SKILL.md).
+`--json` makes `create`, `add`, `list`, `upgrade --check` and `doctor` print exactly one JSON document on stdout, on success and on failure, and nothing else. It never prompts, and it still creates the project unless you add `--dry-run`. Errors carry a stable `code` and a `fix`: the command to run instead. The documents, every error code and the versioning rules are in [json.md](json.md); JSON Schemas ship in the package under `schemas/`. Under `npm create`, npm prints its own lines first; use `npx create-efforge ... --json`. Coding agents can learn all of this from one file: [skills/efforge/SKILL.md](../skills/efforge/SKILL.md).
 
 Before writing anything, efforge checks that pnpm is installed (unless `--no-install`), warns about unsupported Node versions, and skips git if git isn't installed.
 
@@ -74,8 +74,46 @@ On a project made by efforge 0.2.0, `add` also repairs the Effect version guard:
 
 Removing an add-on isn't supported yet, and a single-choice slot only moves from `none` to a value.
 
+## `efforge upgrade --check`
+
+Run inside a generated project, or pass `--cwd`:
+
+```sh
+npx create-efforge upgrade --check            # what differs from this efforge, and what to do
+npx create-efforge upgrade --check --diff     # also each file against today's template
+npx create-efforge upgrade --check --patch | git apply   # make the changes that keep your edits
+```
+
+It renders today's templates for the project's own stack and compares, without writing anything. The report, summary first:
+
+- **Versions**: each catalog pin against efforge's: behind, ahead, the same, or not one efforge manages. Pins that move together are grouped (the Effect family, drizzle-orm with drizzle-kit, alchemy and its Cloudflare provider, the lint toolchain, TanStack, React, Tailwind), so nobody bumps half a set.
+- **Guards**: the overrides that hold every Effect package at one version, and a `packageManager` new enough to honour them ([ADR 0005](decisions/0005-effect-lockstep-overrides.md)). Their absence is what broke 0.2.0 projects.
+- **Generated files**: `efforge.jsonc` keeps a hash of each file efforge wrote, not its content, so efforge can tell who changed a file but can't merge. `refresh`: you haven't touched it and the template moved on, safe to replace. `review`: you changed it and so did the template. `yours`: you changed it; nothing to do. `new`: efforge generates it today and the project lacks it. `differs`: a file efforge edits in place (`layers.ts`, `AGENTS.md`), which has no hash and differs from today's template.
+- **Seams**: what efforge's transforms or templates would add today that the project lacks: an `AGENTS.md` section, a binding, a dependency, `engines`.
+- **Scripts**: package scripts that differ from today's template.
+- **What to do**: the steps in order, each a command or the exact lines to put in a file, ending with the project's gate.
+
+`--patch` prints, and nothing else, one git patch of every change except files you edited: the guard, the pins, seams, refreshed and new files, and their hashes in `efforge.jsonc` (so a later `add` still treats them as efforge's). Commit first; `git apply` refuses the patch if a file changed since the report. To take efforge's version of a file you are reviewing, `npx create-efforge upgrade --check --diff | git apply --include=<file>`. `--verbose` lists every pin and file. Bare `upgrade` (applying changes itself) isn't there yet and says so.
+
+Exit codes: `0` nothing to do, `2` drifted (a guard is missing or `--patch` has something), `1` an error. Files you edited, deleted or keep differently never count, so a project can always get back to `0`, and a CI job can gate on it.
+
+A scheduled job in generated projects that runs this weekly was considered and left out ([ADR 0009](decisions/0009-upgrade-check-and-doctor.md)): run it yourself, or add a step to your own CI.
+
+## `efforge doctor`
+
+```sh
+npx create-efforge doctor           # one line per check, the fix under each problem
+npx create-efforge doctor --json    # {status, checks: [{id, status, message, fix, details?}]}
+```
+
+Checks the checkout as it is now: Node and pnpm against `engines` and `packageManager`; that `node_modules` matches the lockfile and package.json files; that exactly one Effect version is installed (the one-line explanation of the 0.2.0 build failure); `pnpm peers check`, with the known upstream Alchemy `unenv` issue and optional peers reported as known; every env var the add-ons declare and the code reads, against `.dev.vars` (or `.env` with Alchemy) and `.env.example`, never printing a value; the bindings the stack needs in `wrangler.jsonc` or `infra/alchemy.run.ts`; D1 migrations not applied locally; whether the local Postgres answers (it starts nothing); `efforge.jsonc` against its schema; a layer in `layers.ts` for each add-on; and whether `upgrade --check` has something to do.
+
+It changes nothing and uses no network unless you pass `--online` (to run `pnpm peers check` when your pnpm differs from `packageManager`, which may download it, or to try a database on another host). Exit codes: `0` no check failed (warnings allowed), `2` a check failed, `1` an error.
+
 ## Troubleshooting
 
 **`pnpm check` says "Expected at least one target file".** The formatter reads `.gitignore` files in parent directories, even outside a git repository. If a parent directory ignores everything (for example a dotfiles `~/.gitignore` containing `*`), a project created with `--no-git` sees no files. Run `git init` in the project; the default flow already does this.
 
-**The app returns 500 at startup.** A layer is missing configuration. Check `.dev.vars` against `.env.example`: each add-on lists the variables it needs there.
+**The app returns 500 at startup.** A layer is missing configuration. Run `npx create-efforge doctor`: its `env` check names each variable `.dev.vars` lacks, and `.env.example` says what each is for.
+
+**A project made by an older efforge stopped building.** Run `npx create-efforge doctor`, then `npx create-efforge upgrade --check` and follow its steps.

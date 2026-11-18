@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/create-efforge/schemas/doctor.schema.json",
+  "type": "object",
+  "properties": {
+    "efforge": {
+      "type": "string",
+      "description": "The CLI version that printed this."
+    },
+    "contract": {
+      "type": "number",
+      "enum": [
+        1
+      ],
+      "description": "The version of this contract. It changes only when a field is renamed, removed or changes meaning."
+    },
+    "ok": {
+      "type": "boolean",
+      "enum": [
+        true
+      ]
+    },
+    "directory": {
+      "type": "string"
+    },
+    "stack": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "runtime": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "cloudflare"
+              ]
+            }
+          ]
+        },
+        "database": {
+          "type": "string",
+          "enum": [
+            "postgres",
+            "d1",
+            "none"
+          ]
+        },
+        "orm": {
+          "type": "string",
+          "enum": [
+            "drizzle",
+            "effect-sql",
+            "none"
+          ]
+        },
+        "auth": {
+          "type": "string",
+          "enum": [
+            "better-auth-orgs",
+            "better-auth",
+            "none"
+          ]
+        },
+        "infra": {
+          "type": "string",
+          "enum": [
+            "none",
+            "alchemy"
+          ]
+        },
+        "ai": {
+          "type": "string",
+          "enum": [
+            "none",
+            "effect-ai-byok"
+          ]
+        },
+        "extras": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "workflows",
+              "realtime",
+              "browser",
+              "storage",
+              "email"
+            ]
+          }
+        }
+      },
+      "required": [
+        "name",
+        "runtime",
+        "database",
+        "orm",
+        "auth",
+        "infra",
+        "ai",
+        "extras"
+      ],
+      "additionalProperties": true
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "warn",
+        "fail"
+      ],
+      "description": "The worst check: fail (exit code 2), then warn, then ok."
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable: node, pnpm, manifest, install, ..."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warn",
+              "fail",
+              "skipped"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "fix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A shell command that fixes it, or null (then `details` says what to change)."
+          },
+          "details": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "message",
+          "fix"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "efforge",
+    "contract",
+    "ok",
+    "directory",
+    "status",
+    "checks"
+  ],
+  "additionalProperties": true,
+  "title": "efforge doctor --json"
+}

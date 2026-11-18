@@ -3,13 +3,16 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:
 import { dirname, join, resolve as resolvePath } from "node:path"
 import { NodeFileSystem, NodeServices } from "@effect/platform-node"
 import { describe, it } from "@effect/vitest"
-import { Effect, FileSystem, Path } from "effect"
+import { Effect, FileSystem, Layer, Path } from "effect"
 import { loadAddons } from "../../src/addon.ts"
 import { addAddons } from "../../src/commands/add.ts"
 import { generate } from "../../src/generate.ts"
 import { ROUTE_TREE_COMMAND } from "../../src/routeTree.ts"
 import { type StackConfig, withDefaults } from "../../src/stack.ts"
 import type { Tree } from "../../src/tree.ts"
+import { classifyPeers } from "../../src/doctor.ts"
+import { runWith } from "../../src/cli.ts"
+import { PromptIOLive } from "../../src/prompts/navigable.ts"
 import { isEffectLockstep } from "../../src/versions.ts"
 import { parse, parseAllDocuments } from "yaml"
 
@@ -39,16 +42,6 @@ const sh = (cwd: string, command: string) => {
 }
 
 /**
- * Unmet peers inside third-party packages that efforge can't fix from a template. Upstream as of
- * 2026-11-18: @alchemy.run/cloudflare-runtime depends on `unenv: ^2.0.0-rc.24` (now rc.25) and on
- * @cloudflare/unenv-preset, which peers on exactly 2.0.0-rc.24. The stack still passes its gate.
- */
-const knownUpstreamPeer = (peer: string, parents: ReadonlyArray<{ name: string }>) =>
-  peer === "unenv" &&
-  parents.some((p) => p.name === "@alchemy.run/cloudflare-runtime") &&
-  parents.at(-1)?.name === "@cloudflare/unenv-preset"
-
-/**
  * What the drift guard promises, checked against the real install: every package released with
  * `effect` resolved to the catalog's `effect` version (not only the ones the project names), and
  * pnpm reports no unmet peers.
@@ -68,27 +61,10 @@ const checkEffectLockstep = (dir: string) => {
   })
   if (drifted.length > 0)
     throw new Error(`Effect packages not at effect ${effect}: ${drifted.join(", ")}`)
-  // optional peers outside their range are warnings (alchemy's capnp-es asks for typescript 5 or
-  // 6); a required peer, or any Effect package, out of range is a failure
+  // optional peers outside their range, and the known upstream Alchemy one, are not failures; a
+  // required peer, or any Effect package, out of range is (the same rule as `doctor`'s peers check)
   const peers = spawnSync("pnpm", ["peers", "check", "--json"], { cwd: dir, encoding: "utf8" })
-  type Issue = {
-    optional: boolean
-    wantedRange?: string
-    foundVersion?: string
-    parents: Array<{ name: string }>
-  }
-  const report = JSON.parse(peers.stdout) as Record<
-    string,
-    { bad: Record<string, Issue[]>; missing: Record<string, Issue[]> }
-  >
-  const unmet = Object.entries(report).flatMap(([project, r]) =>
-    [...Object.entries(r.bad), ...Object.entries(r.missing)].flatMap(([peer, issues]) =>
-      issues
-        .filter((i) => !i.optional || isEffectLockstep(peer))
-        .filter((i) => !knownUpstreamPeer(peer, i.parents))
-        .map((i) => `${project}: ${peer} ${i.foundVersion ?? "missing"}, wanted ${i.wantedRange}`),
-    ),
-  )
+  const { unmet } = classifyPeers(JSON.parse(peers.stdout))
   if (unmet.length > 0) throw new Error(`unmet peers:\n${unmet.join("\n")}`)
 }
 
@@ -154,10 +130,54 @@ const checkRegionsOnly = (dir: string): number => {
   return checked
 }
 
+/**
+ * `upgrade --check --json` and `doctor --json` on a project efforge just made and installed: nothing
+ * to do, and no check fails. Run in-process with the real spawner; doctor's Postgres check is pointed
+ * at a closed port, so the run touches no database.
+ */
+const checkDoctor = (dir: string) =>
+  Effect.gen(function* () {
+    const json = (args: ReadonlyArray<string>) =>
+      Effect.gen(function* () {
+        const out: string[] = []
+        const log = console.log
+        console.log = (...a: unknown[]) => void out.push(a.join(" "))
+        const before = process.env.DATABASE_URL
+        process.env.DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:9/app"
+        process.exitCode = undefined
+        yield* runWith(args).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              console.log = log
+              if (before === undefined) delete process.env.DATABASE_URL
+              else process.env.DATABASE_URL = before
+            }),
+          ),
+        )
+        const exit = process.exitCode ?? 0
+        process.exitCode = undefined
+        return { doc: JSON.parse(out.join("\n")) as Record<string, unknown>, exit }
+      })
+    const upgrade = yield* json(["upgrade", "--check", "--json", "--cwd", dir])
+    if (upgrade.exit !== 0 || upgrade.doc.drifted !== false)
+      throw new Error(
+        `upgrade --check found drift on a new project:\n${JSON.stringify(upgrade.doc.steps, null, 2)}`,
+      )
+    const doctor = yield* json(["doctor", "--json", "--cwd", dir])
+    const failed = (
+      doctor.doc.checks as Array<{ id: string; status: string; message: string }>
+    ).filter((c) => c.status === "fail")
+    if (doctor.exit !== 0 || failed.length > 0)
+      throw new Error(
+        `doctor failed on a new project:\n${failed.map((c) => `${c.id}: ${c.message}`).join("\n")}`,
+      )
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, PromptIOLive)))
+
 /** Generates `config` into a tmp dir, installs, then runs the generated project's full gate: typecheck, check, test, build. */
 const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
   Effect.gen(function* () {
     const dir = yield* generateStack(config)
+    yield* checkDoctor(dir)
     yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
     // a minimal stack's card files may have nothing outside their regions; auth and database ones do
     yield* Effect.try(() => checkRegionsOnly(dir))

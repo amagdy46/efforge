@@ -1,6 +1,6 @@
 ---
 name: efforge
-description: Create a full-stack Effect app on Cloudflare Workers (TanStack Start, D1 or Postgres, Better Auth, email, storage, AI) with the efforge CLI, or add one of those capabilities to an existing efforge project. Use when asked to start a new Effect or Cloudflare Workers web app, or when a project has an efforge.jsonc file and needs a database, auth, email, storage, AI, realtime, workflows or browser rendering.
+description: Create a full-stack Effect app on Cloudflare Workers (TanStack Start, D1 or Postgres, Better Auth, email, storage, AI) with the efforge CLI, add one of those capabilities to an existing efforge project, check what is wrong with one, or bring an old one up to date. Use when asked to start a new Effect or Cloudflare Workers web app, or when a project has an efforge.jsonc file and needs a database, auth, email, storage, AI, realtime, workflows or browser rendering, fails to install or build, or was made by an older efforge.
 license: MIT
 compatibility: Needs create-efforge 0.3.0 or later, Node 24.11+ or 26+, pnpm, git, and network access to the npm registry.
 ---
@@ -75,6 +75,24 @@ Ids: `email`, `storage`, `realtime`, `workflows`, `browser`, `ai`, `infra/alchem
 
 The result lists `created`, `changed` and `removed` files, the new `env` vars, and `nextSteps` (often `pnpm install --no-frozen-lockfile` or `pnpm db:migrate`). Run the `nextSteps`. `notes` is work `add` left for you, one line each (for example, a line to add to a dashboard the user edited): do each one, or tell the user why you didn't. Read `warnings` and pass them on to the user. `add` checks everything before it writes: an error before the write (`UnknownAddon`, `IncompatibleStack`, `OverlayConflict`, ...) leaves the project as it was. A failed install afterwards (`CommandFailed`) leaves the files written. Commit before you run it, so `git diff` shows only its changes.
 
+## Check your own work
+
+After `create`, after `add`, and whenever an install or build fails in an efforge project, run:
+
+```sh
+npx -y create-efforge@latest doctor --json --cwd my-app
+```
+
+`checks` lists each check with `id`, `status` (`ok`, `warn`, `fail`, `skipped`), `message` and `fix`. Fix every `fail`: run its `fix` when it isn't `null`; when it is, `details` says what to add (a missing binding, layer or env var). Tell the user about each `warn`. `status` is the worst check; the exit code is `2` when it is `fail`, and the document still has `ok: true`. doctor never changes anything and never prints a secret's value. A `fail` you can't fix (a Node version) goes to the user.
+
+## Bring an older project up to date
+
+```sh
+npx -y create-efforge@latest upgrade --check --json --cwd my-app
+```
+
+It changes nothing. `drifted` (and exit code `2`) says whether there is anything to do; `steps` is what to do, in order, ending with the project's gate. The usual way: commit first, then run the `patch` step (`npx -y create-efforge@latest upgrade --check --patch | git apply` in the project; it changes only files the user hasn't edited), then `install`, then each `scripts` and `review` step: these are files and scripts that differ from efforge's templates where efforge can't tell whose change it is. Show the user each one's diff (`--diff`) and ask before taking efforge's version; never take it for a file the user edited without asking. End with the `gate` step. Bare `upgrade` (without `--check`) answers `UpgradeNeedsCheck`.
+
 ## Errors
 
 | `code` | What to do |
@@ -97,11 +115,12 @@ The result lists `created`, `changed` and `removed` files, the new `env` vars, a
 | `TransformAnchorMissing` | Nothing was written. Apply `snippet` to `file` by hand, then run the same command again. |
 | `PnpmMissing` | Install pnpm (`npm install --global pnpm`) and run the command again, or ask the user. |
 | `SetupIncomplete`, `CommandFailed` | The files are written; a command failed (`output` says why, often the network). Run `fix`, then the rest of `nextSteps`; the error also carries `env`. Running the same `add` again also finishes the install it owes. |
+| `UpgradeNeedsCheck` | `upgrade` needs `--check`; efforge can't apply an upgrade itself yet. Run `command`, then follow its `steps`. |
 | `WriteFailed`, `InternalError` | Stop and tell the user, with `message`. |
 
 A code not in this table is newer than this skill: treat it as a failure, run `fix` if it isn't `null`, and otherwise tell the user `message`.
 
-Exit codes: `0` success, `1` error, `130` stopped (with `--json`, `create` and `add` still print an `Interrupted` document; stopped in the first moment, before anything was written, stdout can be empty: run the same command again).
+Exit codes: `0` success, `1` error, `2` `upgrade --check` or `doctor` found something (the document has `ok: true`), `130` stopped (with `--json`, `create` and `add` still print an `Interrupted` document; stopped in the first moment, before anything was written, stdout can be empty: run the same command again).
 
 ## Verify
 
@@ -111,7 +130,7 @@ In the project directory, after the `nextSteps` that aren't long-running:
 pnpm typecheck && pnpm check && pnpm test && pnpm build
 ```
 
-All four pass on a new project and after every `add`. If one fails after your own edits, fix your code, not the generated setup.
+All four pass on a new project and after every `add`. If one fails after your own edits, fix your code, not the generated setup. If one fails and you don't know why, run `doctor --json` (above): it names a missing install, two Effect versions, a missing binding, layer or env var in one line each.
 
 ## Working in the project
 

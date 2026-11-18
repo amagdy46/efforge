@@ -221,7 +221,11 @@ export const upgradeCommand = Command.make(
           check: true,
           directory: r.directory,
           stack: r.stack,
-          efforgeVersion: r.project,
+          efforgeVersion: {
+            project: r.project.efforgeVersion,
+            cli: r.project.cli,
+            status: r.project.status,
+          },
           drifted: r.drifted,
           pins: r.pins,
           sets: r.sets,
@@ -235,7 +239,7 @@ export const upgradeCommand = Command.make(
         })
       } else if (input.patch) {
         // only the patch, so `| git apply` reads nothing else
-        if (r.patch !== "") yield* Effect.sync(() => process.stdout.write(r.patch))
+        if (r.patch !== "") yield* Console.log(r.patch.trimEnd())
       } else {
         // in a pipe, stdout carries only the report (docs/json.md, "In a pipe")
         if (process.stdout.isTTY)

@@ -116,6 +116,137 @@ export const ListOutput = Schema.Struct({
   ),
 }).annotate({ title: "efforge list --json" })
 
+const PinStatus = Schema.Literals(["same", "behind", "ahead", "unmanaged"])
+
+export const UpgradeOutput = Schema.Struct({
+  ...Envelope,
+  ok: Schema.Literal(true),
+  check: Schema.Literal(true).annotate({
+    description:
+      "A report; nothing was changed. (A later `upgrade` that applies changes will say false.)",
+  }),
+  directory: Schema.String,
+  stack: StackConfig,
+  efforgeVersion: Schema.Struct({
+    project: Schema.String.annotate({ description: "The efforge version that made the project." }),
+    cli: Schema.String.annotate({ description: "This CLI's version, the one compared against." }),
+    status: Schema.Literals(["same", "behind", "ahead"]),
+  }),
+  drifted: Schema.Boolean.annotate({
+    description:
+      "True when a guard is missing or `--patch` would change something; then the exit code is 2. Files you edited never count.",
+  }),
+  pins: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      project: Schema.String,
+      efforge: Schema.NullOr(Schema.String).annotate({
+        description: "This efforge's pin, or null when it doesn't manage the package.",
+      }),
+      status: PinStatus,
+      where: Schema.String.annotate({
+        description: "`catalog`, `packageManager`, or the package.json that pins it exactly.",
+      }),
+      set: Schema.optionalKey(
+        Schema.String.annotate({ description: "The set it moves with (see `sets`)." }),
+      ),
+    }),
+  ),
+  sets: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      why: Schema.String,
+      packages: Strings,
+      split: Schema.Boolean.annotate({
+        description: "Some members are at efforge's pin and others aren't.",
+      }),
+    }),
+  ).annotate({ description: "Sets of pins that move together, when one of them differs." }),
+  guards: Schema.Array(
+    Schema.Struct({
+      id: Schema.Literals(["effect-overrides", "package-manager"]),
+      ok: Schema.Boolean,
+      message: Schema.String,
+      missing: Schema.optionalKey(Strings),
+    }),
+  ),
+  files: Schema.Array(
+    Schema.Struct({
+      path: Schema.String,
+      status: Schema.Literals([
+        "current",
+        "refresh",
+        "review",
+        "yours",
+        "deleted",
+        "dropped",
+        "new",
+        "differs",
+      ]),
+      diff: Schema.optionalKey(
+        Schema.String.annotate({
+          description: "With --diff: a git diff, yours -> efforge's today.",
+        }),
+      ),
+    }),
+  ),
+  seams: Schema.Array(
+    Schema.Struct({
+      file: Schema.String,
+      missing: Strings,
+      diff: Schema.String,
+      snippet: Schema.optionalKey(Schema.String),
+    }),
+  ),
+  scripts: Schema.Array(
+    Schema.Struct({
+      file: Schema.String,
+      name: Schema.String,
+      yours: Schema.String,
+      efforge: Schema.String,
+    }),
+  ),
+  steps: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      description: Schema.String,
+      command: Schema.optionalKey(Schema.String),
+      cwd: Schema.optionalKey(Schema.String),
+      file: Schema.optionalKey(Schema.String),
+      lines: Schema.optionalKey(Schema.String),
+      files: Schema.optionalKey(Strings),
+      byAdd: Schema.optionalKey(Schema.Boolean),
+    }),
+  ).annotate({ description: "What to do, in order, ending with the project's gate." }),
+  warnings: Strings,
+  patch: Schema.optionalKey(
+    Schema.String.annotate({
+      description: "With --patch: every change except files you edited, as a git patch.",
+    }),
+  ),
+}).annotate({ title: "efforge upgrade --check --json" })
+
+export const DoctorOutput = Schema.Struct({
+  ...Envelope,
+  ok: Schema.Literal(true),
+  directory: Schema.String,
+  stack: Schema.optionalKey(StackConfig),
+  status: Schema.Literals(["ok", "warn", "fail"]).annotate({
+    description: "The worst check: fail (exit code 2), then warn, then ok.",
+  }),
+  checks: Schema.Array(
+    Schema.Struct({
+      id: Schema.String.annotate({ description: "Stable: node, pnpm, manifest, install, ..." }),
+      status: Schema.Literals(["ok", "warn", "fail", "skipped"]),
+      message: Schema.String,
+      fix: Schema.NullOr(Schema.String).annotate({
+        description: "A shell command that fixes it, or null (then `details` says what to change).",
+      }),
+      details: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+    }),
+  ),
+}).annotate({ title: "efforge doctor --json" })
+
 export const ErrorOutput = Schema.Struct({
   ...Envelope,
   ok: Schema.Literal(false),
@@ -139,6 +270,8 @@ export const published = {
   "create.schema.json": CreateOutput,
   "add.schema.json": AddOutput,
   "list.schema.json": ListOutput,
+  "upgrade.schema.json": UpgradeOutput,
+  "doctor.schema.json": DoctorOutput,
   "error.schema.json": ErrorOutput,
 } as const
 

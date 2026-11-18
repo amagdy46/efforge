@@ -649,7 +649,7 @@ export const checkUpgrade = (
         lines: `overrides:\n${Object.entries(effectOverrides(target))
           .map(([k, v]) => `  ${yamlKey(k)}: ${v}`)
           .join("\n")}`,
-        byAdd: !effectBehind,
+        ...(effectBehind ? {} : { byAdd: true }),
       })
     if (!pmOk)
       steps.push({

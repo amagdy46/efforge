@@ -17,7 +17,7 @@ import { commands, reservedWords } from "../src/fix.ts"
 
 // "`fix` is a promise" (docs/json.md), tested as a property. Invocations are generated from a
 // seed (commands, typos, invented verbs, names, flags with good and bad values, `--` anywhere,
-// three working directories), plus the 2026-11 re-review's corpus as fixed cases. Each runs against
+// three working directories; upgrade and doctor too), plus the 2026-11 re-review's corpus as fixed cases. Each runs against
 // the built CLI in its own copy of a sandbox, and its `fix` is followed up to three times. For
 // every one: stdout is one document under --json; nothing prompts; no project is created unless
 // the original was a create of that name; a fix of anything else never creates; a create's fix
@@ -89,10 +89,15 @@ const random = (seed: number) => {
   }
 }
 
-const verbs: Record<"create" | "add" | "list" | "other", ReadonlyArray<ReadonlyArray<string>>> = {
+const verbs: Record<
+  "create" | "add" | "list" | "upgrade" | "doctor" | "other",
+  ReadonlyArray<ReadonlyArray<string>>
+> = {
   create: [[], ["create"], ["Create"], ["CREATE"], ["crate"], ["creat"]],
   add: [["add"], ["ad"], ["Add"], ["ADD"], ["adds"]],
   list: [["list"], ["lst"], ["lsit"], ["LIST"], ["List"]],
+  upgrade: [["upgrade", "--check"], ["upgrade"], ["Upgrade", "--check"], ["upgarde", "--check"]],
+  doctor: [["doctor"], ["Doctor"], ["docter"], ["DOCTOR"]],
   other: [
     ["update"],
     ["remove"],
@@ -103,7 +108,7 @@ const verbs: Record<"create" | "add" | "list" | "other", ReadonlyArray<ReadonlyA
     ["version"],
     ["ls"],
     ["deploy"],
-    ["doctor"],
+    ["check"],
     ["hlep"],
     ["run"],
     ["foo"],
@@ -178,6 +183,12 @@ const flags = [
   ["--with-stripe"],
   ["--ai"],
   ["--infra=alchmy"],
+  ["--check"],
+  ["--patch"],
+  ["--diff"],
+  ["--verbose"],
+  ["--online"],
+  ["--chek"],
 ]
 const where = ["", "", "", "my-app", "my-app", "my-app/apps/web"]
 
@@ -192,12 +203,27 @@ const generate = (seed: number, count: number): Case[] => {
   const pick = <A>(xs: ReadonlyArray<A>): A => xs[Math.floor(next() * xs.length)] as A
   const cases: Case[] = []
   for (let n = 0; n < count; n++) {
-    const kind = pick(["create", "create", "add", "add", "list", "other"] as const)
+    const kind = pick([
+      "create",
+      "create",
+      "add",
+      "add",
+      "list",
+      "upgrade",
+      "doctor",
+      "other",
+    ] as const)
     const verb = [...pick(verbs[kind])]
     const words: string[] = []
     const many = Math.floor(next() * 3)
     for (let k = 0; k < many; k++)
-      words.push(kind === "add" ? pick(ids) : kind === "list" ? pick(["extra", "x"]) : pick(names))
+      words.push(
+        kind === "add"
+          ? pick(ids)
+          : kind === "list" || kind === "upgrade" || kind === "doctor"
+            ? pick(["extra", "x"])
+            : pick(names),
+      )
     const opts: string[] = []
     if (next() < 0.85) opts.push("--json")
     const extra = Math.floor(next() * 4)
@@ -347,6 +373,21 @@ const reviewed: Case[] = [
   { args: ["--json"], cwd: "my-app" },
   { args: ["list", "--json"], cwd: "my-app/apps/web" },
   { args: ["add", "storage", "--json", "--dry-run"], cwd: "my-app/apps/web" },
+  // upgrade and doctor (W4-A)
+  { args: ["upgrade", "--json"], cwd: "my-app" },
+  { args: ["upgrade", "--check", "--json"], cwd: "my-app/apps/web" },
+  { args: ["upgrade", "--check", "--json"], cwd: "" },
+  { args: ["upgarde", "--check", "--json"], cwd: "my-app" },
+  { args: ["update", "--json"], cwd: "my-app" },
+  { args: ["upgrade", "--check", "--patch"], cwd: "my-app" },
+  { args: ["upgrade", "--chek", "--json"], cwd: "my-app" },
+  { args: ["doctor", "--json"], cwd: "my-app" },
+  { args: ["doctor", "--json"], cwd: "my-app/apps/web" },
+  { args: ["doctor", "extra", "--json", "--cwd", "my-app"], cwd: "" },
+  { args: ["docter", "--json", "--cwd", "my-app"], cwd: "" },
+  { args: ["doctor", "--json", "--overwrite"], cwd: "my-app" },
+  { args: ["my-app5", "--check", "--json"], cwd: "" },
+  { args: ["--cwd", "my-app", "doctor", "--json"], cwd: "" },
 ]
 
 // --- Running ------------------------------------------------------------------------------
@@ -474,6 +515,11 @@ const knownFlags = new Set([
   "git",
   "no-git",
   "overwrite",
+  "check",
+  "patch",
+  "diff",
+  "verbose",
+  "online",
   "cwd",
   ...valueFlags,
   ...valueFlags2,
@@ -496,8 +542,8 @@ const check = async (c: Case, n: number): Promise<string[]> => {
       return end < 0 ? [] : a.slice(end + 1)
     }
     const isCreate = (args: ReadonlyArray<string>) => {
-      const [first] = words(args)
-      return first !== "add" && first !== "list"
+      const first = words(args)[0]?.toLowerCase()
+      return !["add", "list", "upgrade", "doctor"].includes(first ?? "")
     }
     const seen = new Set<string>()
     let step: { args: string[]; cwd: string } | undefined = { args: [...c.args], cwd: start }
@@ -530,7 +576,8 @@ const check = async (c: Case, n: number): Promise<string[]> => {
           break
         }
         if (typeof doc?.ok !== "boolean") say(`hop ${hop}: no ok field`)
-        if ((r.status === 0) !== (doc?.ok === true))
+        // 2 is a check that ran and found something (upgrade --check, doctor): ok, with a finding
+        if ((r.status === 0 || r.status === 2) !== (doc?.ok === true))
           say(`hop ${hop}: exit ${r.status}, ok ${doc?.ok}`)
         fix = doc?.error?.fix ?? null
         code = doc?.error?.code ?? ""
