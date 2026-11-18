@@ -22,7 +22,7 @@ released with `effect`, all set to the `effect` pin:
 ```yaml
 overrides:
   vite: "catalog:"
-  effect: 4.1.4
+  effect@>=4.0.0-0: 4.1.4
   "@effect/ai-*": 4.1.4
   "@effect/atom-*": 4.1.4
   "@effect/openapi-generator": 4.1.4
@@ -38,10 +38,21 @@ Effect-TS/effect-smol's `packages/` directory. `@effect/tsgo` and
 a bare `@effect/*` would also catch `@effect/tsgo-linux-x64`, tsgo's binary,
 which then silently fails to install (seen when probing).
 
+The `effect` key is scoped to Effect 4 (`effect@>=4.0.0-0`). A bare `effect`
+key rewrites every `effect` edge in the tree, including the private Effect 3
+dependency of libraries such as `uploadthing` (`effect: 3.17.7`) and
+`@prisma/config`, which then fail at import (`Cannot find module
+.../effect/dist/Micro.js`). Scoped, those libraries keep their own copy and
+every Effect 4 edge is still held at the pin.
+
 `generate` writes the overrides. `add` writes any that are missing, at the
 project's own catalog `effect` version, so running a new efforge on an older
 project repairs it; an Effect package `add` introduces joins the catalog at that
-version too, not at efforge's newest pin.
+version too, not at efforge's newest pin. Older pnpm ignores the wildcard keys
+(see Evidence), so `add` also raises the root `packageManager` to the version
+generated projects pin when it is older than 12.17.0, says so in its summary
+and in `--json` (`packageManager: {from, to}`), and never lowers it. A project
+made by 0.2.0 pins `pnpm@12.4.2`.
 
 ## Evidence (probed 2026-11-18, pnpm 12)
 
@@ -54,6 +65,11 @@ version too, not at efforge's newest pin.
 - Regression case: the 0.2.0 pins (effect 4.0.5) plus these overrides, for
   the default stack and D1 + effect-sql + better-auth: no 4.1.x package
   installed, `pnpm peers check` clean, typecheck, check, test and build pass.
+- Effect 3 dependents: on a guarded 0.2.0 project, `pnpm add -w uploadthing`
+  with `effect: 4.0.5` gives uploadthing Effect 4.0.5 and
+  `import("uploadthing/server")` fails; with `effect@>=4.0.0-0: 4.0.5` it gets
+  3.17.7 and imports, the `@effect/sql-*` packages stay at 4.0.5, and the
+  project still builds.
 - Not chosen (from the pnpm docs, not probed): `peerDependencyRules` only
   changes which peer ranges pnpm accepts, and `autoInstallPeers: false` would
   leave `effect-cf`'s required peers unmet. Neither picks a version, and
@@ -78,6 +94,11 @@ version. Two checks keep it honest:
 
 - Upgrading `effect` in a generated project means changing the catalog entry
   and the overrides together; the comment in `pnpm-workspace.yaml` says so.
+- The family wildcards are not scoped by version. `@effect/ai-google`,
+  `@effect/sql-drizzle` and `@effect/sql-kysely` have no 4.x release on npm
+  (latest 0.16.0, 0.51.0 and 0.48.0), so the overrides would ask for a version
+  that does not exist if a project added one (not probed). No efforge add-on
+  uses them.
 - A new family in effect-smol (a new `packages/` directory) needs a line in
   `effectLockstep`; the e2e lockfile check fails if one ever enters an
   install at another version.

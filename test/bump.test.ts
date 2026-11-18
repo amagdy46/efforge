@@ -2,6 +2,7 @@ import { expect, it } from "@effect/vitest"
 import {
   applyBumps,
   checkToolchain,
+  heldPins,
   compareVersions,
   diffPins,
   formatReport,
@@ -99,4 +100,32 @@ it("flags lint-toolchain pins outside tsgo's table or vite-plus's bundle", () =>
     "vitest 5.1.1 differs from vite-plus 1.7.0's 5.1.0",
   ])
   expect(checkToolchain(pins, {}, bundle)).toHaveLength(3)
+})
+
+it("--write holds a pin the lint toolchain fixes, and says why", () => {
+  const support = { typescript: ["7.0.2"], oxlint: ["1.94.0"], "oxlint-tsgolint": ["7.0.2007"] }
+  const bundle = { oxlint: "=1.94.0", vitest: "5.1.0" }
+  const pins = {
+    "@effect/tsgo": "0.70.0",
+    "vite-plus": "1.7.0",
+    typescript: "7.0.2",
+    oxlint: "1.94.0",
+    "oxlint-tsgolint": "7.0.2007",
+    vitest: "5.1.0",
+    react: "19.3.1",
+  }
+  const lines = diffPins([
+    { pkg: "vitest", pin: "5.1.0", latest: "5.1.1" },
+    { pkg: "react", pin: "19.3.1", latest: "19.3.2" },
+  ])
+  const held = heldPins(lines, pins, support, bundle)
+  expect([...held.keys()]).toEqual(["vitest"])
+  const src = `{\n  react: "19.3.1",\n  vitest: "5.1.0",\n}`
+  const { source, applied, skipped } = applyBumps(src, lines, held)
+  expect(applied).toEqual(["react 19.3.1 -> 19.3.2"])
+  expect(skipped).toEqual([
+    "vitest 5.1.0 -> 5.1.1: vitest 5.1.1 differs from vite-plus 1.7.0's 5.1.0",
+  ])
+  expect(source).toContain('vitest: "5.1.0"')
+  expect(checkToolchain({ ...pins, vitest: "5.1.0" }, support, bundle)).toEqual([])
 })
