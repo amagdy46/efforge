@@ -235,7 +235,8 @@ it("after installing, add generates the route tree (and does neither with --no-i
     recordingSpawner(calls),
   )
   await runIn(recorded as never, addAddons(dir, ["email"], { overwrite: false, dryRun: false }))
-  expect(calls).toEqual(["pnpm install", ROUTE_TREE_COMMAND])
+  // not a frozen install: add changed dependencies, and with CI set pnpm would refuse to update the lockfile
+  expect(calls).toEqual(["pnpm install --no-frozen-lockfile", ROUTE_TREE_COMMAND])
   calls.length = 0
   await runIn(
     recorded as never,

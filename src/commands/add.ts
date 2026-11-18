@@ -84,6 +84,12 @@ export interface AddResult {
   readonly notes: string[]
 }
 
+/**
+ * `add` has just changed dependencies, so the lockfile must be rewritten. With `CI` set (CI, and many
+ * agent sandboxes) pnpm installs with a frozen lockfile by default and fails with OUTDATED_LOCKFILE.
+ */
+const INSTALL_ARGS = ["install", "--no-frozen-lockfile"]
+
 const DASHBOARD = "apps/web/src/routes/app/index.tsx"
 const WIDGETS = "apps/web/src/components/widgets.tsx"
 
@@ -677,7 +683,7 @@ export const addAddons = (
       yield* fs.writeFileString(abs, content).pipe(io(rel))
     }
     if ((out.size > 0 || removed.size > 0) && opts.install !== false) {
-      yield* exec("pnpm", ["install"], dir)
+      yield* exec("pnpm", INSTALL_ARGS, dir)
       // add-ons may add or replace routes
       yield* generateRouteTree(dir)
     }
@@ -826,7 +832,7 @@ export const addHandler = (input: {
       if (!input.install || input.dryRun || !changes) return
       if (installs)
         yield* io.task("Installing dependencies (pnpm install)", (log) =>
-          exec("pnpm", ["install"], dir, log),
+          exec("pnpm", INSTALL_ARGS, dir, log),
         )
       // add-ons may add or replace routes; without an install, `pnpm typecheck` regenerates it later
       if (installs || installed) yield* io.step("Generating the route tree", generateRouteTree(dir))
