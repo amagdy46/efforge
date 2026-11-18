@@ -8,6 +8,7 @@ import { type AddonLoadError, addonIdsFor, loadAddons } from "../addon.ts"
 import { unifiedDiff } from "../diff.ts"
 import { type CommandFailed, exec, has } from "../exec.ts"
 import { GenerateError, generate, isComputed, matches } from "../generate.ts"
+import { introLine } from "../intro.ts"
 import { EfforgeManifest, hash, renderManifest } from "../manifest.ts"
 import { applyProjectName } from "../projectName.ts"
 import { generateRouteTree } from "../routeTree.ts"
@@ -712,10 +713,7 @@ export const addHandler = (input: {
           task: (_label, eff) => eff(() => {}),
         }
       : live
-    if (!input.json)
-      yield* io.intro(
-        `${pc.bgCyan(pc.black(" efforge add "))}${pc.dim(`  ${input.ids.join(" ")}`)}`,
-      )
+    if (!input.json) yield* io.intro(introLine(`add ${input.ids.join(" ")}`))
 
     const manifest = yield* readManifest(dir)
     if (!input.json && newer(manifest.efforgeVersion, efforgeVersion))

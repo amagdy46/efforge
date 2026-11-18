@@ -2,6 +2,7 @@ import { Console, Effect, Path } from "effect"
 import { Command, Flag } from "effect/cli"
 import pc from "picocolors"
 import { loadAddons } from "../addon.ts"
+import { introLine } from "../intro.ts"
 import { slots } from "../slots.ts"
 import { readManifest } from "./add.ts"
 import { TemplatesDir } from "./create.ts"
@@ -98,6 +99,7 @@ export const listCommand = Command.make(
           `${mark} ${a.installed === true ? pc.dim(a.id.padEnd(width)) : pc.cyan(a.id.padEnd(width))}  ${pc.dim(room === undefined ? a.description : short(a.description, room))}`,
         )
       }
+      lines.unshift(introLine("list"))
       lines.push(
         "",
         pc.dim(
