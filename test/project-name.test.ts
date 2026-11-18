@@ -43,3 +43,14 @@ it("names the Alchemy stack after the project, as a lowercase slug", () => {
   expect(out.get("infra/alchemy.run.ts")).toContain('Alchemy.Stack(\n  "my-shop-v2",')
   expect(applyProjectName(out, "@acme/My_Shop.v2")).toEqual(out)
 })
+
+it("names the web app: the title and headers read PROJECT_NAME", () => {
+  const t: Tree = new Map([
+    ["apps/web/src/lib/project.ts", '/** doc */\nexport const PROJECT_NAME = "app"\n'],
+  ])
+  const out = applyProjectName(t, "@acme/shop")
+  expect(out.get("apps/web/src/lib/project.ts")).toBe(
+    '/** doc */\nexport const PROJECT_NAME = "shop"\n',
+  )
+  expect(applyProjectName(out, "@acme/shop")).toEqual(out)
+})

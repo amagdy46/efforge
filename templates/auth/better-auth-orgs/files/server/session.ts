@@ -1,4 +1,4 @@
-import { Auth } from "@repo/core/Auth"
+import { Auth, sessionOrNull } from "@repo/core/Auth"
 import { createServerFn } from "@tanstack/react-start"
 import { getRequestHeaders } from "@tanstack/react-start/server"
 import { Effect } from "effect"
@@ -7,12 +7,7 @@ import { runtime } from "./runtime"
 
 /** The signed-in user, or null. Route guards call this. */
 export const getSession = createServerFn({ method: "GET" }).handler(() =>
-  runtime.runPromise(
-    Effect.gen(function* () {
-      const auth = yield* Auth
-      return yield* auth.currentSession
-    }).pipe(Effect.catchTag("Unauthorized", () => Effect.succeed(null))),
-  ),
+  runtime.runPromise(sessionOrNull),
 )
 
 /**

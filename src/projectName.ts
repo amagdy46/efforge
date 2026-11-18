@@ -5,6 +5,9 @@ const formattingOptions = { insertSpaces: true, tabSize: 2 }
 
 const ALCHEMY_RUN = "infra/alchemy.run.ts"
 
+/** The web app's name constant, shown in the `<title>` and the headers. */
+export const PROJECT_FILE = "apps/web/src/lib/project.ts"
+
 /** Stack names end up in Cloudflare resource names: lowercase letters, digits and dashes. */
 const slug = (name: string): string =>
   name
@@ -17,7 +20,8 @@ export const projectDirName = (name: string): string => name.split("/").pop() ??
 
 /**
  * Built-in post-step: names the generated project. Sets the root `package.json` (`<name>-monorepo`, so it can never clash with a workspace package called `<name>`) and
- * `wrangler.jsonc` `name`, the Alchemy stack name and the README's first heading. Files that are absent, or lack
+ * `wrangler.jsonc` `name`, the Alchemy stack name, the README's first heading and the web app's
+ * `PROJECT_NAME` (apps/web/src/lib/project.ts). Files that are absent, or lack
  * the field, are left alone; running it twice changes nothing.
  */
 export const applyProjectName = (tree: Tree, name: string): Tree => {
@@ -52,6 +56,13 @@ export const applyProjectName = (tree: Tree, name: string): Tree => {
   const alchemy = out.get(ALCHEMY_RUN)
   if (alchemy !== undefined)
     out.set(ALCHEMY_RUN, alchemy.replace(/(Alchemy\.Stack\(\s*)"[^"]*"/, `$1"${slug(dir)}"`))
+
+  const project = out.get(PROJECT_FILE)
+  if (project !== undefined)
+    out.set(
+      PROJECT_FILE,
+      project.replace(/(export const PROJECT_NAME = )"[^"]*"/, `$1${JSON.stringify(dir)}`),
+    )
 
   return out
 }

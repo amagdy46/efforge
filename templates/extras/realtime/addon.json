@@ -1,7 +1,7 @@
 {
   "id": "extras/realtime",
   "title": "Realtime",
-  "description": "WebSockets: a Realtime service, a hibernating Room Durable Object, a useRoom hook and a demo on /app.",
+  "description": "WebSockets: a Realtime service, a hibernating Room Durable Object, a useRoom hook and a dashboard card.",
   "files": [
     {
       "path": "files/core-realtime.ts",
@@ -24,18 +24,31 @@
       "target": "apps/web/src/lib/use-room.ts"
     },
     {
-      "path": "files/realtime-demo.tsx",
-      "target": "apps/web/src/components/realtime-demo.tsx"
-    },
-    {
       "path": "files/realtime-limits.ts",
       "target": "packages/core/src/realtime-limits.ts"
     },
     {
       "path": "files/realtime-limits.test.ts",
       "target": "packages/core/test/realtime-limits.test.ts"
+    },
+    {
+      "path": "files/realtime.test.ts",
+      "target": "packages/core/test/realtime.test.ts"
     }
   ],
+  "card": {
+    "export": "realtime",
+    "files": [
+      {
+        "path": "files/card/realtime.tsx",
+        "target": "apps/web/src/capabilities/realtime.tsx"
+      },
+      {
+        "path": "files/card/realtime-demo.ts",
+        "target": "apps/web/src/server/realtime-demo.ts"
+      }
+    ]
+  },
   "dependencies": {},
   "devDependencies": {},
   "envVars": [],
@@ -85,16 +98,6 @@
         "item": "realtimeRoute",
         "import": "realtimeRoute",
         "from": "./realtime-route"
-      }
-    },
-    {
-      "name": "addArrayItem",
-      "args": {
-        "file": "apps/web/src/components/widgets.tsx",
-        "name": "widgets",
-        "item": "<RealtimeDemo key=\"realtime\" />",
-        "import": "RealtimeDemo",
-        "from": "./realtime-demo"
       }
     },
     {

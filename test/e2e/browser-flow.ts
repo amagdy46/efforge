@@ -1,4 +1,5 @@
-import { chromium, type Page } from "playwright"
+import { request as httpRequest } from "node:http"
+import { chromium, type Page, type Request } from "playwright"
 
 const password = "correct-horse-battery"
 
@@ -11,6 +12,79 @@ const signUp = async (page: Page, name: string, email: string) => {
   await page.getByLabel("Email").fill(email)
   await page.getByLabel("Password").fill(password)
   await page.getByRole("button", { name: "Create account" }).click()
+}
+
+/** A POST to `url` with `Host: host`, which fetch cannot send. */
+const postWithHost = (url: string, host: string, body: string) =>
+  new Promise<{ status: number; body: string }>((resolve, reject) => {
+    const req = httpRequest(
+      url,
+      {
+        method: "POST",
+        headers: { host, origin: `http://${host}`, "content-type": "application/json" },
+      },
+      (res) => {
+        let text = ""
+        res.on("data", (chunk: Buffer) => (text += chunk.toString()))
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, body: text }))
+      },
+    )
+    req.on("error", reject)
+    req.end(body)
+  })
+
+/**
+ * Uses every card's demo as a signed-in user, then replays each server function call the dashboard
+ * made without the session cookie: every one must be refused with `Unauthorized`, reads included.
+ * Also checks that a failed add keeps the typed note.
+ */
+const cardsRequireSession = async (page: Page) => {
+  const calls: Request[] = []
+  page.on("request", (r) => {
+    if (r.url().includes("/_serverFn/")) calls.push(r)
+  })
+  await page.reload()
+  await hydrated(page)
+  const runtime = page.locator("#runtime")
+  await runtime.getByLabel("Name").fill("Ann")
+  await runtime.getByRole("button", { name: "Run on the server" }).click()
+  await runtime.getByText("Hello, Ann").waitFor()
+  const database = page.locator("#database")
+  await database.getByLabel("New note").fill("n".repeat(250))
+  await database.getByRole("button", { name: "Add note" }).click()
+  await database.getByRole("alert").getByText("InvalidNote").waitFor()
+  if ((await database.getByLabel("New note").inputValue()).length !== 250)
+    throw new Error("a failed add cleared the note input")
+  await database.getByLabel("New note").fill("written by Ann")
+  await database.getByRole("button", { name: "Add note" }).click()
+  await database.getByText("written by Ann").waitFor()
+  const realtime = page.locator("#realtime")
+  await realtime.getByRole("button", { name: "Send from the server" }).click()
+  await realtime.getByText(/broadcast it to/).waitFor()
+
+  const seen = new Map(calls.map((c) => [`${c.method()} ${c.url()}`, c]))
+  const names = new Set<string>()
+  for (const call of seen.values()) {
+    const headers = { ...(await call.allHeaders()) }
+    delete headers.cookie
+    const response = await fetch(call.url(), {
+      method: call.method(),
+      headers,
+      ...(call.method() === "POST" ? { body: call.postData() ?? "" } : {}),
+    })
+    const body = await response.text()
+    const name = JSON.parse(
+      Buffer.from(call.url().split("/_serverFn/")[1]?.split("?")[0] ?? "", "base64url").toString(),
+    ).export as string
+    names.add(name.split("_")[0] as string)
+    if (!body.includes("Unauthorized"))
+      throw new Error(
+        `${name} answered a request without a session: ${response.status} ${body.slice(0, 200)}`,
+      )
+  }
+  for (const fn of ["greet", "listNotes", "addNote", "announce"])
+    if (!names.has(fn))
+      throw new Error(`the dashboard never called ${fn}; replayed ${[...names].join(", ")}`)
 }
 
 /**
@@ -41,8 +115,17 @@ export const orgsFlow = async (baseURL: string): Promise<void> => {
     await annPage.waitForURL(/\/app$/)
     await expectVisible(annPage, "Dashboard")
     await expectVisible(annPage, "Notes")
-    // add-on widgets render on the database + auth dashboard too (the stack includes realtime)
+    // every card renders on the database + auth dashboard (the stack includes realtime)
     await expectVisible(annPage, "Realtime room")
+    await cardsRequireSession(annPage)
+    // a host Better Auth does not allow under pnpm dev gets a clear 403, not a 500
+    const lan = await postWithHost(
+      `${baseURL}/api/auth/sign-in/email`,
+      "192.0.2.1:5199",
+      JSON.stringify({ email: ann.email, password }),
+    )
+    if (lan.status !== 403 || !lan.body.includes("BETTER_AUTH_URL"))
+      throw new Error(`sign-in from another host: ${lan.status} ${lan.body.slice(0, 200)}`)
     await annPage
       .getByRole("button", { name: "Switch organization" })
       .getByText("Acme Inc")

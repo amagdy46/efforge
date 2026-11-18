@@ -1,20 +1,18 @@
 import { Auth } from "@repo/core/Auth"
 import { createMiddleware } from "@tanstack/react-start"
-import { Effect } from "effect"
 import { runtime } from "./runtime"
 
+const user = Auth.use((auth) => auth.currentSession)
+const middleware = createMiddleware({ type: "function" })
+
+// #region card
 /**
- * Server-function middleware: rejects the call unless someone is signed in. Add it with
- * `createServerFn(...).middleware([requireSession])`; `efforge` extras (browser, workflows, AI)
- * are wired this way when the project has auth. The session is also passed on as `context.session`.
+ * Rejects the call with `Unauthorized` unless someone is signed in, and passes
+ * the session on as `context.session`. Chain it on a server function with
+ * `.middleware([requireSession])`; efforge does that for every card's server
+ * functions, and for the browser, workflows and AI extras, on auth stacks.
  */
-export const requireSession = createMiddleware({ type: "function" }).server(({ next }) =>
-  runtime
-    .runPromise(
-      Effect.gen(function* () {
-        const auth = yield* Auth
-        return yield* auth.currentSession
-      }),
-    )
-    .then((session) => next({ context: { session } })),
+export const requireSession = middleware.server(({ next }) =>
+  runtime.runPromise(user).then((session) => next({ context: { session } })),
 )
+// #endregion

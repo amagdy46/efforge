@@ -8,12 +8,20 @@
       "target": "packages/core/src/Auth.ts"
     },
     {
+      "path": "files/core/auth.test.ts",
+      "target": "packages/core/test/auth.test.ts"
+    },
+    {
       "path": "files/shared/server/auth.ts",
       "target": "apps/web/src/server/auth.ts"
     },
     {
       "path": "files/server/auth-live.ts",
       "target": "apps/web/src/server/auth-live.ts"
+    },
+    {
+      "path": "files/shared/server/auth-url.ts",
+      "target": "apps/web/src/server/auth-url.ts"
     },
     {
       "path": "files/shared/server/auth-route.ts",
@@ -56,12 +64,18 @@
       "target": "apps/web/src/routes/sign-up.tsx"
     },
     {
-      "path": "files/shared/routes/app/index.tsx",
-      "target": "apps/web/src/routes/app/index.tsx"
-    },
-    {
       "path": "files/routes/app.tsx",
       "target": "apps/web/src/routes/app.tsx"
+    },
+    {
+      "path": "../../base/files/web/src/components/app-shell.tsx",
+      "target": "apps/web/src/components/app-shell.tsx",
+      "ifAbsent": true
+    },
+    {
+      "path": "../../base/files/web/src/lib/project.ts",
+      "target": "apps/web/src/lib/project.ts",
+      "ifAbsent": true
     },
     {
       "path": "files/shared/server/db/pg-drizzle.ts",
@@ -232,6 +246,19 @@
       }
     }
   ],
+  "card": {
+    "export": "auth",
+    "files": [
+      {
+        "path": "files/card/auth.tsx",
+        "target": "apps/web/src/capabilities/auth.tsx"
+      },
+      {
+        "path": "files/card/account.ts",
+        "target": "apps/web/src/server/account.ts"
+      }
+    ]
+  },
   "dependencies": {
     "apps/web": [
       "better-auth"
@@ -246,8 +273,8 @@
     },
     {
       "name": "BETTER_AUTH_URL",
-      "example": "http://localhost:5173",
-      "description": "Public origin of the app, used for redirects and trusted origins (a Worker var in production)"
+      "example": "https://app.example.com",
+      "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port)."
     }
   ],
   "requires": [],
@@ -271,13 +298,6 @@
       "args": {
         "name": "BETTER_AUTH_SECRET",
         "value": "dev-only-secret-replace-me-with-openssl-rand-base64-32"
-      }
-    },
-    {
-      "name": "addDevVar",
-      "args": {
-        "name": "BETTER_AUTH_URL",
-        "value": "http://localhost:5173"
       }
     },
     {
@@ -413,7 +433,7 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "auth-secret",
-        "content": "- `BETTER_AUTH_SECRET` signs sessions: set it as a Worker secret (`.dev.vars` locally, `wrangler secret put BETTER_AUTH_SECRET` in production). Never log or return it. `BETTER_AUTH_URL` is the public origin; when unset Better Auth infers it from the request."
+        "content": "- `BETTER_AUTH_SECRET` signs sessions: set it as a Worker secret (`.dev.vars` locally, `wrangler secret put BETTER_AUTH_SECRET` in production). Never log or return it. `BETTER_AUTH_URL` is the public origin and always wins when set. Unset, Better Auth takes it from the request (under `pnpm dev`, from localhost on any port); set it to sign in from another host in development, such as a phone on your network or a tunnel."
       },
       "when": {
         "infra": [
@@ -425,7 +445,7 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "auth-secret",
-        "content": "- `BETTER_AUTH_SECRET` signs sessions: Alchemy passes it to the Worker from `.env` locally and from the deploy workflow secret in CI. Never log or return it. `BETTER_AUTH_URL` is the public origin; when unset Better Auth infers it from the request."
+        "content": "- `BETTER_AUTH_SECRET` signs sessions: Alchemy passes it to the Worker from `.env` locally and from the deploy workflow secret in CI. Never log or return it. `BETTER_AUTH_URL` is the public origin and always wins when set. Unset, Better Auth takes it from the request (under `pnpm dev`, from localhost on any port); set it to sign in from another host in development, such as a phone on your network or a tunnel."
       },
       "when": {
         "infra": [
