@@ -368,7 +368,11 @@ const deployAlchemy = (input: ReadmeInput): string => {
   const resources = Object.entries(alchemyResources(stack))
     .filter(([id]) => ids.includes(id))
     .map(([, r]) => r)
-  const env = ["CLOUDFLARE_API_TOKEN", ...allEnv(input)]
+  const env = [
+    "CLOUDFLARE_API_TOKEN",
+    "CLOUDFLARE_ACCOUNT_ID",
+    ...allEnv(input).filter((n) => n !== "CLOUDFLARE_ACCOUNT_ID"),
+  ]
   const steps = [
     `Write the production values of ${and(env.map(code))} to \`.env.production\` (gitignored; \`.env.example\` says what each is). Check the Cloudflare credentials with \`pnpm exec alchemy provider check-env -c infra/alchemy.run.ts --env-file .env.production\`.`,
   ]
@@ -378,7 +382,7 @@ const deployAlchemy = (input: ReadmeInput): string => {
     )
   if (ids.includes("extras/email"))
     steps.push(
-      "Enable Email Sending for your domain in the Cloudflare dashboard (or `wrangler email sending enable example.com`) and send from an address on it (`MAIL_FROM`).",
+      "Enable Email Sending for your domain, `pnpm exec wrangler email sending enable example.com` (sign in first with `pnpm exec wrangler login`), and send from an address on it (`MAIL_FROM`).",
     )
   steps.push(
     `Deploy the \`prod\` stage: \`pnpm run deploy --stage prod --env-file .env.production\`. It prints the Worker's URL.${ids.includes("extras/browser") ? " Docker must be running to build the browser image (Containers need the Workers Paid plan)." : ""} Any other \`--stage\` name is a separate copy of everything; \`pnpm run destroy --stage <name> --env-file .env.production\` removes one.`,
