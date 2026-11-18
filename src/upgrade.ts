@@ -747,10 +747,15 @@ export const checkUpgrade = (
     if (at >= 0 && last > at)
       steps[at] = {
         ...(steps[at] as UpgradeStep),
-        description: (steps[at] as UpgradeStep).description.replace(
-          "The next steps",
-          last === at + 1 ? `Step ${at + 2}` : `Steps ${at + 2}–${last + 1}`,
-        ),
+        description: (steps[at] as UpgradeStep).description
+          .replace(
+            "The next steps",
+            last === at + 1 ? `Step ${at + 2}` : `Steps ${at + 2}–${last + 1}`,
+          )
+          .replace(
+            "Or do them by hand.",
+            last === at + 1 ? "Or do it by hand." : "Or do them by hand.",
+          ),
       }
     if (steps.length > 0)
       steps.push({

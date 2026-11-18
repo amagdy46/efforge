@@ -906,9 +906,9 @@ const upgradeCheck: Check = {
       return {
         status: "warn" as const,
         message: `${made}; it differs from what efforge ${efforgeVersion} generates (${[
-          report.guards.some((g) => !g.ok) ? "Effect guard" : undefined,
+          report.guards.some((g) => !g.ok) ? "the Effect guard" : undefined,
           report.pins.some((p) => p.status === "behind")
-            ? `${report.pins.filter((p) => p.status === "behind").length} pins behind`
+            ? `${report.pins.filter((p) => p.status === "behind").length} ${report.pins.filter((p) => p.status === "behind").length === 1 ? "pin" : "pins"} behind`
             : undefined,
           report.files.some((f) => f.status === "refresh") ? "files to refresh" : undefined,
           report.seams.length > 0 ? "missing seams" : undefined,
