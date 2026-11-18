@@ -1,7 +1,7 @@
 {
   "id": "extras/storage",
   "title": "Storage",
-  "description": "Object storage: a Storage service on R2 with Worker-served signed download URLs.",
+  "description": "Object storage: a Storage service on R2 with Worker-served signed download URLs, and a dashboard card.",
   "files": [
     {
       "path": "files/storage-security.ts",
@@ -22,8 +22,29 @@
     {
       "path": "files/storage-route.ts",
       "target": "apps/web/src/server/storage-route.ts"
+    },
+    {
+      "path": "files/storage-in-memory.ts",
+      "target": "packages/core/test/storage-in-memory.ts"
+    },
+    {
+      "path": "files/storage.test.ts",
+      "target": "packages/core/test/storage.test.ts"
     }
   ],
+  "card": {
+    "export": "storage",
+    "files": [
+      {
+        "path": "files/card/storage.tsx",
+        "target": "apps/web/src/capabilities/storage.tsx"
+      },
+      {
+        "path": "files/card/storage-demo.ts",
+        "target": "apps/web/src/server/storage-demo.ts"
+      }
+    ]
+  },
   "dependencies": {},
   "devDependencies": {},
   "envVars": [
@@ -125,7 +146,19 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "storage",
-        "content": "## Storage\n\n- Use the `Storage` service from `@repo/core` (put, get, delete, signedUrl, verify); do not touch the R2 binding directly.\n- The implementation is `apps/web/src/server/storage.ts` on the `STORAGE` R2 binding; downloads are served by the Worker route in `storage-route.ts`.\n- Signed URLs are HMAC-signed with the `STORAGE_SIGNING_SECRET` secret (at least 32 characters; the app fails to start without it). Never log or return it.\n- Storage keys are opaque: generate them on the server, never from raw user input. Files are served as attachments with `nosniff`, inline only for raster images."
+        "content": "## Storage\n\n- Use the `Storage` service from `@repo/core` (put, get, list, delete, signedUrl, verify); do not touch the R2 binding directly. Programs that use it (`upload`, `listUploads`, `deleteUpload`) live next to it in `packages/core/src/storage.ts`.\n- The layer is `StorageLive` in `apps/web/src/server/storage.ts`, on the `STORAGE` R2 binding; downloads are served by the Worker route in `storage-route.ts`. The dashboard card's server functions are in `apps/web/src/server/storage-demo.ts`.\n- Signed URLs are HMAC-signed with the `STORAGE_SIGNING_SECRET` secret (at least 32 characters; the app fails to start without it). Never log or return it.\n- Storage keys are opaque: generate them on the server, never from raw user input. Files are served as attachments with `nosniff`, inline only for raster images.\n- Test with `StorageInMemory` from `packages/core/test/storage-in-memory.ts` (`layer(StorageInMemory)` from `@effect/vitest`), as `storage.test.ts` does; do not mock R2.\n- On auth stacks efforge chains `.middleware([requireSession])` on the card's server functions in `storage-demo.ts`; gate any server function you add that reads or writes the bucket the same way."
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "storage-without-auth",
+        "content": "### Storage without auth\n\n- While this project has no auth, the upload and delete server functions in `apps/web/src/server/storage-demo.ts` are open: anyone who can reach the app can store files in the bucket. Add auth (`efforge add auth/better-auth`, which guards them) or remove the demo before deploying."
+      },
+      "when": {
+        "auth": [
+          "none"
+        ]
       }
     }
   ]
