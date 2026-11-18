@@ -4,7 +4,7 @@
 
 Plain Effect SQL (tagged-template queries) behind the Database service; migrations are SQL files.
 
-Id `orm/effect-sql`: Effect SQL, in the ORM slot. Template: [`templates/orm/effect-sql/`](../../templates/orm/effect-sql/).
+Id `orm/effect-sql`. It fills the ORM slot: a project makes one ORM choice, or none. Template: [`templates/orm/effect-sql/`](../../templates/orm/effect-sql/).
 
 ## What it is for
 
@@ -18,15 +18,15 @@ When you create the project:
 npm create efforge my-app -- --orm=effect-sql
 ```
 
-Add it to an existing project whose `orm` is `none` (a single-choice slot only moves from `none` to a value):
+An ORM needs a database, and a project without an ORM has no database either, so add both in one command (`database/d1` works too):
 
 ```sh
-npx create-efforge add orm/effect-sql
+npx create-efforge add database/postgres orm/effect-sql
 ```
 
 ## Needs
 
-- A database. On a project without one, add both in one command: `npx create-efforge add database/postgres orm/effect-sql` (or another database).
+- A database, and with it an ORM ([Add it](#add-it) has the command).
 
 ## Conflicts with
 
@@ -34,33 +34,47 @@ Nothing.
 
 ## Service and layer
 
-Your code asks for `Database`, declared in `packages/core/src/Database.ts`. `DatabaseLayer` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
+Your code asks for `Database`, declared in `packages/core/src/Database.ts`. It has one member:
+
+- `sql`.
+
+`DatabaseLayer` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
 
 - To test code that uses `Database`, give it a test layer: `Layer.succeed(Database, Database.of({ ... }))`. See [Swap a layer to test](../testing.md).
 - To change the provider, write another layer for `Database` and use it in `layers.ts` in place of `DatabaseLayer`.
 
-## Files it adds
+## Files it writes
 
-| File | Only with |
-| --- | --- |
-| `packages/db/src/index.ts` | Always |
-| `packages/core/src/notes.ts` | Always |
-| `packages/core/test/notes.test.ts` | Always |
-| `packages/db/src/notes.ts` | Always |
-| `packages/db/src/layer.ts` | `database=postgres`; `database=d1` |
-| `packages/db/src/schema.ts` | `database=postgres`; `database=d1` |
-| `packages/db/scripts/migrate.ts` | `database=postgres`; `database=d1` |
-| `packages/core/src/Database.ts` | Always |
-| `packages/db/migrations/0001_init.sql` | `database=postgres`; `database=d1` |
+`efforge add` writes these files.
+
+- `packages/db/src/index.ts`
+- `packages/core/src/notes.ts`
+- `packages/core/test/notes.test.ts`
+- `packages/db/src/notes.ts`
+- `packages/db/src/layer.ts`
+- `packages/db/src/schema.ts`
+- `packages/db/scripts/migrate.ts`
+- `packages/core/src/Database.ts`
+- `packages/db/migrations/0001_init.sql`
+- `apps/web/src/capabilities/database.tsx`
+- `apps/web/src/server/notes.ts`
 
 ## Files it edits
 
-`efforge add` makes these edits with AST transforms, so it changes only what is listed and leaves the rest of each file alone.
+`efforge add` makes these edits with AST transforms (changes to the parsed code, not to its text), so it changes only what is listed and leaves the rest of each file alone.
 
 ### `apps/web/src/server/layers.ts`
 
 - Imports `WorkerEnvLive` from `./cloudflare`.
 - Adds `DatabaseLayer.pipe(Layer.provide(WorkerEnvLive))` to `AppLayer`, imported from `@repo/db`.
+
+### `apps/web/src/server/notes.ts`
+
+- Runs `requireSession` before every server function in the file. Only with `auth=better-auth-orgs` or `auth=better-auth`.
+
+### `apps/web/src/capabilities/registry.ts`
+
+- Adds `database` to `capabilities`.
 
 ### `packages/db/package.json`
 

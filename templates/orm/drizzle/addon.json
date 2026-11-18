@@ -191,7 +191,7 @@
       "errors": []
     },
     "limits": [
-      "`drizzle-orm` and `drizzle-kit` are pinned to the `1.0.0-rc.5` release candidate ([why](../decisions/0002-drizzle-rc-pin.md))."
+      "`drizzle-orm` and `drizzle-kit` are pinned to a 1.0 release candidate, the version under Dependencies ([why](../decisions/0002-drizzle-rc-pin.md))."
     ]
   },
   "transforms": [

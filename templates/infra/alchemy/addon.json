@@ -33,7 +33,7 @@
   "guide": {
     "purpose": "Declares the Worker and its bindings in TypeScript, in `infra/alchemy.run.ts`, instead of `wrangler.jsonc`, which it removes. `pnpm dev` and `pnpm run deploy` go through Alchemy, and `.github/workflows/deploy.yml` deploys a preview stage for each pull request.",
     "limits": [
-      "It uses Alchemy 2.0 beta (`2.0.0-beta.87`).",
+      "It uses an Alchemy 2.0 beta; the exact version is under Dependencies.",
       "Local secrets are read from `.env`, not `.dev.vars`.",
       "On D1, `pnpm db:migrate` still expects a `wrangler.jsonc`."
     ]

@@ -4,7 +4,7 @@
 
 Email and password sign-in with Better Auth, a guarded /app and a user menu.
 
-Id `auth/better-auth`: Better Auth, in the Auth slot. Template: [`templates/auth/better-auth/`](../../templates/auth/better-auth/).
+Id `auth/better-auth`. It fills the Auth slot: a project makes one Auth choice, or none. Template: [`templates/auth/better-auth/`](../../templates/auth/better-auth/).
 
 ## What it is for
 
@@ -18,15 +18,21 @@ When you create the project:
 npm create efforge my-app -- --auth=better-auth
 ```
 
-Add it to an existing project whose `auth` is `none` (a single-choice slot only moves from `none` to a value):
+Add it to an existing project whose `auth` is `none`:
 
 ```sh
 npx create-efforge add auth/better-auth
 ```
 
+Auth needs a database. On a project without one, add a database and an ORM in the same command (any of them works):
+
+```sh
+npx create-efforge add database/postgres orm/drizzle auth/better-auth
+```
+
 ## Needs
 
-- A database. On a project without one, add both in one command: `npx create-efforge add database/postgres orm/drizzle auth/better-auth` (or another database and ORM).
+- A database, and with it an ORM ([Add it](#add-it) has the command).
 
 ## Conflicts with
 
@@ -34,12 +40,18 @@ Nothing.
 
 ## Service and layer
 
-Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`, and it fails with `Unauthorized`. `AuthLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
+Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`. It has one member:
+
+- `currentSession`. Fails with `Unauthorized`.
+
+`AuthLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
 
 - To test code that uses `Auth`, give it a test layer: `Layer.succeed(Auth, Auth.of({ ... }))`. See [Swap a layer to test](../testing.md).
 - To change the provider, write another layer for `Auth` and use it in `layers.ts` in place of `AuthLive`.
 
-## Files it adds
+## Files it writes
+
+`efforge add` writes these files. A file marked *replaces* is one efforge generated before; it is replaced only if you have not edited it, and otherwise `add` changes nothing and shows the diff.
 
 | File | Only with |
 | --- | --- |
@@ -58,21 +70,23 @@ Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`, and it fails
 | `apps/web/src/components/user-menu.tsx` | Always |
 | `apps/web/src/routes/sign-in.tsx` | Always |
 | `apps/web/src/routes/sign-up.tsx` | Always |
-| `apps/web/src/routes/app.tsx` | Always |
-| `apps/web/src/components/app-shell.tsx` | Always |
-| `apps/web/src/lib/project.ts` | Always |
-| `apps/web/src/server/auth-database.ts` | `database=postgres` and `orm=drizzle`; `database=postgres` and `orm=effect-sql`; `database=d1` and `orm=drizzle`; `database=d1` and `orm=effect-sql` |
-| `packages/db/src/auth-schema.ts` | `database=postgres` and `orm=drizzle`; `database=d1` and `orm=drizzle` |
-| `packages/db/drizzle.config.ts` | `database=postgres` and `orm=drizzle`; `database=d1` and `orm=drizzle` |
+| `apps/web/src/routes/app.tsx` (*replaces*) | Always |
+| `apps/web/src/components/app-shell.tsx` (*only if missing*) | Always |
+| `apps/web/src/lib/project.ts` (*only if missing*) | Always |
+| `apps/web/src/server/auth-database.ts` | Always |
+| `packages/db/src/auth-schema.ts` | `orm=drizzle` |
+| `packages/db/drizzle.config.ts` (*replaces*) | `orm=drizzle` |
 | `packages/db/drizzle/20261018161053_auth/migration.sql` | `database=postgres` and `orm=drizzle` |
 | `packages/db/drizzle/20261018161053_auth/snapshot.json` | `database=postgres` and `orm=drizzle` |
-| `packages/db/migrations/0002_auth.sql` | `database=postgres` and `orm=effect-sql`; `database=d1` and `orm=effect-sql` |
+| `packages/db/migrations/0002_auth.sql` | `orm=effect-sql` |
 | `packages/db/drizzle/20261018161054_auth/migration.sql` | `database=d1` and `orm=drizzle` |
 | `packages/db/drizzle/20261018161054_auth/snapshot.json` | `database=d1` and `orm=drizzle` |
+| `apps/web/src/capabilities/auth.tsx` | Always |
+| `apps/web/src/server/account.ts` | Always |
 
 ## Files it edits
 
-`efforge add` makes these edits with AST transforms, so it changes only what is listed and leaves the rest of each file alone.
+`efforge add` makes these edits with AST transforms (changes to the parsed code, not to its text), so it changes only what is listed and leaves the rest of each file alone.
 
 ### `.dev.vars`
 
@@ -108,6 +122,14 @@ Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`, and it fails
 ### `AGENTS.md`
 
 - Adds the rules under [Rules it adds to AGENTS.md](#rules-it-adds-to-agentsmd).
+
+### `apps/web/src/server/account.ts`
+
+- Runs `requireSession` before every server function in the file.
+
+### `apps/web/src/capabilities/registry.ts`
+
+- Adds `auth` to `capabilities`.
 
 ### `apps/web/package.json`
 

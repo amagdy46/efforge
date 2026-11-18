@@ -4,7 +4,7 @@
 
 A D1 binding (SQLite on Cloudflare) and the `@repo/db` package.
 
-Id `database/d1`: Cloudflare D1, in the Database slot. Template: [`templates/database/d1/`](../../templates/database/d1/).
+Id `database/d1`. It fills the Database slot: a project makes one Database choice, or none. Template: [`templates/database/d1/`](../../templates/database/d1/).
 
 ## What it is for
 
@@ -18,15 +18,15 @@ When you create the project:
 npm create efforge my-app -- --database=d1
 ```
 
-Add it to an existing project whose `database` is `none` (a single-choice slot only moves from `none` to a value):
+A database needs an ORM, so a project without a database gets both in one command (`orm/effect-sql` works too):
 
 ```sh
-npx create-efforge add database/d1
+npx create-efforge add database/d1 orm/drizzle
 ```
 
 ## Needs
 
-- An ORM, added in the same command: `npx create-efforge add database/d1 orm/drizzle` or `orm/effect-sql`.
+- An ORM, added in the same command ([Add it](#add-it) has it).
 - The Cloudflare runtime, which every project has today.
 
 ## Conflicts with
@@ -37,16 +37,16 @@ Nothing.
 
 None: this add-on adds no service of its own.
 
-## Files it adds
+## Files it writes
 
-| File | Only with |
-| --- | --- |
-| `packages/db/package.json` | Always |
-| `packages/db/tsconfig.json` | Always |
+`efforge add` writes these files.
+
+- `packages/db/package.json`
+- `packages/db/tsconfig.json`
 
 ## Files it edits
 
-`efforge add` makes these edits with AST transforms, so it changes only what is listed and leaves the rest of each file alone.
+`efforge add` makes these edits with AST transforms (changes to the parsed code, not to its text), so it changes only what is listed and leaves the rest of each file alone.
 
 ### `wrangler.jsonc`
 
@@ -54,8 +54,7 @@ None: this add-on adds no service of its own.
 
 ### `infra/alchemy.run.ts`
 
-- Declares `database` and binds it to the Worker as `DB`. Only with `orm=drizzle` and `infra=alchemy`.
-- Declares `database` and binds it to the Worker as `DB`. Only with `orm=effect-sql` and `infra=alchemy`.
+- Declares `database` and binds it to the Worker as `DB`. Only with `infra=alchemy`.
 
 ### `AGENTS.md`
 
@@ -79,7 +78,7 @@ None: this add-on adds no service of its own.
 
 ### `package.json`
 
-- Sets the scripts `db:migrate`; a script of the same name is replaced.
+- Sets the script `db:migrate`; a script of the same name is replaced.
 
 ### `efforge.jsonc`
 

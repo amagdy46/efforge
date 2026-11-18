@@ -4,7 +4,7 @@
 
 Durable background jobs: a Jobs service on Cloudflare Workflows, with an example workflow and server functions.
 
-Id `extras/workflows`: Workflows, in the Extras slot. Template: [`templates/extras/workflows/`](../../templates/extras/workflows/).
+Id `extras/workflows`. It is one of the Extras: a project can have any number of them. Template: [`templates/extras/workflows/`](../../templates/extras/workflows/).
 
 ## What it is for
 
@@ -34,23 +34,28 @@ Nothing.
 
 ## Service and layer
 
-Your code asks for `Jobs`, declared in `packages/core/src/jobs.ts`, and it fails with `JobError`. `JobsLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
+Your code asks for `Jobs`, declared in `packages/core/src/jobs.ts`. Its members:
+
+- `start(job, payload)`. Fails with `JobError`.
+- `status(job, id)`. Fails with `JobError`.
+
+`JobsLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
 
 - To test code that uses `Jobs`, give it a test layer: `Layer.succeed(Jobs, Jobs.of({ ... }))`. See [Swap a layer to test](../testing.md).
 - To change the provider, write another layer for `Jobs` and use it in `layers.ts` in place of `JobsLive`.
 
-## Files it adds
+## Files it writes
 
-| File | Only with |
-| --- | --- |
-| `packages/core/src/jobs.ts` | Always |
-| `apps/web/src/workflows/Example.ts` | Always |
-| `apps/web/src/server/jobs.ts` | Always |
-| `apps/web/src/server/example-job.ts` | Always |
+`efforge add` writes these files.
+
+- `packages/core/src/jobs.ts`
+- `apps/web/src/workflows/Example.ts`
+- `apps/web/src/server/jobs.ts`
+- `apps/web/src/server/example-job.ts`
 
 ## Files it edits
 
-`efforge add` makes these edits with AST transforms, so it changes only what is listed and leaves the rest of each file alone.
+`efforge add` makes these edits with AST transforms (changes to the parsed code, not to its text), so it changes only what is listed and leaves the rest of each file alone.
 
 ### `packages/core/src/index.ts`
 

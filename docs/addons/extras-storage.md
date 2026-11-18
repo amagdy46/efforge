@@ -4,7 +4,7 @@
 
 Object storage: a Storage service on R2 with Worker-served signed download URLs.
 
-Id `extras/storage`: Storage, in the Extras slot. Template: [`templates/extras/storage/`](../../templates/extras/storage/).
+Id `extras/storage`. It is one of the Extras: a project can have any number of them. Template: [`templates/extras/storage/`](../../templates/extras/storage/).
 
 ## What it is for
 
@@ -34,24 +34,32 @@ Nothing.
 
 ## Service and layer
 
-Your code asks for `Storage`, declared in `packages/core/src/storage.ts`, and it fails with `StorageError` or `StorageConfigError`. `StorageLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
+Your code asks for `Storage`, declared in `packages/core/src/storage.ts`. Its members:
+
+- `put(key, body, options?)`. Fails with `StorageError`.
+- `get(key)`. Fails with `StorageError`.
+- `delete(key)`. Fails with `StorageError`.
+- `signedUrl(key, options?)`. Fails with `StorageError`.
+- `verify(key, expires, signature)`. Fails with `StorageError`.
+
+`StorageLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`. Building the layer fails with `StorageConfigError` when a setting is missing or invalid.
 
 - To test code that uses `Storage`, give it a test layer: `Layer.succeed(Storage, Storage.of({ ... }))`. See [Swap a layer to test](../testing.md).
 - To change the provider, write another layer for `Storage` and use it in `layers.ts` in place of `StorageLive`.
 
-## Files it adds
+## Files it writes
 
-| File | Only with |
-| --- | --- |
-| `packages/core/src/storage-security.ts` | Always |
-| `packages/core/test/storage-security.test.ts` | Always |
-| `packages/core/src/storage.ts` | Always |
-| `apps/web/src/server/storage.ts` | Always |
-| `apps/web/src/server/storage-route.ts` | Always |
+`efforge add` writes these files.
+
+- `packages/core/src/storage-security.ts`
+- `packages/core/test/storage-security.test.ts`
+- `packages/core/src/storage.ts`
+- `apps/web/src/server/storage.ts`
+- `apps/web/src/server/storage-route.ts`
 
 ## Files it edits
 
-`efforge add` makes these edits with AST transforms, so it changes only what is listed and leaves the rest of each file alone.
+`efforge add` makes these edits with AST transforms (changes to the parsed code, not to its text), so it changes only what is listed and leaves the rest of each file alone.
 
 ### `packages/core/src/index.ts`
 

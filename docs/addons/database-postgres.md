@@ -4,7 +4,7 @@
 
 Postgres reached through a Hyperdrive binding on Workers, with a local docker-compose database and the `@repo/db` package.
 
-Id `database/postgres`: Postgres, in the Database slot. Template: [`templates/database/postgres/`](../../templates/database/postgres/).
+Id `database/postgres`. It fills the Database slot: a project makes one Database choice, or none. Template: [`templates/database/postgres/`](../../templates/database/postgres/).
 
 ## What it is for
 
@@ -18,15 +18,15 @@ When you create the project:
 npm create efforge my-app -- --database=postgres
 ```
 
-Add it to an existing project whose `database` is `none` (a single-choice slot only moves from `none` to a value):
+A database needs an ORM, so a project without a database gets both in one command (`orm/effect-sql` works too):
 
 ```sh
-npx create-efforge add database/postgres
+npx create-efforge add database/postgres orm/drizzle
 ```
 
 ## Needs
 
-- An ORM, added in the same command: `npx create-efforge add database/postgres orm/drizzle` or `orm/effect-sql`.
+- An ORM, added in the same command ([Add it](#add-it) has it).
 
 ## Conflicts with
 
@@ -36,20 +36,20 @@ Nothing.
 
 None: this add-on adds no service of its own.
 
-## Files it adds
+## Files it writes
 
-| File | Only with |
-| --- | --- |
-| `docker-compose.yml` | Always |
-| `packages/db/package.json` | Always |
-| `packages/db/tsconfig.json` | Always |
-| `apps/web/src/server/runtime.ts` | Always |
-| `apps/web/src/server/settings.ts` | Always |
-| `apps/web/src/server/manifest.ts` | Always |
+`efforge add` writes these files. A file marked *replaces* is one efforge generated before; it is replaced only if you have not edited it, and otherwise `add` changes nothing and shows the diff.
+
+- `docker-compose.yml`
+- `packages/db/package.json`
+- `packages/db/tsconfig.json`
+- `apps/web/src/server/runtime.ts` (*replaces*)
+- `apps/web/src/server/settings.ts` (*only if missing*)
+- `apps/web/src/server/manifest.ts` (*only if missing*)
 
 ## Files it edits
 
-`efforge add` makes these edits with AST transforms, so it changes only what is listed and leaves the rest of each file alone.
+`efforge add` makes these edits with AST transforms (changes to the parsed code, not to its text), so it changes only what is listed and leaves the rest of each file alone.
 
 ### `wrangler.jsonc`
 
@@ -83,7 +83,7 @@ None: this add-on adds no service of its own.
 
 ### `package.json`
 
-- Sets the scripts `db:migrate`; a script of the same name is replaced.
+- Sets the script `db:migrate`; a script of the same name is replaced.
 
 ### `.env.example`
 
@@ -112,7 +112,7 @@ None: this add-on adds no service of its own.
 
 ## Environment variables
 
-- `DATABASE_URL`, for example `postgres://postgres:postgres@localhost:5432/app`: Used by `pnpm db:migrate` and drizzle-kit; the running app connects through the HYPERDRIVE binding.
+- `DATABASE_URL`, for example `postgres://postgres:postgres@localhost:5432/app`: Used by `pnpm db:migrate` and drizzle-kit, read from the shell; unset, they use the docker-compose database. The running app connects through the HYPERDRIVE binding.
 
 ## Package scripts
 

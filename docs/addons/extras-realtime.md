@@ -4,7 +4,7 @@
 
 WebSockets: a Realtime service, a hibernating Room Durable Object, a useRoom hook and a dashboard card.
 
-Id `extras/realtime`: Realtime, in the Extras slot. Template: [`templates/extras/realtime/`](../../templates/extras/realtime/).
+Id `extras/realtime`. It is one of the Extras: a project can have any number of them. Template: [`templates/extras/realtime/`](../../templates/extras/realtime/).
 
 ## What it is for
 
@@ -34,27 +34,35 @@ Nothing.
 
 ## Service and layer
 
-Your code asks for `Realtime`, declared in `packages/core/src/realtime.ts`, and it fails with `RealtimeError`. `RealtimeLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
+Your code asks for `Realtime`, declared in `packages/core/src/realtime.ts`. Its members:
+
+- `connect(roomId, request)`. Forwards a WebSocket upgrade request to the room; the response completes the handshake. Fails with `RealtimeError`.
+- `broadcast(roomId, message)`. Sends `message` to every client connected to the room. Fails with `RealtimeError`.
+- `connections(roomId)`. Number of clients currently connected to the room. Fails with `RealtimeError`.
+
+`RealtimeLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
 
 - To test code that uses `Realtime`, give it a test layer: `Layer.succeed(Realtime, Realtime.of({ ... }))`. See [Swap a layer to test](../testing.md).
 - To change the provider, write another layer for `Realtime` and use it in `layers.ts` in place of `RealtimeLive`.
 
-## Files it adds
+## Files it writes
 
-| File | Only with |
-| --- | --- |
-| `packages/core/src/realtime.ts` | Always |
-| `apps/web/src/realtime/Room.ts` | Always |
-| `apps/web/src/server/realtime.ts` | Always |
-| `apps/web/src/server/realtime-route.ts` | Always |
-| `apps/web/src/lib/use-room.ts` | Always |
-| `packages/core/src/realtime-limits.ts` | Always |
-| `packages/core/test/realtime-limits.test.ts` | Always |
-| `packages/core/test/realtime.test.ts` | Always |
+`efforge add` writes these files.
+
+- `packages/core/src/realtime.ts`
+- `apps/web/src/realtime/Room.ts`
+- `apps/web/src/server/realtime.ts`
+- `apps/web/src/server/realtime-route.ts`
+- `apps/web/src/lib/use-room.ts`
+- `packages/core/src/realtime-limits.ts`
+- `packages/core/test/realtime-limits.test.ts`
+- `packages/core/test/realtime.test.ts`
+- `apps/web/src/capabilities/realtime.tsx`
+- `apps/web/src/server/realtime-demo.ts`
 
 ## Files it edits
 
-`efforge add` makes these edits with AST transforms, so it changes only what is listed and leaves the rest of each file alone.
+`efforge add` makes these edits with AST transforms (changes to the parsed code, not to its text), so it changes only what is listed and leaves the rest of each file alone.
 
 ### `packages/core/src/index.ts`
 
@@ -84,6 +92,14 @@ Your code asks for `Realtime`, declared in `packages/core/src/realtime.ts`, and 
 ### `AGENTS.md`
 
 - Adds the rules under [Rules it adds to AGENTS.md](#rules-it-adds-to-agentsmd).
+
+### `apps/web/src/server/realtime-demo.ts`
+
+- Runs `requireSession` before every server function in the file. Only with `auth=better-auth-orgs` or `auth=better-auth`.
+
+### `apps/web/src/capabilities/registry.ts`
+
+- Adds `realtime` to `capabilities`.
 
 ### `efforge.jsonc`
 

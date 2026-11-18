@@ -4,7 +4,7 @@
 
 Runs the app on Cloudflare Workers via @cloudflare/vite-plugin.
 
-Id `runtime/cloudflare`: Cloudflare Workers, in the Runtime slot. Template: [`templates/runtime/cloudflare/`](../../templates/runtime/cloudflare/).
+Id `runtime/cloudflare`. It is the Runtime, and every project has it. Template: [`templates/runtime/cloudflare/`](../../templates/runtime/cloudflare/).
 
 ## What it is for
 
@@ -30,7 +30,9 @@ Nothing.
 
 None: this add-on adds no service of its own.
 
-## Files it adds
+## Files it writes
+
+`efforge add` writes these files.
 
 | File | Only with |
 | --- | --- |
@@ -43,7 +45,7 @@ None: this add-on adds no service of its own.
 
 ## Files it edits
 
-`efforge add` makes these edits with AST transforms, so it changes only what is listed and leaves the rest of each file alone.
+`efforge add` makes these edits with AST transforms (changes to the parsed code, not to its text), so it changes only what is listed and leaves the rest of each file alone.
 
 ### `apps/web/package.json`
 

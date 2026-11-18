@@ -4,7 +4,7 @@
 
 A headless browser: a Browser service on a Cloudflare Container that runs Playwright (apps/browser).
 
-Id `extras/browser`: Browser rendering, in the Extras slot. Template: [`templates/extras/browser/`](../../templates/extras/browser/).
+Id `extras/browser`. It is one of the Extras: a project can have any number of them. Template: [`templates/extras/browser/`](../../templates/extras/browser/).
 
 ## What it is for
 
@@ -34,30 +34,34 @@ Nothing.
 
 ## Service and layer
 
-Your code asks for `Browser`, declared in `packages/core/src/browser.ts`, and it fails with `BrowserError`. `BrowserLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
+Your code asks for `Browser`, declared in `packages/core/src/browser.ts`. It has one member:
+
+- `run(url)`. Loads `url` and reports what the page did. Fails with `BrowserError`.
+
+`BrowserLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
 
 - To test code that uses `Browser`, give it a test layer: `Layer.succeed(Browser, Browser.of({ ... }))`. See [Swap a layer to test](../testing.md).
 - To change the provider, write another layer for `Browser` and use it in `layers.ts` in place of `BrowserLive`.
 
-## Files it adds
+## Files it writes
 
-| File | Only with |
-| --- | --- |
-| `packages/core/src/browser.ts` | Always |
-| `apps/web/src/browser/BrowserContainer.ts` | Always |
-| `apps/web/src/server/browser.ts` | Always |
-| `apps/web/src/server/run-browser.ts` | Always |
-| `apps/browser/Dockerfile` | Always |
-| `apps/browser/.dockerignore` | Always |
-| `apps/browser/package.json` | Always |
-| `apps/browser/tsconfig.json` | Always |
-| `apps/browser/package-lock.json` | Always |
-| `apps/browser/src/url-policy.ts` | Always |
-| `apps/browser/src/server.ts` | Always |
+`efforge add` writes these files.
+
+- `packages/core/src/browser.ts`
+- `apps/web/src/browser/BrowserContainer.ts`
+- `apps/web/src/server/browser.ts`
+- `apps/web/src/server/run-browser.ts`
+- `apps/browser/Dockerfile`
+- `apps/browser/.dockerignore`
+- `apps/browser/package.json`
+- `apps/browser/tsconfig.json`
+- `apps/browser/package-lock.json`
+- `apps/browser/src/url-policy.ts`
+- `apps/browser/src/server.ts`
 
 ## Files it edits
 
-`efforge add` makes these edits with AST transforms, so it changes only what is listed and leaves the rest of each file alone.
+`efforge add` makes these edits with AST transforms (changes to the parsed code, not to its text), so it changes only what is listed and leaves the rest of each file alone.
 
 ### `packages/core/src/index.ts`
 

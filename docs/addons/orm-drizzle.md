@@ -4,7 +4,7 @@
 
 Drizzle 1.0 with its Effect drivers behind the Database service; migrations come from drizzle-kit.
 
-Id `orm/drizzle`: Drizzle, in the ORM slot. Template: [`templates/orm/drizzle/`](../../templates/orm/drizzle/).
+Id `orm/drizzle`. It fills the ORM slot: a project makes one ORM choice, or none. Template: [`templates/orm/drizzle/`](../../templates/orm/drizzle/).
 
 ## What it is for
 
@@ -18,15 +18,15 @@ When you create the project:
 npm create efforge my-app -- --orm=drizzle
 ```
 
-Add it to an existing project whose `orm` is `none` (a single-choice slot only moves from `none` to a value):
+An ORM needs a database, and a project without an ORM has no database either, so add both in one command (`database/d1` works too):
 
 ```sh
-npx create-efforge add orm/drizzle
+npx create-efforge add database/postgres orm/drizzle
 ```
 
 ## Needs
 
-- A database. On a project without one, add both in one command: `npx create-efforge add database/postgres orm/drizzle` (or another database).
+- A database, and with it an ORM ([Add it](#add-it) has the command).
 
 ## Conflicts with
 
@@ -34,12 +34,18 @@ Nothing.
 
 ## Service and layer
 
-Your code asks for `Database`, declared in `packages/core/src/Database.ts`. `DatabaseLayer` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
+Your code asks for `Database`, declared in `packages/core/src/Database.ts`. It has one member:
+
+- `db`.
+
+`DatabaseLayer` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
 
 - To test code that uses `Database`, give it a test layer: `Layer.succeed(Database, Database.of({ ... }))`. See [Swap a layer to test](../testing.md).
 - To change the provider, write another layer for `Database` and use it in `layers.ts` in place of `DatabaseLayer`.
 
-## Files it adds
+## Files it writes
+
+`efforge add` writes these files.
 
 | File | Only with |
 | --- | --- |
@@ -47,24 +53,34 @@ Your code asks for `Database`, declared in `packages/core/src/Database.ts`. `Dat
 | `packages/core/src/notes.ts` | Always |
 | `packages/core/test/notes.test.ts` | Always |
 | `packages/db/src/notes.ts` | Always |
-| `packages/db/src/layer.ts` | `database=postgres`; `database=d1` |
-| `packages/db/src/schema.ts` | `database=postgres`; `database=d1` |
-| `packages/db/scripts/migrate.ts` | `database=postgres`; `database=d1` |
-| `packages/core/src/Database.ts` | `database=postgres`; `database=d1` |
-| `packages/db/drizzle.config.ts` | `database=postgres`; `database=d1` |
+| `packages/db/src/layer.ts` | Always |
+| `packages/db/src/schema.ts` | Always |
+| `packages/db/scripts/migrate.ts` | Always |
+| `packages/core/src/Database.ts` | Always |
+| `packages/db/drizzle.config.ts` | Always |
 | `packages/db/drizzle/20261018154416_init/migration.sql` | `database=postgres` |
 | `packages/db/drizzle/20261018154416_init/snapshot.json` | `database=postgres` |
 | `packages/db/drizzle/20261018154417_init/migration.sql` | `database=d1` |
 | `packages/db/drizzle/20261018154417_init/snapshot.json` | `database=d1` |
+| `apps/web/src/capabilities/database.tsx` | Always |
+| `apps/web/src/server/notes.ts` | Always |
 
 ## Files it edits
 
-`efforge add` makes these edits with AST transforms, so it changes only what is listed and leaves the rest of each file alone.
+`efforge add` makes these edits with AST transforms (changes to the parsed code, not to its text), so it changes only what is listed and leaves the rest of each file alone.
 
 ### `apps/web/src/server/layers.ts`
 
 - Imports `WorkerEnvLive` from `./cloudflare`.
 - Adds `DatabaseLayer.pipe(Layer.provide(WorkerEnvLive))` to `AppLayer`, imported from `@repo/db`.
+
+### `apps/web/src/server/notes.ts`
+
+- Runs `requireSession` before every server function in the file. Only with `auth=better-auth-orgs` or `auth=better-auth`.
+
+### `apps/web/src/capabilities/registry.ts`
+
+- Adds `database` to `capabilities`.
 
 ### `apps/web/package.json`
 
@@ -77,7 +93,7 @@ Your code asks for `Database`, declared in `packages/core/src/Database.ts`. `Dat
 ### `packages/db/package.json`
 
 - Adds the dependencies listed below.
-- Sets the scripts `db:generate`; a script of the same name is replaced.
+- Sets the script `db:generate`; a script of the same name is replaced.
 
 ### `pnpm-workspace.yaml`
 
@@ -110,4 +126,4 @@ None.
 
 ## Limits
 
-- `drizzle-orm` and `drizzle-kit` are pinned to the `1.0.0-rc.5` release candidate ([why](../decisions/0002-drizzle-rc-pin.md)).
+- `drizzle-orm` and `drizzle-kit` are pinned to a 1.0 release candidate, the version under Dependencies ([why](../decisions/0002-drizzle-rc-pin.md)).

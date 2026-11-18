@@ -4,7 +4,7 @@
 
 Infrastructure as Effects (Alchemy v2): infra/alchemy.run.ts declares the Worker and its bindings instead of wrangler.jsonc, with PR preview stages deployed from GitHub Actions.
 
-Id `infra/alchemy`: Alchemy, in the Infrastructure as code slot. Template: [`templates/infra/alchemy/`](../../templates/infra/alchemy/).
+Id `infra/alchemy`. It fills the Infrastructure as code slot: a project makes one Infrastructure as code choice, or none. Template: [`templates/infra/alchemy/`](../../templates/infra/alchemy/).
 
 ## What it is for
 
@@ -18,7 +18,7 @@ When you create the project:
 npm create efforge my-app -- --infra=alchemy
 ```
 
-Add it to an existing project whose `infra` is `none` (a single-choice slot only moves from `none` to a value):
+Add it to an existing project whose `infra` is `none`:
 
 ```sh
 npx create-efforge add infra/alchemy
@@ -36,20 +36,22 @@ Nothing.
 
 None: this add-on adds no service of its own.
 
-## Files it adds
+## Files it writes
 
-| File | Only with |
-| --- | --- |
-| `infra/alchemy.run.ts` | Always |
-| `infra/tsconfig.json` | Always |
-| `infra/README.md` | Always |
-| `.github/workflows/deploy.yml` | Always |
-| `apps/web/vite.config.ts` | Always |
-| `apps/web/regions.ts` | Always |
+`efforge add` writes these files. A file marked *replaces* is one efforge generated before; it is replaced only if you have not edited it, and otherwise `add` changes nothing and shows the diff.
+
+- `infra/alchemy.run.ts`
+- `infra/tsconfig.json`
+- `infra/README.md`
+- `.github/workflows/deploy.yml`
+- `apps/web/vite.config.ts` (*replaces*)
+- `apps/web/regions.ts` (*only if missing*)
+
+It removes `wrangler.jsonc`, because `infra/alchemy.run.ts` declares the Worker instead. If you edited `wrangler.jsonc`, `add` stops and shows the diff.
 
 ## Files it edits
 
-`efforge add` makes these edits with AST transforms, so it changes only what is listed and leaves the rest of each file alone.
+`efforge add` makes these edits with AST transforms (changes to the parsed code, not to its text), so it changes only what is listed and leaves the rest of each file alone.
 
 ### `package.json`
 
@@ -62,7 +64,7 @@ None: this add-on adds no service of its own.
 
 ### `apps/web/package.json`
 
-- Sets the scripts `deploy`; a script of the same name is replaced.
+- Sets the script `deploy`; a script of the same name is replaced.
 
 ### `.env.example`
 
@@ -101,6 +103,6 @@ None.
 
 ## Limits
 
-- It uses Alchemy 2.0 beta (`2.0.0-beta.87`).
+- It uses an Alchemy 2.0 beta; the exact version is under Dependencies.
 - Local secrets are read from `.env`, not `.dev.vars`.
 - On D1, `pnpm db:migrate` still expects a `wrangler.jsonc`.

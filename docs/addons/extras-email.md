@@ -4,7 +4,7 @@
 
 Transactional email: a Mailer service on Cloudflare Email Service, printed to the console in development, plus invitation emails with organizations.
 
-Id `extras/email`: Email, in the Extras slot. Template: [`templates/extras/email/`](../../templates/extras/email/).
+Id `extras/email`. It is one of the Extras: a project can have any number of them. Template: [`templates/extras/email/`](../../templates/extras/email/).
 
 ## What it is for
 
@@ -34,13 +34,19 @@ Nothing.
 
 ## Service and layer
 
-Your code asks for `Mailer`, declared in `packages/core/src/mailer.ts`, and it fails with `MailerError` or `MailerConfigError`. `MailerLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
+Your code asks for `Mailer`, declared in `packages/core/src/mailer.ts`. It has one member:
+
+- `send(message)`. Fails with `MailerError`.
+
+`MailerLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`. Building the layer fails with `MailerConfigError` when a setting is missing or invalid.
 
 - To test code that uses `Mailer`, give it a test layer: `Layer.succeed(Mailer, Mailer.of({ ... }))`. See [Swap a layer to test](../testing.md).
 - To change the provider, write another layer for `Mailer` and use it in `layers.ts` in place of `MailerLive`.
 - `MailerLive` already chooses between two implementations by `MAIL_TRANSPORT`. To add a provider, write another layer for `Mailer` in `apps/web/src/server/mailer.ts` and return it from `MailerLive` for a new `MAIL_TRANSPORT` value.
 
-## Files it adds
+## Files it writes
+
+`efforge add` writes these files.
 
 | File | Only with |
 | --- | --- |
@@ -50,7 +56,7 @@ Your code asks for `Mailer`, declared in `packages/core/src/mailer.ts`, and it f
 
 ## Files it edits
 
-`efforge add` makes these edits with AST transforms, so it changes only what is listed and leaves the rest of each file alone.
+`efforge add` makes these edits with AST transforms (changes to the parsed code, not to its text), so it changes only what is listed and leaves the rest of each file alone.
 
 ### `packages/core/src/index.ts`
 
@@ -102,7 +108,7 @@ None.
 
 ## Environment variables
 
-- `MAIL_FROM`, for example `noreply@example.com`: Sender address; its domain must be enabled for Cloudflare Email Sending (wrangler email sending enable <domain>).
+- `MAIL_FROM`, for example `noreply@example.com`: Sender address; its domain must be enabled for Cloudflare Email Sending (wrangler email sending enable &lt;domain&gt;).
 - `MAIL_TRANSPORT`, for example `cloudflare`: cloudflare (default) sends through the EMAIL binding; console prints emails instead (used by .dev.vars).
 
 ## Package scripts

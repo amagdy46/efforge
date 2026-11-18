@@ -4,7 +4,7 @@
 
 An Llm service on Effect AI with Anthropic, OpenAI, OpenRouter and Ollama providers; keys come from the environment, or are saved encrypted per organization when auth has organizations.
 
-Id `ai/effect-ai-byok`: Effect AI (bring your own key), in the AI slot. Template: [`templates/ai/effect-ai-byok/`](../../templates/ai/effect-ai-byok/).
+Id `ai/effect-ai-byok`. It fills the AI slot: a project makes one AI choice, or none. Template: [`templates/ai/effect-ai-byok/`](../../templates/ai/effect-ai-byok/).
 
 ## What it is for
 
@@ -18,7 +18,7 @@ When you create the project:
 npm create efforge my-app -- --ai=effect-ai-byok
 ```
 
-Add it to an existing project whose `ai` is `none` (a single-choice slot only moves from `none` to a value):
+Add it to an existing project whose `ai` is `none`:
 
 ```sh
 npx create-efforge add ai/effect-ai-byok
@@ -34,33 +34,39 @@ Nothing.
 
 ## Service and layer
 
-Your code asks for `Llm`, declared in `packages/core/src/llm.ts`, and it fails with `LlmError` or `LlmNotConfigured`. `LlmLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
+Your code asks for `Llm`, declared in `packages/core/src/llm.ts`. It has one member:
+
+- `generateText(prompt)`. Fails with `LlmError` or `LlmNotConfigured`.
+
+`LlmLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
 
 - To test code that uses `Llm`, give it a test layer: `Layer.succeed(Llm, Llm.of({ ... }))`. See [Swap a layer to test](../testing.md).
 - To change the provider, write another layer for `Llm` and use it in `layers.ts` in place of `LlmLive`.
 
-## Files it adds
+## Files it writes
+
+`efforge add` writes these files.
 
 | File | Only with |
 | --- | --- |
 | `packages/core/src/llm.ts` | Always |
 | `apps/web/src/server/llm-provider.ts` | Always |
 | `apps/web/src/server/ai.ts` | Always |
-| `apps/web/src/server/llm.ts` | `auth=none` or `auth=better-auth`; `auth=better-auth-orgs` |
+| `apps/web/src/server/llm.ts` | Always |
 | `packages/core/src/llm-crypto.ts` | `auth=better-auth-orgs` |
 | `packages/core/test/llm-crypto.test.ts` | `auth=better-auth-orgs` |
 | `packages/core/src/llm-store.ts` | `auth=better-auth-orgs` |
 | `apps/web/src/server/ai-settings.ts` | `auth=better-auth-orgs` |
 | `apps/web/src/routes/app/settings/ai.tsx` | `auth=better-auth-orgs` |
-| `apps/web/src/server/llm-store.ts` | `orm=drizzle` and `auth=better-auth-orgs`; `database=postgres` and `orm=effect-sql` and `auth=better-auth-orgs`; `database=d1` and `orm=effect-sql` and `auth=better-auth-orgs` |
-| `packages/db/src/ai-schema.ts` | `database=postgres` and `orm=drizzle` and `auth=better-auth-orgs`; `database=d1` and `orm=drizzle` and `auth=better-auth-orgs` |
-| `packages/db/migrations/0003_llm_credential.sql` | `database=postgres` and `orm=effect-sql` and `auth=better-auth-orgs`; `database=d1` and `orm=effect-sql` and `auth=better-auth-orgs` |
-| `packages/db/drizzle/20261018161056_llm_credential/migration.sql` | `database=postgres` and `orm=drizzle` and `auth=better-auth-orgs`; `database=d1` and `orm=drizzle` and `auth=better-auth-orgs` |
-| `packages/db/drizzle/20261018161056_llm_credential/snapshot.json` | `database=postgres` and `orm=drizzle` and `auth=better-auth-orgs`; `database=d1` and `orm=drizzle` and `auth=better-auth-orgs` |
+| `apps/web/src/server/llm-store.ts` | `auth=better-auth-orgs` |
+| `packages/db/src/ai-schema.ts` | `orm=drizzle` and `auth=better-auth-orgs` |
+| `packages/db/migrations/0003_llm_credential.sql` | `orm=effect-sql` and `auth=better-auth-orgs` |
+| `packages/db/drizzle/20261018161056_llm_credential/migration.sql` | `orm=drizzle` and `auth=better-auth-orgs` |
+| `packages/db/drizzle/20261018161056_llm_credential/snapshot.json` | `orm=drizzle` and `auth=better-auth-orgs` |
 
 ## Files it edits
 
-`efforge add` makes these edits with AST transforms, so it changes only what is listed and leaves the rest of each file alone.
+`efforge add` makes these edits with AST transforms (changes to the parsed code, not to its text), so it changes only what is listed and leaves the rest of each file alone.
 
 ### `packages/core/src/index.ts`
 
@@ -139,7 +145,7 @@ Your code asks for `Llm`, declared in `packages/core/src/llm.ts`, and it fails w
 - `LLM_PROVIDER`, for example `anthropic`: anthropic | openai | openrouter | ollama. Only with `auth=none` or `auth=better-auth`.
 - `LLM_MODEL`, for example `claude-sonnet-5-5`: Model id for the provider. Only with `auth=none` or `auth=better-auth`.
 - `LLM_API_KEY`, for example `sk-...`: Provider API key (not needed for a local Ollama); a Worker secret in production. Only with `auth=none` or `auth=better-auth`.
-- `LLM_BASE_URL`, for example ``: Optional OpenAI-compatible endpoint (openai, ollama). Only with `auth=none` or `auth=better-auth`.
+- `LLM_BASE_URL`: Optional OpenAI-compatible endpoint (openai, ollama). Only with `auth=none` or `auth=better-auth`.
 
 ## Package scripts
 
