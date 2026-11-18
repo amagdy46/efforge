@@ -1,29 +1,25 @@
-import { existsSync, readdirSync } from "node:fs"
-import { dirname, join, relative, resolve } from "node:path"
-import { Effect, FileSystem, Path, Schema } from "effect"
+import { relative, resolve } from "node:path"
+import { Effect, Exit, FileSystem, Path, Schema } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import type { ChildProcessSpawner } from "effect/process"
 import { type ParseError, parse } from "jsonc-parser"
 import pc from "picocolors"
 import { parseDocument } from "yaml"
 import { type AddonLoadError, addonIdsFor, loadAddons } from "../addon.ts"
-import {
-  commandLine,
-  isTypo,
-  type Failure,
-  inDir,
-  insertAt,
-  internal,
-  Invocation,
-  positionals,
-  printSuccess,
-  replaceAt,
-  report,
-  setFlag,
-} from "../contract.ts"
+import { type Failure, internal, Invocation, printSuccess, report } from "../contract.ts"
 import { unifiedDiff } from "../diff.ts"
 import { type CommandFailed, exec, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
+import {
+  addonSuggestions,
+  alternative,
+  finish,
+  fix,
+  type Intent,
+  nearbyProject,
+  withFlag,
+} from "../fix.ts"
 import { GenerateError, generate, isComputed, matches } from "../generate.ts"
+import { installOwed } from "../installed.ts"
 import { introLine } from "../intro.ts"
 import { EfforgeManifest, hash, renderManifest } from "../manifest.ts"
 import { applyProjectName } from "../projectName.ts"
@@ -141,33 +137,41 @@ export type AddError =
   | AddonLoadError
   | CommandFailed
 
-const incompatible = (
-  slot: IncompatibleStack["slot"],
-  value: string,
-  allowed: string[],
-  reason: string,
-  needs: string[],
-) => new IncompatibleStack({ slot, value, allowed, reason, needs })
-
 const allIds = slots.flatMap((s) =>
   s.options.filter((o) => o.id !== "none").map((o) => `${s.id}/${o.id}`),
 )
 
+const combinations = <A>(xs: ReadonlyArray<A>, k: number): A[][] =>
+  k === 0
+    ? [[]]
+    : xs.flatMap((x, i) => combinations(xs.slice(i + 1), k - 1).map((rest) => [x].concat(rest)))
+
+const product = <A>(lists: ReadonlyArray<ReadonlyArray<A>>): A[][] =>
+  lists.reduce<A[][]>((acc, list) => acc.flatMap((xs) => list.map((x) => [...xs, x])), [[]])
+
 /**
- * Full ids `id` could mean. A fragment of at least three letters that starts a slot or an option
- * name ("auth", "better", "stor") names every id it starts; else the one id `id` is a typo of
- * (the typo rule in contract.ts); else nothing. Only a single suggestion becomes a `fix`.
+ * The smallest sets of ids that make `stack` valid when added with the caller's: each fills a
+ * slot that is `none` and that the caller didn't name. Every set found is one way out; choosing
+ * between them (D1 or Postgres, Drizzle or Effect SQL) is the caller's, since a slot can't be
+ * swapped later.
  */
-const suggest = (id: string): string[] => {
-  const partial =
-    id.length >= 3
-      ? allIds.filter((full) => full.split("/").some((part) => part.startsWith(id)))
-      : []
-  if (partial.length > 0) return partial
-  const near = allIds.filter((full) =>
-    [full, full.split("/")[1] as string].some((c) => isTypo(id, c)),
+const waysOut = (stack: StackConfig, named: ReadonlySet<string>): string[][] => {
+  const open = slots.filter(
+    (s) => !s.multi && s.options.length > 1 && stack[s.id] === "none" && !named.has(s.id),
   )
-  return near.length === 1 ? near : []
+  for (let k = 1; k <= 2; k++) {
+    const found: string[][] = []
+    for (const combo of combinations(open, k))
+      for (const choice of product(
+        combo.map((s) => s.options.filter((o) => o.id !== "none").map((o) => [s.id, o.id])),
+      )) {
+        const next = { ...stack, ...Object.fromEntries(choice) } as StackConfig
+        if (Exit.isSuccess(Effect.runSyncExit(validate(next))))
+          found.push(choice.map(([slot, option]) => `${slot}/${option}`))
+      }
+    if (found.length > 0) return found
+  }
+  return []
 }
 
 /** Same JSONC data and comments, ignoring formatting, key order and array order (earlier `add`s reorder bindings). */
@@ -225,12 +229,12 @@ const parseId = (
   )
   const [first] = candidates
   if (first === undefined) {
-    const suggestions = suggest(id)
+    const suggestions = addonSuggestions(id)
     return Effect.fail(
       new UnknownAddon({
         id: raw,
         suggestions,
-        message: `"${raw}" is not an add-on.${suggestions.length === 0 ? "" : ` Did you mean ${suggestions.join(" or ")}?`} See which ones this project can add with npx create-efforge list --json.`,
+        message: `"${raw}" is not an add-on.${suggestions.length === 0 ? "" : ` Did you mean ${suggestions.join(" or ")}?`}`,
       }),
     )
   }
@@ -240,7 +244,7 @@ const parseId = (
       new UnknownAddon({
         id: raw,
         suggestions,
-        message: `"${raw}" is ambiguous; write it as ${suggestions.join(" or ")}. See which ones this project can add with npx create-efforge list --json.`,
+        message: `"${raw}" is ambiguous; write it as ${suggestions.join(" or ")}.`,
       }),
     )
   }
@@ -258,8 +262,10 @@ const applyIds = (
   Effect.gen(function* () {
     let next = stack
     const skipped: string[] = []
+    const named = new Set<string>()
     for (const id of ids) {
       const { slot, option } = yield* parseId(id)
+      named.add(slot.id)
       if (slot.id === "extras") {
         if (next.extras.includes(option as never)) skipped.push(`extras/${option}`)
         else {
@@ -278,30 +284,21 @@ const applyIds = (
     }
     const valid = yield* validate(next).pipe(
       Effect.mapError((e) => {
-        // the stack rules hold across slots: say which ids to add together
-        const typed = ids.map((x) => x.trim().toLowerCase())
-        const hasOrm = typed.some(
-          (x) => x.startsWith("orm/") || x === "drizzle" || x === "effect-sql",
-        )
-        if (next.database === "none" && (e.slot === "orm" || e.slot === "auth")) {
-          const needs = ["database/d1", ...(hasOrm ? [] : ["orm/effect-sql"])]
-          return incompatible(
-            e.slot,
-            e.value,
-            [...e.allowed],
-            `${e.slot === "auth" ? "auth" : "an ORM"} needs a database, and this project has none. Add one in the same command: npx create-efforge add ${[...needs, ...typed].join(" ")}`,
-            needs,
-          )
-        }
-        if (e.slot === "orm" && next.orm === "none")
-          return incompatible(
-            "database",
-            next.database,
-            [...e.allowed],
-            `a database needs an ORM. Add one with it: npx create-efforge add ${typed.join(" ")} orm/drizzle (or orm/effect-sql)`,
-            ["orm/drizzle"],
-          )
-        return e
+        // the stack rules hold across slots: say which ids could be added together
+        const ways = waysOut(next, named)
+        const reason =
+          next.database === "none" && (e.slot === "orm" || e.slot === "auth")
+            ? `${e.slot === "auth" ? "auth" : "an ORM"} needs a database, and this project has none. Add one in the same command (alternatives lists the ways)`
+            : e.slot === "orm" && next.orm === "none"
+              ? "a database needs an ORM. Add one in the same command (alternatives lists the ways)"
+              : e.reason
+        return new IncompatibleStack({
+          slot: e.slot,
+          value: e.value,
+          allowed: [...e.allowed],
+          ...(reason === undefined ? {} : { reason }),
+          ways,
+        })
       }),
     )
     return { stack: valid, skipped }
@@ -314,8 +311,9 @@ export const readManifest = (
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const fail = (reason: string) => new NotAnEfforgeProject({ dir, reason })
-    if (!(yield* fs.exists(dir).pipe(Effect.orElseSucceed(() => false))))
-      return yield* fail("the directory does not exist")
+    const info = yield* fs.stat(dir).pipe(Effect.orElseSucceed(() => undefined))
+    if (info === undefined) return yield* fail("the directory does not exist")
+    if (info.type !== "Directory") return yield* fail("not a directory")
     const text = yield* fs
       .readFileString(path.join(dir, "efforge.jsonc"))
       .pipe(Effect.mapError(() => fail("efforge.jsonc not found")))
@@ -754,16 +752,6 @@ export class AddIncomplete extends Schema.TaggedError<AddIncomplete>()("AddIncom
   partial: Schema.Unknown,
 }) {}
 
-/**
- * Left in node_modules while dependencies `add` changed aren't installed yet; removed when the
- * install succeeds. pnpm keeps unknown files there, and a skipped "Already up to date" install
- * doesn't touch its own files, so neither mtimes nor pnpm's state can tell.
- */
-export const INSTALL_PENDING = "node_modules/.efforge-install-pending"
-
-/** An earlier `add` changed dependencies and the install never finished (failed, stopped, skipped). */
-export const installOwed = (dir: string): boolean => existsSync(join(dir, INSTALL_PENDING))
-
 /** `add` was given no ids: `available` are the add-ons the project doesn't have yet. */
 export class NoAddonIds extends Schema.TaggedError<NoAddonIds>()("NoAddonIds", {
   available: Schema.Array(Schema.String),
@@ -782,22 +770,28 @@ export const addable = (stack: StackConfig): string[] =>
         .map((o) => `${s.id}/${o.id}`),
     )
 
-/** The efforge project nearest to `dir`: a parent, or the one child that holds efforge.jsonc. */
-const nearbyProject = (dir: string): string | undefined => {
-  for (let d = dirname(dir); d !== dirname(d); d = dirname(d))
-    if (existsSync(join(d, "efforge.jsonc"))) return d
-  try {
-    const children = readdirSync(dir, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && existsSync(join(dir, e.name, "efforge.jsonc")))
-      .map((e) => join(dir, e.name))
-    return children.length === 1 ? children[0] : undefined
-  } catch {
-    return undefined
-  }
-}
-
 /** `--cwd` for `dir`, relative to where efforge runs. */
 const cwdArg = (dir: string) => relative(process.cwd(), dir) || "."
+
+/** `args` as a `list` of the same project, with the same --json. */
+const asList = (i: Intent): Intent => ({
+  verb: "list",
+  word: "list",
+  operands: [],
+  flags: i.flags.filter((f) => f.name === "json" || f.name === "cwd"),
+})
+
+/** The add-on slots `ways` fill, each with the ids that can fill it. */
+const needsOf = (ways: ReadonlyArray<ReadonlyArray<string>>) => {
+  const bySlot = new Map<string, string[]>()
+  for (const id of ways.flat()) {
+    const slot = id.split("/")[0] as string
+    const options = bySlot.get(slot) ?? []
+    if (!options.includes(id)) options.push(id)
+    bySlot.set(slot, options)
+  }
+  return [...bySlot].map(([slot, options]) => ({ slot, options }))
+}
 
 /** What went wrong in `add` (or `list --cwd`), as the contract reports it. */
 export const addFailure = (
@@ -805,16 +799,24 @@ export const addFailure = (
   args: ReadonlyArray<string>,
   projectDir: string = process.cwd(),
 ): Failure => {
-  const run = commandLine
-  const ids = positionals(args).slice(1)
+  const seeList = () => {
+    const command = alternative(args, asList)
+    return command === null ? "" : ` See which ones this project can add: ${command}`
+  }
   switch (e._tag) {
     case "NotAnEfforgeProject": {
       const dir = String(e.dir)
-      const near = e.reason === "efforge.jsonc not found" ? nearbyProject(dir) : undefined
+      const near =
+        e.reason === "efforge.jsonc not found" || e.reason === "not a directory"
+          ? nearbyProject(dir)
+          : undefined
       return {
         code: "NotAnEfforgeProject",
         message: `${dir} is not an efforge project (${String(e.reason)}). Run this from the project root or pass --cwd.`,
-        fix: near === undefined ? null : run(setFlag(args, "cwd", cwdArg(near))),
+        fix:
+          near === undefined
+            ? null
+            : fix(args, (i) => withFlag(i, "cwd", cwdArg(near)), { cwd: true }),
         details: {
           directory: dir,
           reason: String(e.reason),
@@ -826,21 +828,24 @@ export const addFailure = (
       const available = e.available as string[]
       return {
         code: "NoAddonIds",
-        message: `Name the add-ons to add${available.length > 0 ? `: ${available.join(", ")}` : "; this project already has every add-on"}. For example: npx create-efforge add ${available[0] ?? "email"}.`,
-        fix: run(["list", ...jsonOf(args), ...cwdOf(args)]),
+        message: `Name the add-ons to add${available.length > 0 ? `: ${available.join(", ")}` : "; this project already has every add-on"}.`,
+        fix: fix(args, asList, { list: true }),
         details: { available },
       }
     }
     case "UnknownAddon": {
       const suggestions = e.suggestions as string[]
-      const at = ids.find(([, t]) => t === e.id)
+      const [only] = suggestions
       return {
         code: "UnknownAddon",
-        message: String(e.message),
+        message: `${String(e.message)}${seeList()}`,
         // only a clear typo becomes a command; anything else is the caller's choice to make
         fix:
-          suggestions.length === 1 && at !== undefined
-            ? run(replaceAt(args, at[0], suggestions[0] as string))
+          suggestions.length === 1 && only !== undefined
+            ? fix(args, (i) => ({
+                ...i,
+                operands: i.operands.map((t) => (t === e.id ? only : t)),
+              }))
             : null,
         details: { id: String(e.id), suggestions, addons: allIds },
       }
@@ -860,20 +865,26 @@ export const addFailure = (
         details: { slot: String(e.slot), current: String(e.current), value: String(e.value) },
       }
     case "IncompatibleStack": {
-      const needs = (e.needs as string[] | undefined) ?? []
-      const [first] = ids
+      // every way out picks a database or an ORM for good (a slot can't be swapped later), so
+      // the caller picks: no fix, the ways as complete commands
+      const ways = (e.ways as string[][] | undefined) ?? []
+      const alternatives = ways.flatMap((w) => {
+        const command = alternative(args, (i) => ({ ...i, operands: [...w, ...i.operands] }))
+        return command === null ? [] : [{ command, description: `Add ${w.join(" and ")} with it` }]
+      })
       return {
         code: "IncompatibleStack",
-        message: `Can't add ${String(e.slot)}/${String(e.value)}: ${typeof e.reason === "string" ? e.reason : "not compatible with the current stack."}`,
-        fix:
-          needs.length > 0 && first !== undefined ? run(insertAt(args, first[0], ...needs)) : null,
+        message: `Can't add ${String(e.slot)}/${String(e.value)}: ${typeof e.reason === "string" ? `${e.reason}.` : "not compatible with the current stack."}`,
+        fix: null,
         details: {
           slot: String(e.slot),
           value: String(e.value),
           allowed: e.allowed as string[],
-          needs,
+          needs: needsOf(ways),
+          alternatives,
           ...(typeof e.reason === "string" ? { reason: e.reason } : {}),
         },
+        more: alternatives.map((a) => `  ${a.command}  # ${a.description}`).join("\n"),
       }
     }
     case "OverlayConflict": {
@@ -881,7 +892,7 @@ export const addFailure = (
       return {
         code: "OverlayConflict",
         message: `You've edited ${files.join(", ")} since ${files.length === 1 ? "it was" : "they were"} generated. Nothing was written. Re-run with --overwrite to replace ${files.length === 1 ? "it" : "them"} (your edits are lost), or commit first and merge by hand.`,
-        fix: run(setFlag(args, "overwrite")),
+        fix: fix(args, (i) => withFlag(i, "overwrite", true), { overwrite: true }),
         details: { files, diff: String(e.diff) },
         more: String(e.diff),
       }
@@ -899,7 +910,7 @@ export const addFailure = (
       return {
         code: "CommandFailed",
         message: `\`${String(e.command)}\` failed. The files were written; run it yourself, then the rest of nextSteps.`,
-        fix: inDir(relative(process.cwd(), projectDir), [String(e.command)]),
+        fix: finish(args, projectDir, [String(e.command)]),
         details: {
           failed: String(e.command),
           output: output.split("\n").slice(-15).join("\n"),
@@ -910,38 +921,26 @@ export const addFailure = (
     }
     case "CommandFailed": {
       const output = String(e.output).trim()
-      const dir = projectDir
       return {
         code: "CommandFailed",
         message: `\`${String(e.command)}\` failed. The files were written; run it yourself.`,
-        fix: inDir(relative(process.cwd(), dir), [String(e.command)]),
+        fix: finish(args, projectDir, [String(e.command)]),
         details: { failed: String(e.command), output: output.split("\n").slice(-15).join("\n") },
         more: output,
       }
     }
-    case "PnpmMissing":
+    case "PnpmMissing": {
+      const again = fix(args, (i) => i, { again: true })
       return {
         code: "PnpmMissing",
         message:
           "efforge projects use pnpm, and it isn't on your PATH. Install it (npm install --global pnpm, or https://pnpm.io/installation) and re-run, or pass --no-install.",
-        fix: `npm install --global pnpm && ${run(args)}`,
+        fix: again === null ? null : `npm install --global pnpm && ${again}`,
       }
+    }
     default:
       return internal(e)
   }
-}
-
-const jsonOf = (args: ReadonlyArray<string>): string[] =>
-  args.some((a) => a === "--json" || a.startsWith("--json=")) ? ["--json"] : []
-
-/** `--cwd=<dir>` from `args`, to carry over into a suggested `list`. */
-const cwdOf = (args: ReadonlyArray<string>): string[] => {
-  const i = args.findIndex((t) => t === "--cwd" || t.startsWith("--cwd="))
-  const t = args[i]
-  if (t === undefined) return []
-  if (t.includes("=")) return [t]
-  const v = args[i + 1]
-  return v === undefined ? [] : [`--cwd=${v}`]
 }
 
 export const addConfig = {
@@ -1010,6 +1009,12 @@ export const addHandler = (input: {
   install: boolean
 }) => {
   const dir = resolve(input.cwd)
+  // how far the run got, for the document an interrupted --json run still prints
+  const progress: {
+    phase: "planning" | "writing" | "written"
+    pending: string[]
+    partial: object | undefined
+  } = { phase: "planning", pending: [], partial: undefined }
   return Effect.gen(function* () {
     const path = yield* Path.Path
     const fs = yield* FileSystem.FileSystem
@@ -1034,13 +1039,14 @@ export const addHandler = (input: {
     if (input.ids.length === 0) return yield* new NoAddonIds({ available: addable(manifest.stack) })
     if (newer(manifest.efforgeVersion, efforgeVersion))
       yield* io.warn(
-        `This project was made with efforge ${manifest.efforgeVersion}, newer than this CLI (${efforgeVersion}). Use npx create-efforge@latest add.`,
+        `This project was made with efforge ${manifest.efforgeVersion}, newer than this CLI (${efforgeVersion}). Use npx -y create-efforge@latest add.`,
       )
-    // an earlier install that never finished (it failed, or was stopped): this run owes it
+    // dependencies the package.json files declare but aren't installed (an earlier install
+    // failed, was stopped or skipped): this run owes the install
     const owed = installOwed(dir)
     if (owed)
       yield* io.warn(
-        `An earlier efforge add changed dependencies and the install didn't finish. ${input.install && !input.dryRun ? "Running it now." : `Run ${INSTALL}.`}`,
+        `The dependencies in package.json aren't all installed: an earlier install didn't finish. ${input.install && !input.dryRun ? "Running it now." : `Run ${INSTALL}.`}`,
       )
     const opts = { overwrite: input.overwrite, install: false }
     // checked before anything is written: install and the route tree both need pnpm
@@ -1058,8 +1064,10 @@ export const addHandler = (input: {
           "You have uncommitted changes, so git diff will mix them with efforge's edits. Commit or stash first to review them on their own.",
         )
     }
+    if (!input.dryRun && changes) progress.phase = "writing"
     const result =
       input.dryRun || !changes ? plan : yield* addAddons(dir, input.ids, { ...opts, dryRun: false })
+    if (progress.phase === "writing") progress.phase = "written"
     // only when dependencies changed: package.json files or the catalog
     const depsChanged = result.written.some(
       (f) => f.endsWith("package.json") || f === "pnpm-workspace.yaml",
@@ -1068,14 +1076,6 @@ export const addHandler = (input: {
     const installed = yield* fs
       .exists(path.join(dir, "node_modules", ".modules.yaml"))
       .pipe(Effect.orElseSucceed(() => false))
-    // remember the owed install until one succeeds, so a re-run after a failure says so
-    if (!input.dryRun && changes && depsChanged)
-      yield* fs
-        .makeDirectory(path.join(dir, "node_modules"), { recursive: true })
-        .pipe(
-          Effect.andThen(fs.writeFileString(path.join(dir, INSTALL_PENDING), `${INSTALL}\n`)),
-          Effect.ignore,
-        )
     const installs = input.install && !input.dryRun && ((changes && depsChanged) || owed)
     // a new database needs its tables before the app (or sign-up) can use it; when the last
     // install never finished, neither did the steps after it, so count the ids already there too
@@ -1101,13 +1101,32 @@ export const addHandler = (input: {
       ...result.written.filter((f) => !result.created.includes(f)),
       ...result.transformed,
     ].toSorted()
-    const finish = Effect.gen(function* () {
+    /** What a success would report about the files, for the documents of a run that stopped. */
+    const partial = (next: ReadonlyArray<Step>) => ({
+      directory: dir,
+      stack: result.stack,
+      added: result.added,
+      skipped: result.skipped,
+      created: result.created,
+      changed: changedFiles,
+      removed: result.removed,
+      replacedScripts: result.replacedScripts,
+      packageManager: result.packageManager,
+      notes: result.notes,
+      env: result.envVars,
+      nextSteps: [...next, ...afterInstall].map((x) => Object.assign({}, x, { cwd: dir })),
+      warnings,
+    })
+    if (installs) progress.pending = [INSTALL]
+    progress.partial = partial(progress.pending.map((command) => ({ command })))
+    const complete = Effect.gen(function* () {
       if (!input.install || input.dryRun || (!changes && !installs)) return
       if (installs) {
         yield* io.task("Installing dependencies (pnpm install)", (log) =>
           exec("pnpm", [...INSTALL_ARGS], dir, log),
         )
-        yield* fs.remove(path.join(dir, INSTALL_PENDING), { force: true }).pipe(Effect.ignore)
+        progress.pending = []
+        progress.partial = partial([])
       }
       // add-ons may add or replace routes; without an install, `pnpm typecheck` regenerates it later
       if (installs || installed) yield* io.step("Generating the route tree", generateRouteTree(dir))
@@ -1118,19 +1137,7 @@ export const addHandler = (input: {
           new AddIncomplete({
             command: e.command,
             output: e.output,
-            partial: {
-              directory: dir,
-              stack: result.stack,
-              added: result.added,
-              created: result.created,
-              changed: changedFiles,
-              removed: result.removed,
-              notes: result.notes,
-              env: result.envVars,
-              nextSteps: [{ command: e.command }, ...afterInstall].map((x) =>
-                Object.assign({}, x, { cwd: dir }),
-              ),
-            },
+            partial: partial([{ command: e.command }]),
           }),
         ),
       ),
@@ -1147,7 +1154,7 @@ export const addHandler = (input: {
     })
     if (input.json) {
       yield* replacementWarnings
-      yield* finish
+      yield* complete
       return yield* printSuccess({
         dryRun: input.dryRun,
         directory: dir,
@@ -1188,7 +1195,7 @@ export const addHandler = (input: {
     for (const note of result.notes) yield* io.warn(note)
     if (input.dryRun) return yield* io.outro(pc.dim("dry run: nothing written"))
 
-    yield* finish
+    yield* complete
     const width = Math.max(0, ...result.envVars.map((x) => x.name.length))
     const room = Math.max(30, (process.stdout.columns || 80) - 14)
     const lines = [
@@ -1212,6 +1219,18 @@ export const addHandler = (input: {
     if (lines.length > 0) yield* io.note(lines.join("\n"), "Next steps")
     yield* io.outro(`${pc.green("Done.")} ${pc.dim("Review the changes with")} git diff`)
   }).pipe(
+    // under --json a stopped add still prints its one document (Ctrl-C, SIGTERM, a timeout)
+    Effect.onInterrupt(() =>
+      input.json
+        ? Effect.gen(function* () {
+            const args = yield* Invocation
+            yield* report(true, addInterrupted(args, dir, progress))
+            yield* Effect.sync(() => {
+              process.exitCode = 130
+            })
+          })
+        : Effect.void,
+    ),
     Effect.catch((e) =>
       Effect.gen(function* () {
         const args = yield* Invocation
@@ -1219,6 +1238,45 @@ export const addHandler = (input: {
       }),
     ),
   )
+}
+
+/** The `Interrupted` document of an `add` that was stopped, by how far it got. */
+const addInterrupted = (
+  args: ReadonlyArray<string>,
+  dir: string,
+  progress: {
+    readonly phase: "planning" | "writing" | "written"
+    readonly pending: ReadonlyArray<string>
+    readonly partial: object | undefined
+  },
+): Failure => {
+  const rel = relative(process.cwd(), dir) || "."
+  switch (progress.phase) {
+    case "planning":
+      return {
+        code: "Interrupted",
+        message: "Stopped before anything was written. Run the same command again.",
+        fix: null,
+        details: { directory: dir, written: false, remaining: [] },
+      }
+    case "writing":
+      return {
+        code: "Interrupted",
+        message: `Stopped while writing files, so some of them may be written. See git status in ${rel}; running the same command again finishes what it can.`,
+        fix: null,
+        details: { directory: dir, written: true, remaining: [] },
+      }
+    case "written":
+      return {
+        code: "Interrupted",
+        message:
+          progress.pending.length === 0
+            ? `Stopped after the files were written; ${rel} has everything this add needed.`
+            : `Stopped. The files were written; to finish, run in ${rel}: ${progress.pending.join(", then ")}`,
+        fix: finish(args, dir, progress.pending),
+        details: { written: true, remaining: progress.pending, ...progress.partial },
+      }
+  }
 }
 
 export const addCommand = Command.make("add", addConfig, addHandler).pipe(

@@ -224,7 +224,7 @@ describe("an agent drives efforge without a terminal", { timeout: 120_000 }, () 
     })
   })
 
-  it("an unknown value and incompatible choices: fix picks a valid one", () => {
+  it("an unknown value: fix uses the one it is a typo of; conflicting choices: no fix, every way out", () => {
     const unknown = failure(["create", "v", "--json", "--dry-run", "--database=postgress"])
     expect(unknown.code).toBe("UnknownValue")
     expect(unknown.allowed).toEqual(["postgres", "d1", "none"])
@@ -238,10 +238,20 @@ describe("an agent drives efforge without a terminal", { timeout: 120_000 }, () 
       "--database=none",
       "--auth=better-auth",
     ])
-    expect(conflict.code).toBe("IncompatibleStack")
-    expect(runFix(CreateOutput, conflict.fix).stack).toMatchObject({
-      database: "none",
-      auth: "none",
+    // --auth=none would drop the auth asked for, --database=d1 would pick a database: the
+    // caller's choice, so each way out is data, as a complete command
+    expect(conflict).toMatchObject({ code: "IncompatibleStack", fix: null })
+    const ways = conflict.alternatives as Array<{ command: string; description: string }>
+    expect(ways.map((w) => w.description)).toEqual([
+      "Use --database=postgres instead of --database=none",
+      "Use --database=d1 instead of --database=none",
+      "Use --auth=none instead of --auth=better-auth",
+    ])
+    for (const w of ways) runFix(CreateOutput, w.command)
+    expect(runFix(CreateOutput, ways[1]?.command ?? null).stack).toMatchObject({
+      name: "v",
+      database: "d1",
+      auth: "better-auth",
     })
   })
 
@@ -342,16 +352,22 @@ describe("an agent drives efforge without a terminal", { timeout: 120_000 }, () 
     expect(lost.fix).toBeNull()
   })
 
-  it("add that needs other add-ons: fix adds them in the same command", () => {
+  it("add that needs other add-ons: no fix, each way out as a command", () => {
     ok(CreateOutput, ["create", "nodb", "--json", "--database=none", "--no-git"])
     const e = failure(["add", "auth/better-auth", "--json", "--dry-run", "--cwd", "nodb"])
-    expect(e.code).toBe("IncompatibleStack")
-    expect(e.needs).toEqual(["database/d1", "orm/effect-sql"])
-    expect(runFix(AddOutput, e.fix).stack).toMatchObject({
-      database: "d1",
-      orm: "effect-sql",
-      auth: "better-auth",
-    })
+    // a database and an ORM can't be swapped later, so efforge doesn't choose them
+    expect(e).toMatchObject({ code: "IncompatibleStack", fix: null })
+    expect(e.needs).toEqual([
+      { slot: "database", options: ["database/postgres", "database/d1"] },
+      { slot: "orm", options: ["orm/drizzle", "orm/effect-sql"] },
+    ])
+    const ways = e.alternatives as Array<{ command: string; description: string }>
+    expect(ways.map((w) => w.command)).toContain(
+      "npx -y create-efforge add database/d1 orm/effect-sql auth/better-auth --json --dry-run --cwd nodb",
+    )
+    expect(ways).toHaveLength(4)
+    for (const w of ways)
+      expect(runFix(AddOutput, w.command).added.map((a) => a.id)).toContain("auth/better-auth")
   })
 
   it("add over a file you edited: nothing is written, fix overwrites it", () => {
@@ -483,6 +499,83 @@ describe("an agent drives efforge without a terminal", { timeout: 120_000 }, () 
     expect(done.nextSteps.map((x) => x.command)).toEqual(["pnpm db:migrate"])
     const quiet = ok(AddOutput, [...args, "--cwd", "noinst"])
     expect(quiet).toMatchObject({ installed: false, nextSteps: [], warnings: [] })
+  })
+
+  it("an interrupted add --json prints one document with the files and the install it owes", async () => {
+    ok(CreateOutput, ["create", "stopadd", "--json", "--database=d1", "--no-git"])
+    const stubs = join(work, ".slow-add")
+    mkdirSync(stubs, { recursive: true })
+    writeFileSync(
+      join(stubs, "pnpm"),
+      '#!/bin/sh\nif [ "$1" = install ]; then exec sleep 30; fi\nexit 0\n',
+    )
+    chmodSync(join(stubs, "pnpm"), 0o755)
+    const child = spawn(process.execPath, [bin, "add", "ai", "--json", "--cwd", "stopadd"], {
+      cwd: work,
+      env: { ...env, PATH: `${stubs}${delimiter}${env.PATH ?? ""}` },
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+    let stdout = ""
+    let stderr = ""
+    child.stdout.on("data", (d: Buffer) => (stdout += String(d)))
+    child.stderr.on("data", (d: Buffer) => (stderr += String(d)))
+    const exited = new Promise<number | null>((done) => child.on("close", (code) => done(code)))
+    // wait until the files are written and the install is running
+    const deadline = Date.now() + 30_000
+    while (manifest(join(work, "stopadd")).stack.ai === "none" && Date.now() < deadline)
+      await new Promise((r) => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 500))
+    child.kill("SIGINT")
+    expect(await exited).toBe(130)
+    expect(stderr).toBe("")
+    const doc = JSON.parse(stdout)
+    Schema.decodeUnknownSync(ErrorOutput)(doc)
+    expect(doc.error).toMatchObject({
+      code: "Interrupted",
+      written: true,
+      remaining: ["pnpm install --no-frozen-lockfile"],
+      fix: "cd stopadd && pnpm install --no-frozen-lockfile",
+    })
+    expect(doc.error.added.map((a: { id: string }) => a.id)).toEqual(["ai/effect-ai-byok"])
+    expect(doc.error.env.length).toBeGreaterThan(0)
+    expect(doc.error.changed).toContain("apps/web/package.json")
+  })
+
+  it("the bare root form inside a project creates nothing; create <name> still does", () => {
+    const inside = join(work, "app")
+    for (const args of [
+      ["update", "--json", "--no-install", "--no-git"],
+      ["--json"],
+      ["thing", "--json"],
+    ]) {
+      const e = failure(args, inside)
+      expect(e.fix, args.join(" ")).toBeNull()
+      expect(["UnknownCommand", "InsideProject"]).toContain(e.code)
+    }
+    expect(failure(["thing", "--json"], inside)).toMatchObject({
+      code: "InsideProject",
+      project: inside,
+    })
+    expect(existsSync(join(inside, "update"))).toBe(false)
+    expect(existsSync(join(inside, "my-app"))).toBe(false)
+    expect(ok(CreateOutput, ["create", "nested", "--json", "--dry-run"], inside).directory).toBe(
+      join(inside, "nested"),
+    )
+  })
+
+  it("list from inside a project names it in nearby", () => {
+    const inside = join(work, "app", "apps", "web")
+    const listed = ok(ListOutput, ["list", "--json"], inside)
+    expect(listed).toMatchObject({ project: false, nearby: join(work, "app") })
+    const text = efforge(["list"], inside)
+    expect(text.stdout).toContain(`${join(work, "app")} is`)
+  })
+
+  it("a project with another stack in the directory: no fix, both stacks as data", () => {
+    const e = failure(["create", "app", "--json", "--database=postgres", "--extras=email"])
+    expect(e).toMatchObject({ code: "TargetNotEmpty", project: true, fix: null })
+    expect((e.stack as { database: string }).database).toBe("d1")
+    expect((e.requested as { database: string }).database).toBe("postgres")
   })
 
   it("in a pipe, list prints the list and nothing else", () => {

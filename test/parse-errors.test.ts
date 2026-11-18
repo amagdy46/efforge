@@ -93,7 +93,9 @@ it("--json: an invalid value for a global flag is one JSON error too, not a log 
   expect(stderr).toEqual([])
   const out = JSON.parse(stdout.join("\n"))
   expect(out.error.code).toBe("InvalidFlagValue")
-  expect(out.error.fix).toBe("npx -y create-efforge zz --yes --dry-run --json")
+  // which level was meant is the caller's choice: no fix, the levels as data
+  expect(out.error.fix).toBeNull()
+  expect(out.error.allowed).toContain("debug")
   expect(out.error.message).toContain("--log-level")
 })
 

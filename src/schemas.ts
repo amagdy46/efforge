@@ -98,6 +98,12 @@ export const ListOutput = Schema.Struct({
   }),
   directory: Schema.optionalKey(Schema.String),
   stack: Schema.optionalKey(StackConfig),
+  nearby: Schema.optionalKey(
+    Schema.String.annotate({
+      description:
+        "When project is false: the efforge project around or beside the directory (a parent, or the one child that has one). Pass it as --cwd.",
+    }),
+  ),
   addons: Schema.Array(
     Schema.Struct({
       id: Schema.String.annotate({ description: "What to pass to `add`." }),
@@ -121,7 +127,8 @@ export const ErrorOutput = Schema.Struct({
     }),
     message: Schema.String,
     fix: Schema.NullOr(Schema.String).annotate({
-      description: "A command to run instead, or null when there is none.",
+      description:
+        "A command that does what you were trying to do, or null when there is none (then the other fields hold the facts, and `alternatives`, when present, the ways out to choose from).",
     }),
   }).annotate({ description: "More fields depend on `code`; see docs/json.md." }),
 }).annotate({ title: "efforge --json error" })

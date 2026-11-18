@@ -4,7 +4,9 @@ import pc from "picocolors"
 import { loadAddons } from "../addon.ts"
 import { introLine } from "../intro.ts"
 import { slots } from "../slots.ts"
-import { commandLine, dropFlag, Invocation, printSuccess, report } from "../contract.ts"
+import { relative } from "node:path"
+import { BIN, Invocation, printSuccess, quote, report } from "../contract.ts"
+import { nearbyProject } from "../fix.ts"
 import { addFailure, readManifest } from "./add.ts"
 import { TemplatesDir } from "./create.ts"
 
@@ -52,7 +54,9 @@ export const listAddons = (cwd: string) =>
         })
       }
     }
-    return { project: stack !== undefined, stack, addons: out }
+    // not a project, but inside one or beside one: say where, as `add` would
+    const nearby = stack === undefined ? nearbyProject(cwd) : undefined
+    return { project: stack !== undefined, stack, nearby, addons: out }
   })
 
 /** First clause of a description, cut to fit the terminal. */
@@ -81,11 +85,12 @@ export const listCommand = Command.make(
     Effect.gen(function* () {
       const path = yield* Path.Path
       const dir = path.resolve(input.cwd)
-      const { project, stack, addons } = yield* listAddons(dir)
+      const { project, stack, nearby, addons } = yield* listAddons(dir)
       if (input.json)
         return yield* printSuccess({
           project,
           ...(stack === undefined ? {} : { directory: dir, stack }),
+          ...(nearby === undefined ? {} : { nearby }),
           addons,
         })
       const width = Math.max(...addons.map((a) => a.id.length))
@@ -110,12 +115,15 @@ export const listCommand = Command.make(
       }
       // in a pipe, stdout carries only the list (docs/json.md, "In a pipe")
       if (process.stdout.isTTY) lines.unshift(introLine("list"))
+      const near = nearby === undefined ? undefined : relative(process.cwd(), nearby) || "."
       lines.push(
         "",
         pc.dim(
           project
-            ? "✓ already in this project. Add one with: npx -y create-efforge add <id>"
-            : "Pick them in npx -y create-efforge, or add one later with: npx -y create-efforge add <id>",
+            ? `✓ already in this project. Add one with: ${BIN} add <id>`
+            : near !== undefined
+              ? `This directory isn't an efforge project; ${nearby} is. See what it has: ${BIN} list --cwd ${quote(near)}`
+              : `Pick them in ${BIN}, or add one later with: ${BIN} add <id>`,
         ),
       )
       yield* Console.log(lines.join("\n").replace(/^\n/, ""))
@@ -123,14 +131,7 @@ export const listCommand = Command.make(
       Effect.catch((e) =>
         Effect.gen(function* () {
           const args = yield* Invocation
-          const f = addFailure(e as never, args)
-          // a --cwd that isn't a project: listing everything still works
-          yield* report(
-            input.json,
-            f.code === "NotAnEfforgeProject" && f.fix === null
-              ? { ...f, fix: commandLine(dropFlag(args, "cwd")) }
-              : f,
-          )
+          yield* report(input.json, addFailure(e as never, args))
         }),
       ),
     ),

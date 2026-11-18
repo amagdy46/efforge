@@ -1,27 +1,22 @@
 import { execFileSync } from "node:child_process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join, relative } from "node:path"
-import { Context, Effect, Option, Path, Schema } from "effect"
+import { Context, Effect, Exit, Option, Path, Schema } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { parse as parseJsonc } from "jsonc-parser"
 import pc from "picocolors"
 import { addonIdsFor, type LoadedAddon, loadAddons } from "../addon.ts"
 import {
-  commandLine,
-  dropFlag,
+  BIN,
   type Failure,
-  inDir,
-  insertAt,
   internal,
   Invocation,
-  positionals,
   printSuccess,
-  replaceAt,
   report,
-  setFlag,
   typoOf,
 } from "../contract.ts"
-import { exec, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
+import { COMMIT, exec, FORMAT, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
+import { alternative, finish, fix, meantName, withFlag } from "../fix.ts"
 import { generate, matches } from "../generate.ts"
 import { askStack, DEFAULT_NAME, type StackFlags } from "../prompts/flow.ts"
 import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
@@ -97,6 +92,7 @@ export const leftBehind = (o: {
   readonly env: ReadonlyArray<EnvVar>
   readonly remaining: ReadonlyArray<string>
   readonly installRequested: boolean
+  readonly warnings: ReadonlyArray<string>
 }) => ({
   directory: o.dir,
   stack: o.stack,
@@ -108,6 +104,7 @@ export const leftBehind = (o: {
     ...o.remaining.map((command) => ({ command })),
     ...planSteps(o.stack, { installed: o.installRequested }),
   ].map((s) => Object.assign({}, s, { cwd: o.dir })),
+  warnings: o.warnings,
 })
 
 /** Node versions Vite+ supports; mirrors `engines` in package.json. */
@@ -264,7 +261,9 @@ export const create = (opts: CreateOptions) =>
     // Fail before generating (and before the confirm prompt) rather than after the user answered everything.
     if (!opts.dryRun && isOccupied(dir)) {
       const project = existingProject(dir)
-      return yield* new TargetNotEmpty(project === undefined ? { dir } : { dir, project })
+      return yield* new TargetNotEmpty(
+        project === undefined ? { dir, requested: stack } : { dir, project, requested: stack },
+      )
     }
     const addons = yield* loadAddons(templatesDir)
     const tree = yield* generate(stack, addons)
@@ -291,7 +290,7 @@ export const create = (opts: CreateOptions) =>
           env,
           nextSteps: [
             {
-              command: commandLine(dropFlag(args, "dry-run")),
+              command: alternative(args, (i) => withFlag(i, "dry-run", null)) ?? command,
               cwd: process.cwd(),
               note: "create it for real",
             },
@@ -399,6 +398,7 @@ export const create = (opts: CreateOptions) =>
         env,
         remaining,
         installRequested: opts.install,
+        warnings,
       })
     yield* setup.pipe(
       Effect.catchTag("CommandFailed", (e) =>
@@ -414,7 +414,7 @@ export const create = (opts: CreateOptions) =>
       ),
       Effect.onInterrupt(() =>
         opts.json
-          ? interrupted({ written, dir, remaining, partial: partial() })
+          ? interrupted({ args, written, dir, remaining, partial: partial() })
           : io.warn(
               !written
                 ? `Stopped while writing files. Delete ${inPlace ? "what was written here" : `./${dirName}`} and run the same command again.`
@@ -442,7 +442,7 @@ export const create = (opts: CreateOptions) =>
       })
     yield* io.note(nextSteps(stack, { dirName, inPlace, installed: opts.install }), "Next steps")
     yield* io.outro(
-      `${pc.green("Done.")} ${pc.dim("Add more later:")} npx create-efforge list\n   ${pc.dim("Same stack again:")} ${command}`,
+      `${pc.green("Done.")} ${pc.dim("Add more later:")} ${BIN} list${inPlace ? "" : ` --cwd ${dirName}`}\n   ${pc.dim("Same stack again:")} ${command}`,
     )
   })
 
@@ -451,6 +451,7 @@ export const create = (opts: CreateOptions) =>
  * document: what was written and the steps that finish the job. The exit code stays 130.
  */
 const interrupted = (o: {
+  readonly args: ReadonlyArray<string>
   readonly written: boolean
   readonly dir: string
   readonly remaining: ReadonlyArray<string>
@@ -471,7 +472,7 @@ const interrupted = (o: {
             o.remaining.length === 0
               ? `Stopped after the setup; ${rel} is ready.`
               : `Stopped. ${rel} is only partly set up; to finish, run there: ${o.remaining.join(", then ")}`,
-          fix: o.remaining.length === 0 ? null : inDir(relative(process.cwd(), o.dir), o.remaining),
+          fix: finish(o.args, o.dir, o.remaining),
           details: { written: true, remaining: o.remaining, ...o.partial },
         }
     yield* report(true, failure)
@@ -479,10 +480,6 @@ const interrupted = (o: {
       process.exitCode = 130
     })
   })
-
-/** The steps that finish a create, as `create` runs them. */
-const FORMAT = "pnpm format"
-const COMMIT = "git add -A && git commit -m 'Initial commit'"
 
 /**
  * `dir` holds an efforge project (an earlier, maybe interrupted, create): its stack, and which
@@ -618,40 +615,56 @@ export const toCreateOptions = (input: {
 
 // --- Errors ----------------------------------------------------------------------
 
-/** Where the project name sits in `args` (after an explicit `create`), if it was given. */
-const nameIndex = (args: ReadonlyArray<string>): number | undefined => {
-  const pos = positionals(args)
-  return (pos[0]?.[1] === "create" ? pos[1] : pos[0])?.[0]
+const resolves = (flags: StackFlags): boolean =>
+  Exit.isSuccess(Effect.runSyncExit(askStack(flags, {} as PromptIOShape, { yes: true })))
+
+/** One way out of a conflict: a complete command, and what it changes. */
+export interface Alternative {
+  readonly command: string
+  readonly description: string
 }
 
-/** `args` with the project name set to `name`. */
-const withName = (args: ReadonlyArray<string>, name: string): string[] => {
-  const i = nameIndex(args)
-  if (i !== undefined) return replaceAt(args, i, name)
-  const pos = positionals(args)
-  return pos[0]?.[1] === "create" ? insertAt(args, pos[0][0] + 1, name) : [name, ...args]
+/**
+ * Every one-flag change of `flags` that resolves a conflict on `slot`: another value of any slot,
+ * or `value` left out of `--extras`. None of them is a `fix`, since each drops or swaps a choice.
+ */
+const waysOut = (
+  args: ReadonlyArray<string>,
+  flags: StackFlags,
+  slot: string,
+  value: string,
+): Alternative[] => {
+  const out: Alternative[] = []
+  const add = (name: string, to: string, description: string) => {
+    const command = alternative(args, (i) => withFlag(i, name, to))
+    if (command !== null) out.push({ command, description })
+  }
+  for (const s of slots) {
+    if (s.options.length <= 1) continue
+    if (s.id === "extras") {
+      const rest = (flags.extras ?? []).filter((x) => x !== value)
+      if (slot === "extras" && resolves({ ...flags, extras: rest }))
+        add("extras", rest.join(","), `Leave ${value} out of --extras`)
+      continue
+    }
+    const current = flags[s.id]
+    for (const o of s.options) {
+      if (o.id === current || !resolves({ ...flags, [s.id]: o.id })) continue
+      add(
+        s.id,
+        o.id,
+        current === undefined
+          ? `Use --${s.id}=${o.id}`
+          : `Use --${s.id}=${o.id} instead of --${s.id}=${current}`,
+      )
+    }
+  }
+  return out
 }
 
-/** A valid npm name close to what was typed: `My App` -> `my-app`, `apps/web` -> `web`. */
-export const slugName = (raw: string): string => {
-  const base = raw.startsWith("@") ? raw : (raw.split("/").findLast((p) => p !== "") ?? raw)
-  const slug = base
-    .toLowerCase()
-    .replace(/[^a-z0-9\-._~@/]+/g, "-")
-    .replace(/\.\.+/g, ".")
-    .replace(/-+/g, "-")
-    .replace(/^[-._]+|[-._]+$/g, "")
-  if (slug === "" || slug.startsWith("@")) return DEFAULT_NAME
-  return ["node_modules", "favicon.ico", "test", "tests", "src", "dist"].includes(slug)
-    ? `${slug}-app`
-    : slug.slice(0, 214)
-}
-
-/** The value of `slot` that fixes a conflict: the slot default when allowed, else the first allowed. */
-const fixValue = (slot: string, allowed: ReadonlyArray<string>): string | undefined => {
-  const def = slots.find((s) => s.id === slot)?.default
-  return typeof def === "string" && allowed.includes(def) ? def : allowed[0]
-}
+const sameStack = (a: StackConfig, b: StackConfig): boolean =>
+  JSON.stringify({ ...a, extras: a.extras.toSorted() }) ===
+  JSON.stringify({ ...b, extras: b.extras.toSorted() })
 
 /** What went wrong in `create`, as the contract reports it. */
 export const createFailure = (
@@ -659,7 +672,6 @@ export const createFailure = (
   args: ReadonlyArray<string>,
   flags: StackFlags,
 ): Failure => {
-  const run = (a: ReadonlyArray<string>) => commandLine(a)
   switch (e._tag) {
     case "IncompatibleStack": {
       const slot = String(e.slot)
@@ -667,54 +679,59 @@ export const createFailure = (
       const allowed = e.allowed as string[]
       const def = slots.find((x) => x.id === slot)
       const known = def?.options.some((o) => o.id === value) ?? false
-      // an unknown value gets a fix only when it is a clear typo of one allowed value (the typo
-      // rule in contract.ts); never a different choice. A known value that conflicts is replaced
-      // by the slot default or dropped from extras, as before.
-      const near = known ? undefined : typoOf(value, allowed)
-      let fix: string | null = null
-      if (slot === "extras") {
-        if (known || near !== undefined) {
-          const list = (flags.extras ?? []).flatMap((x) =>
-            x === value ? (near === undefined ? [] : [near]) : [x],
-          )
-          fix = run(setFlag(args, "extras", [...new Set(list)].join(",")))
+      if (known) {
+        // two choices that can't go together: which one gives way is the caller's to say
+        const alternatives = waysOut(args, flags, slot, value)
+        return {
+          code: "IncompatibleStack",
+          message: `--${slot}=${value} can't be used here${typeof e.reason === "string" ? `: ${e.reason}.` : `. Options: ${allowed.join(", ")}.`} Change one of the two; alternatives lists the commands.`,
+          fix: null,
+          details: {
+            flag: `--${slot}`,
+            value,
+            allowed,
+            ...(typeof e.reason === "string" ? { reason: e.reason } : {}),
+            alternatives,
+          },
+          more: alternatives.map((a) => `  ${a.command}  # ${a.description}`).join("\n"),
         }
-      } else {
-        const to = known ? fixValue(slot, allowed) : near
-        if (to !== undefined) fix = run(setFlag(args, slot, to))
       }
-      return known
-        ? {
-            code: "IncompatibleStack",
-            message: `--${slot}=${value} can't be used here${typeof e.reason === "string" ? `: ${e.reason}.` : `. Options: ${allowed.join(", ")}.`}`,
-            fix,
-            details: {
-              flag: `--${slot}`,
-              value,
-              allowed,
-              ...(typeof e.reason === "string" ? { reason: e.reason } : {}),
-            },
-          }
-        : {
-            code: "UnknownValue",
-            message: `Unknown --${slot}=${value}. Options: ${allowed.join(", ")}.${fix === null ? " It isn't a clear typo of any of them, so there is no fix; efforge offers nothing else here." : ""}`,
-            fix,
-            details: { flag: `--${slot}`, value, allowed },
-          }
+      // an unknown value gets a fix only when it is a clear typo of one allowed value (the typo
+      // rule in contract.ts); never a different choice
+      const near = typoOf(value, allowed)
+      const to =
+        near === undefined
+          ? undefined
+          : slot === "extras"
+            ? [...new Set((flags.extras ?? []).map((x) => (x === value ? near : x)))].join(",")
+            : near
+      const fixed = to === undefined ? null : fix(args, (i) => withFlag(i, slot, to))
+      return {
+        code: "UnknownValue",
+        message: `Unknown --${slot}=${value}. Options: ${allowed.join(", ")}.${fixed === null ? " It isn't a clear typo of any of them, so there is no fix; efforge offers nothing else here." : ""}`,
+        fix: fixed,
+        details: { flag: `--${slot}`, value, allowed },
+      }
     }
     case "InvalidProjectName": {
       const name = String(e.name)
+      // only case and spaces are changed (`My App`): a path or other characters mean a choice
+      const meant = meantName(name)
       return {
         code: "InvalidProjectName",
-        message: String(e.message),
-        fix: run(withName(args, slugName(name))),
-        details: { name },
+        message: `${String(e.message)}.${meant === undefined ? "" : ` Did you mean ${meant}?`}`,
+        fix:
+          meant === undefined
+            ? null
+            : fix(args, (i) => ({ ...i, operands: [meant, ...i.operands.slice(1)] })),
+        details: { name, ...(meant === undefined ? {} : { suggestion: meant }) },
       }
     }
     case "TargetNotEmpty": {
       // never a renamed project: a retry after a timeout would leave two
       const dir = String(e.dir)
       const project = e.project as { stack: StackConfig; remaining: string[] } | undefined
+      const requested = e.requested as StackConfig | undefined
       if (project === undefined)
         return {
           code: "TargetNotEmpty",
@@ -727,17 +744,24 @@ export const createFailure = (
         ...rest.map((command) => ({ command })),
         ...planSteps(project.stack, { installed: true }),
       ].map((x) => Object.assign({}, x, { cwd: dir }))
+      // only the project this command would have made is finished; anything else is a choice
+      const same = requested !== undefined && sameStack(project.stack, requested)
+      const finishing = same ? finish(args, dir, rest) : null
       return {
         code: "TargetNotEmpty",
-        message:
-          rest.length > 0
-            ? `${dir} already holds an efforge project (${project.stack.name}) whose setup didn't finish. To finish it, run there: ${rest.join(", then ")}. Or pick another name.`
-            : `${dir} already holds an efforge project (${project.stack.name}). Use it (see nextSteps), or pick another name.`,
-        fix: rest.length > 0 ? inDir(relative(process.cwd(), dir), rest) : null,
+        message: !same
+          ? `${dir} already holds an efforge project (${project.stack.name}) with a different stack from the one asked for (stack is what it has, requested what this command asked for). Pick another name, or use that project as it is.`
+          : finishing !== null
+            ? `${dir} already holds an efforge project with this stack, and its setup didn't finish. To finish it, run there: ${rest.join(", then ")}. Or pick another name.`
+            : rest.length > 0
+              ? `${dir} already holds an efforge project with this stack; the setup it still lacks (${rest.join(", then ")}) is what this command was told to skip.`
+              : `${dir} already holds an efforge project with this stack. Use it (see nextSteps), or pick another name.`,
+        fix: finishing,
         details: {
           directory: dir,
           project: true,
           stack: project.stack,
+          ...(requested === undefined ? {} : { requested }),
           remaining: rest,
           nextSteps: steps,
         },
@@ -750,17 +774,19 @@ export const createFailure = (
       return {
         code: "NeedsInput",
         message: `No terminal to ask for "${id}": ${flagHint(id, options)}, or --yes to accept the defaults.`,
-        fix: run(setFlag(args, "yes")),
+        fix: fix(args, (i) => withFlag(i, "yes", true)),
         details: { prompt: id, flag, allowed: options },
       }
     }
-    case "PnpmMissing":
+    case "PnpmMissing": {
+      const again = fix(args, (i) => i, { again: true })
       return {
         code: "PnpmMissing",
         message:
           "efforge projects use pnpm, and it isn't on your PATH. Install it (npm install --global pnpm, or https://pnpm.io/installation) and re-run, or pass --no-install.",
-        fix: `npm install --global pnpm && ${run(args)}`,
+        fix: again === null ? null : `npm install --global pnpm && ${again}`,
       }
+    }
     case "SetupIncomplete": {
       const rest = e.remaining as string[]
       const dir = String(e.dir)
@@ -768,7 +794,7 @@ export const createFailure = (
       return {
         code: "SetupIncomplete",
         message: `\`${String(e.command)}\` failed. The files are in ${dir}${rest.length > 0 ? `; to finish, run there: ${rest.join(", then ")}` : "."}`,
-        fix: rest.length > 0 ? inDir(relative(process.cwd(), dir), rest) : null,
+        fix: finish(args, dir, rest),
         details: {
           failed: String(e.command),
           remaining: rest,

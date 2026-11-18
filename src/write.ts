@@ -7,6 +7,8 @@ export class TargetNotEmpty extends Schema.TaggedError<TargetNotEmpty>()("Target
   project: Schema.optionalKey(
     Schema.Struct({ stack: Schema.Unknown, remaining: Schema.Array(Schema.String) }),
   ),
+  /** The stack the create asked for, to tell whether the project there is the same one. */
+  requested: Schema.optionalKey(Schema.Unknown),
 }) {}
 
 export class WriteFailed extends Schema.TaggedError<WriteFailed>()("WriteFailed", {

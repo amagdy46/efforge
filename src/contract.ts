@@ -27,18 +27,26 @@ export const Invocation = Context.Reference<ReadonlyArray<string>>("efforge/Invo
  * reused for something else within one contract version. docs/json.md documents each one.
  */
 export const errorCodes = {
-  UnknownFlag: "A flag efforge doesn't have. `fix` uses the closest flag, or drops it.",
-  InvalidFlagValue: "A flag got a value it can't take, or none. `fix` uses a valid value.",
-  UnexpectedArgument: "More positional arguments than the command takes. `fix` drops them.",
+  UnknownFlag:
+    "A flag efforge doesn't have. `fix` uses the flag it is a clear typo of, or moves a flag to after the command; else null.",
+  InvalidFlagValue:
+    "A flag got a value it can't take, or none. `fix` is null; `allowed` lists the values when there is a list.",
+  UnexpectedArgument:
+    "More words than the command takes. For `list`, `fix` drops them; for `create`, null (a name is one word).",
   UnknownCommand:
-    "The first argument looks like a mistyped command (`lst`), not a project name. `fix` uses the command.",
+    "The first word is a typo of a command (`lst`), a command in other case (`Add`), or a word efforge keeps for commands (`update`), not a project name. `fix` is the command it names, or null.",
+  InsideProject:
+    "The bare root form (no `create`) was run inside an efforge project, where `add` and `list` are meant. No fix; `create <name>` makes a nested project if that is what you want.",
   NeedsInput:
     "A prompt was needed and there is no terminal. Only without --json, which never prompts. `fix` adds --yes.",
-  UnknownValue: "A stack flag got a value that isn't one of its options. `fix` uses a valid one.",
+  UnknownValue:
+    "A stack flag got a value that isn't one of its options. `fix` uses the option it is a clear typo of, or is null.",
   IncompatibleStack:
-    "The choices conflict (auth without a database), or `add` needs other add-ons with it. `fix` resolves it.",
-  InvalidProjectName: "The name isn't a valid npm package name. `fix` uses a valid one.",
-  TargetNotEmpty: "The project directory exists and isn't empty. `fix` uses a free name.",
+    "The choices conflict (auth without a database), or `add` needs another add-on with it. No fix: `alternatives` lists the ways out, each a complete command.",
+  InvalidProjectName:
+    "The name isn't a valid npm package name. `fix` only lower-cases it and joins its words with hyphens (`My App`); a path or anything else is null.",
+  TargetNotEmpty:
+    "The project directory exists and isn't empty. When it holds an unfinished project with the same stack, `fix` finishes it; else null.",
   PnpmMissing: "pnpm isn't on PATH. `fix` installs it and runs the command again.",
   SetupIncomplete:
     "The files were written but a setup step (install, git) failed. `fix` finishes the setup.",
@@ -46,10 +54,10 @@ export const errorCodes = {
     "--json only: the run was stopped (Ctrl-C, SIGTERM, a timeout). Exit code 130. `fix` finishes the setup when files were written.",
   WriteFailed: "efforge couldn't write the project files (permissions, disk). No fix.",
   NotAnEfforgeProject:
-    "`add` was pointed at a directory without a valid efforge.jsonc, or `list --cwd` at a directory that doesn't exist or holds an invalid efforge.jsonc (`list` in a directory without one succeeds with `project: false`). `fix` points `add` at the project when one is nearby; for `list` it drops --cwd.",
+    "`add` or `list --cwd` was pointed at a directory without a valid efforge.jsonc (`list` in a directory without one succeeds with `project: false`). `fix` points --cwd at the nearby project when there is one; else null.",
   NoAddonIds: "`add` was called with no add-on ids. `available` lists them; `fix` lists them.",
   UnknownAddon:
-    "An add-on id that doesn't exist or is ambiguous. `fix` uses the one suggestion, or lists them all.",
+    "An add-on id that doesn't exist or is ambiguous. `fix` uses the one id it is a clear typo or fragment of; else null with `suggestions`.",
   SlotAlreadySet:
     "The project already has a different choice for that slot; `add` can't swap it. No fix: create a new project.",
   RemoveNotSupported: "Removing an add-on (`ai/none`) isn't supported yet. No fix.",
@@ -106,104 +114,9 @@ export const internal = (e: { readonly _tag: string; readonly message?: string }
   details: { cause: e._tag },
 })
 
-// --- Re-writing the invocation ---------------------------------------------------------------
-// A `fix` is the caller's own command with the smallest change that makes it work, so the edits
-// below work on raw argv tokens: `--flag=value`, `--flag value`, `--flag`, positionals.
-
-/** Flags that take a value; their value may be the next token. */
-const valueFlags = new Set([
-  "runtime",
-  "database",
-  "orm",
-  "auth",
-  "infra",
-  "ai",
-  "extras",
-  "cwd",
-  "completions",
-  "log-level",
-])
-
-const isFlag = (t: string) => t.startsWith("-") && t !== "-" && t !== "--"
-
-const flagName = (t: string) => t.replace(/^-+/, "").split("=")[0] as string
-
-/** Indices of the tokens that make up `--name` (with its value), every occurrence. */
-const flagSpans = (args: ReadonlyArray<string>, name: string): Array<[number, number]> => {
-  const spans: Array<[number, number]> = []
-  for (let i = 0; i < args.length; i++) {
-    const t = args[i] as string
-    if (t === "--") break
-    if (!isFlag(t) || flagName(t) !== name) continue
-    const next = args[i + 1]
-    const takesNext =
-      valueFlags.has(name) && !t.includes("=") && next !== undefined && !isFlag(next)
-    spans.push([i, takesNext ? i + 2 : i + 1])
-  }
-  return spans
-}
-
-const without = (args: ReadonlyArray<string>, spans: Array<[number, number]>) =>
-  args.filter((_, i) => !spans.some(([a, b]) => i >= a && i < b))
-
-/** Positional tokens (not flags, not flag values), with their indices. */
-export const positionals = (args: ReadonlyArray<string>): Array<[number, string]> => {
-  const out: Array<[number, string]> = []
-  for (let i = 0; i < args.length; i++) {
-    const t = args[i] as string
-    if (t === "--") continue
-    if (isFlag(t)) {
-      if (valueFlags.has(flagName(t)) && !t.includes("=")) i++
-      continue
-    }
-    out.push([i, t])
-  }
-  return out
-}
-
-/** Sets `--name=value` (or bare `--name` for `true`), replacing any earlier occurrence. */
-export const setFlag = (
-  args: ReadonlyArray<string>,
-  name: string,
-  value: string | true = true,
-): string[] => [
-  ...without(args, flagSpans(args, name)),
-  value === true ? `--${name}` : `--${name}=${value}`,
-]
-
-export const dropFlag = (args: ReadonlyArray<string>, name: string): string[] =>
-  without(args, flagSpans(args, name))
-
-/** Replaces the token at `index`. */
-export const replaceAt = (args: ReadonlyArray<string>, index: number, token: string): string[] =>
-  args.map((t, i) => (i === index ? token : t))
-
-export const dropAt = (args: ReadonlyArray<string>, index: number): string[] =>
-  args.filter((_, i) => i !== index)
-
-export const insertAt = (
-  args: ReadonlyArray<string>,
-  index: number,
-  ...tokens: string[]
-): string[] => [...args.slice(0, index), ...tokens, ...args.slice(index)]
-
-const quote = (t: string) => (/^[\w@%+=:,./-]+$/.test(t) ? t : `'${t.replaceAll("'", `'\\''`)}'`)
-
-/**
- * The command line for `args`, as the caller can paste it. It never needs a prompt: a create
- * without `--yes` or `--json` gets `--yes`, so the fix doesn't stop to ask what flags didn't say.
- */
-export const commandLine = (args: ReadonlyArray<string>): string => {
-  const [first] = positionals(args)
-  const isCreate = first === undefined || !["add", "list"].includes(first[1])
-  const flags = flagSpans(args, "yes").length + flagSpans(args, "json").length
-  const asks =
-    isCreate &&
-    flags === 0 &&
-    !args.includes("-y") &&
-    !args.some((t) => t === "--wizard" || t.startsWith("--wizard=") || t.startsWith("--help"))
-  return [BIN, ...args.map(quote), ...(asks ? ["--yes"] : [])].join(" ")
-}
+/** A token as the shell needs it: bare when safe, else in single quotes. */
+export const quote = (t: string) =>
+  /^[\w@%+=:,./-]+$/.test(t) ? t : `'${t.replaceAll("'", `'\\''`)}'`
 
 /** `cd <dir> && ...` relative to where efforge was run, or nothing when it's the same directory. */
 export const inDir = (relative: string, commands: ReadonlyArray<string>): string =>

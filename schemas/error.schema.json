@@ -25,7 +25,7 @@
       "properties": {
         "code": {
           "type": "string",
-          "description": "A stable identifier. Known codes: UnknownFlag, InvalidFlagValue, UnexpectedArgument, UnknownCommand, NeedsInput, UnknownValue, IncompatibleStack, InvalidProjectName, TargetNotEmpty, PnpmMissing, SetupIncomplete, Interrupted, WriteFailed, NotAnEfforgeProject, NoAddonIds, UnknownAddon, SlotAlreadySet, RemoveNotSupported, OverlayConflict, TransformAnchorMissing, CommandFailed, InternalError. New codes can appear within a contract version; treat an unknown one like any failure."
+          "description": "A stable identifier. Known codes: UnknownFlag, InvalidFlagValue, UnexpectedArgument, UnknownCommand, InsideProject, NeedsInput, UnknownValue, IncompatibleStack, InvalidProjectName, TargetNotEmpty, PnpmMissing, SetupIncomplete, Interrupted, WriteFailed, NotAnEfforgeProject, NoAddonIds, UnknownAddon, SlotAlreadySet, RemoveNotSupported, OverlayConflict, TransformAnchorMissing, CommandFailed, InternalError. New codes can appear within a contract version; treat an unknown one like any failure."
         },
         "message": {
           "type": "string"
@@ -39,7 +39,7 @@
               "type": "null"
             }
           ],
-          "description": "A command to run instead, or null when there is none."
+          "description": "A command that does what you were trying to do, or null when there is none (then the other fields hold the facts, and `alternatives`, when present, the ways out to choose from)."
         }
       },
       "required": [

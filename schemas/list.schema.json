@@ -107,6 +107,10 @@
       ],
       "additionalProperties": true
     },
+    "nearby": {
+      "type": "string",
+      "description": "When project is false: the efforge project around or beside the directory (a parent, or the one child that has one). Pass it as --cwd."
+    },
     "addons": {
       "type": "array",
       "items": {

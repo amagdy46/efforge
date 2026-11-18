@@ -16,6 +16,10 @@ export class CommandFailed extends Schema.TaggedError<CommandFailed>()("CommandF
 export const INSTALL_ARGS = ["install", "--no-frozen-lockfile"] as const
 export const INSTALL = `pnpm ${INSTALL_ARGS.join(" ")}`
 
+/** The steps after the install that finish a create, as `create` runs them. */
+export const FORMAT = "pnpm format"
+export const COMMIT = "git add -A && git commit -m 'Initial commit'"
+
 /**
  * Runs `cmd args` in `cwd`, returning combined output; a non-zero exit fails with `CommandFailed`.
  * `onLine` sees each output line as it arrives (for live progress).
