@@ -7,8 +7,10 @@ without tags). Produced with:
 
 ```sh
 git archive v0.2.0 | tar -x -C v020 && (cd v020 && pnpm install)
-node v020/src/bin.ts d1-effect-sql-auth --yes --database=d1 --orm=effect-sql --no-install --no-git
+node v020/src/bin.ts old-db --yes --database=d1 --orm=effect-sql --no-install --no-git
 ```
+
+The project was generated as `old-db` (its `package.json` says so); the directory here is named after its stack.
 
 The defaults filled in `--auth=better-auth-orgs`. Only these files were kept: the root
 `package.json` (`packageManager: pnpm@12.4.2`), `pnpm-workspace.yaml` (no Effect
