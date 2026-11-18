@@ -134,10 +134,10 @@ jobs:
             --ai=effect-ai-byok --extras=workflows,realtime,browser,storage,email
       - run: docker build "$RUNNER_TEMP/house-app/apps/browser"
 
-  # Drives the generated pg-drizzle-orgs app in Chromium against a real Postgres:
-  # sign up, create an org, invite, accept, both members visible.
+  # Drives the generated pg-drizzle-orgs + realtime app in Chromium against a real Postgres:
+  # sign up, create an org, see the realtime card, invite, accept, both members visible.
   browser-flow:
-    name: browser flow (pg-drizzle-orgs)
+    name: browser flow (pg-drizzle-orgs + realtime)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:

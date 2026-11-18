@@ -294,7 +294,7 @@ describe("add on a real project", () => {
 
 describe.skipIf(process.env.EFFORGE_E2E_BROWSER !== "1")("browser flow", () => {
   it.effect(
-    "pg-drizzle-orgs: sign up, create org, invite, accept, both members visible",
+    "pg-drizzle-orgs + realtime: sign up, create org, see the widgets, invite, accept, both members visible",
     () =>
       browserFlow(
         withDefaults({
@@ -303,6 +303,7 @@ describe.skipIf(process.env.EFFORGE_E2E_BROWSER !== "1")("browser flow", () => {
           orm: "drizzle",
           auth: "better-auth-orgs",
           infra: "none",
+          extras: ["realtime"],
         }),
       ),
     { timeout: 15 * 60 * 1000 },
