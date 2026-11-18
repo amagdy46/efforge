@@ -54,7 +54,7 @@ export const errorCodes = {
     "--json only: the run was stopped (Ctrl-C, SIGTERM, a timeout). Exit code 130. `fix` finishes the setup when files were written.",
   WriteFailed: "efforge couldn't write the project files (permissions, disk). No fix.",
   NotAnEfforgeProject:
-    "`add` or `list --cwd` was pointed at a directory without a valid efforge.jsonc (`list` in a directory without one succeeds with `project: false`). `fix` points --cwd at the nearby project when there is one; else null.",
+    "`add`, `upgrade`, `doctor` or `list --cwd` was pointed at a directory without a valid efforge.jsonc (`list` in a directory without one succeeds with `project: false`). `fix` points --cwd at the nearby project when there is one; else null.",
   NoAddonIds: "`add` was called with no add-on ids. `available` lists them; `fix` lists them.",
   UnknownAddon:
     "An add-on id that doesn't exist or is ambiguous. `fix` uses the one id it is a clear typo or fragment of; else null with `suggestions`.",
@@ -67,6 +67,8 @@ export const errorCodes = {
     "`add` couldn't find where to edit a file you changed. Nothing was written. Apply `snippet` by hand, then re-run.",
   CommandFailed:
     "`add` wrote its files, then a command it runs (pnpm install) failed. `fix` runs it again.",
+  UpgradeNeedsCheck:
+    "`upgrade` without `--check`: efforge can't apply an upgrade yet. No fix; `command` is the same command with --check, which reports what to do.",
   InternalError: "A bug in efforge or a broken install. No fix; report it.",
 } as const
 

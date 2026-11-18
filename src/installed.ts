@@ -154,3 +154,12 @@ export const installOwed = (dir: string): boolean => {
   )
   return !sameDeps(declaredOverrides, installedOverrides)
 }
+
+/** `.` and every workspace package directory pnpm-workspace.yaml names, relative to `dir`. */
+export const workspaceDirs = (dir: string): string[] => {
+  let workspace: Record<string, unknown> = {}
+  try {
+    workspace = record(parse(readText(join(dir, "pnpm-workspace.yaml")) ?? ""))
+  } catch {}
+  return importers(dir, workspace)
+}

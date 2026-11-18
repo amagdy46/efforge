@@ -12,7 +12,7 @@ import { slots } from "./slots.ts"
 // caller made (other than a clear typo), or repeat the caller's own command, is refused: the
 // error then carries `fix: null` and its facts.
 
-export const commands = ["create", "add", "list"] as const
+export const commands = ["create", "add", "list", "upgrade", "doctor"] as const
 export type Verb = (typeof commands)[number]
 
 /**
@@ -101,7 +101,16 @@ const known: Record<Verb, { readonly values: string[]; readonly booleans: string
     booleans: ["overwrite", "dry-run", "json", "install", ...globalBooleans],
   },
   list: { values: ["cwd", ...globalValues], booleans: ["json", ...globalBooleans] },
+  upgrade: {
+    values: ["cwd", ...globalValues],
+    booleans: ["check", "patch", "diff", "verbose", "json", ...globalBooleans],
+  },
+  doctor: { values: ["cwd", ...globalValues], booleans: ["online", "json", ...globalBooleans] },
 }
+
+/** The commands that take `--flag`, in `commands` order. */
+export const commandsTaking = (flag: string): Verb[] =>
+  commands.filter((v) => known[v].values.includes(flag) || known[v].booleans.includes(flag))
 const allValueFlags = new Set([...stackFlags, "cwd", ...globalValues])
 const allBooleans = new Set(Object.values(known).flatMap((k) => k.booleans))
 const shortFlags: Record<string, string> = { y: "yes", h: "help", v: "version" }
@@ -312,7 +321,8 @@ const wellFormed = (c: Intent): boolean => {
       if (values.some((x) => !options.includes(x))) return false
     }
   }
-  if (c.verb === "list" && c.operands.length > 0) return false
+  // list, upgrade and doctor take no words
+  if (c.verb !== "create" && c.verb !== "add" && c.operands.length > 0) return false
   if (c.verb === "create") {
     if (c.operands.length > 1) return false
     if (c.word === undefined) {
@@ -398,7 +408,8 @@ const keeps = (o: Intent, c: Intent, may: May): boolean => {
     const to = resolve(String(vc.set.get("cwd") ?? "."))
     if (from !== to && !(may.cwd === true && existsSync(join(to, "efforge.jsonc")))) return false
   }
-  if (c.verb === "list") return c.operands.length === 0
+  if (c.verb === "list" || c.verb === "upgrade" || c.verb === "doctor")
+    return c.operands.length === 0
   if (c.verb === "add") {
     if (o.operands.length !== c.operands.length) return false
     return o.operands.every((id, k) => {

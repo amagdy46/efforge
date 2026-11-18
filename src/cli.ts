@@ -3,17 +3,27 @@ import { type CliError, Command, Completions } from "effect/cli"
 import { BIN, type ErrorCode, type Failure, Invocation, printSuccess, report } from "./contract.ts"
 import { addCommand } from "./commands/add.ts"
 import { createCommand, createConfig, createHandler } from "./commands/create.ts"
+import { doctorCommand } from "./commands/doctor.ts"
 import { listCommand } from "./commands/list.ts"
-import { commands, fix, intentOf, meantFlag, projectAbove, spelledOut } from "./fix.ts"
+import { upgradeCommand } from "./commands/upgrade.ts"
+import {
+  commands,
+  commandsTaking,
+  fix,
+  intentOf,
+  meantFlag,
+  projectAbove,
+  spelledOut,
+} from "./fix.ts"
 import { slots } from "./slots.ts"
 import { efforgeVersion } from "./versions.ts"
 
-/** Root behaves as `create`; `efforge create` is an explicit alias, `add` and `list` are separate. */
+/** Root behaves as `create`; `efforge create` is an explicit alias; the other commands are separate. */
 export const root = Command.make("create-efforge", createConfig, createHandler).pipe(
   Command.withDescription(
     "Scaffold an Effect + TanStack Start app on Cloudflare with database, auth and services already wired together",
   ),
-  Command.withSubcommands([createCommand, addCommand, listCommand]),
+  Command.withSubcommands([createCommand, addCommand, listCommand, upgradeCommand, doctorCommand]),
   Command.withExamples([
     {
       command: "npm create efforge my-app",
@@ -32,6 +42,11 @@ export const root = Command.make("create-efforge", createConfig, createHandler).
       command: "npx create-efforge add email storage",
       description: "Add add-ons to an existing project",
     },
+    {
+      command: "npx create-efforge upgrade --check",
+      description: "See how a project differs from this efforge, and what to do",
+    },
+    { command: "npx create-efforge doctor", description: "See what is wrong with a checkout" },
   ]),
 )
 
@@ -49,6 +64,8 @@ const probe = Command.make("create-efforge", createConfig).pipe(
     Command.withHandler(createCommand, () => Effect.void),
     Command.withHandler(addCommand, () => Effect.void),
     Command.withHandler(listCommand, () => Effect.void),
+    Command.withHandler(upgradeCommand, () => Effect.void),
+    Command.withHandler(doctorCommand, () => Effect.void),
   ]),
 )
 
@@ -120,9 +137,13 @@ const parseFix = (args: ReadonlyArray<string>, e: CliError.NonShowHelpErrors): s
       })
     }
     case "UnexpectedArgument":
-      // `list foo`: list takes no arguments, so dropping them runs the same list. `create my
-      // app`: a project name is one word, and which one is the caller's choice
-      return fix(args, (i) => (i.verb === "list" ? { ...i, operands: [] } : undefined))
+      // `list foo`: list (like upgrade and doctor) takes no arguments, so dropping them runs the
+      // same command. `create my app`: a project name is one word, and which one is the caller's
+      return fix(args, (i) =>
+        i.verb === "list" || i.verb === "upgrade" || i.verb === "doctor"
+          ? { ...i, operands: [] }
+          : undefined,
+      )
     default:
       // a value a flag can't take, or none: which value is the caller's choice (`allowed`)
       return null
@@ -170,8 +191,8 @@ const reportParseError = (args: ReadonlyArray<string>, error: CliError.ShowHelp)
 // (`reservedWords`, src/fix.ts) or a typo of one, and it doesn't run inside a project, where `add`
 // and `list` are meant. `create <name>` always creates.
 
-/** Flags only `add` or `list` take: with them, the root form was never meant as a create. */
-const notCreateFlags = new Set(["cwd", "overwrite"])
+/** Flags `create` doesn't take: with them, the root form was never meant as a create. */
+const notCreateFlags = new Set(["cwd", "overwrite", "check", "patch", "diff", "verbose", "online"])
 
 /** Why the arguments aren't a create or a command, as the contract reports it; or undefined. */
 export const notACreate = (args: ReadonlyArray<string>): Failure | undefined => {
@@ -198,7 +219,9 @@ export const notACreate = (args: ReadonlyArray<string>): Failure | undefined => 
           ? ` For the version, run ${BIN} --version.`
           : lower === "ls"
             ? ` To see the add-ons, run ${BIN} list.`
-            : ""
+            : lower === "update"
+              ? ` To see how a project differs from this efforge, run ${BIN} upgrade --check.`
+              : ""
     return {
       code: "UnknownCommand",
       message: `${typed} isn't a command, and efforge doesn't take it as a project name.${hint} ${list} To name a project ${typed}, run ${BIN} create ${typed}.`,
@@ -217,7 +240,12 @@ export const notACreate = (args: ReadonlyArray<string>): Failure | undefined => 
   if (other !== undefined && typed !== undefined)
     return {
       code: "UnknownCommand",
-      message: `--${other.name} belongs to add and list, so ${typed} isn't a project name here, and it isn't a command. ${list}`,
+      message: `--${other.name} belongs to ${commandsTaking(other.name)
+        .join(", ")
+        .replace(
+          /, ([^,]*)$/,
+          " and $1",
+        )}, so ${typed} isn't a project name here, and it isn't a command. ${list}`,
       fix: null,
       details: { command: typed, flag: `--${other.name}`, commands },
     }
