@@ -11,7 +11,7 @@ Rules for AI agents (and humans) working in this repo. Read this before changing
 - `apps/web/src/server/routes.ts`: Worker-level routes (`workerRoutes`) tried before TanStack Start.
 - `apps/web/src/routes`: TanStack Router file routes. `routeTree.gen.ts` is generated (and gitignored); never edit it.
 - `apps/web/src/components/ui`: shadcn components.
-- `efforge.jsonc`: the stack choices. `efforge add` reads it; leave it alone.
+- `efforge.jsonc`: the stack choices. `efforge add` reads it; leave it alone. To add a capability (email, storage, a database, auth, AI), run `npx -y create-efforge@latest add <id> --json` from the project root instead of wiring it by hand; `npx -y create-efforge@latest list --json` lists the ids.
 
 ## Effect
 

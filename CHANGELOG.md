@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+Coding agents can drive efforge from start to finish: every choice has a flag, nothing waits for a terminal, and `--json` is a documented contract in which every error says what to run instead.
+
+### Added
+
+- `--json` is a versioned contract ([docs/json.md](docs/json.md)). `create`, `add` and `list` print one JSON document on stdout, on success and on failure, carrying `efforge` (the CLI version), `contract` (1) and `ok`. Success documents include the project directory, the stack, the files, the env vars with where their local values go, and the next commands with the directory to run each in. Errors have a stable `code`, a `message` and a `fix`: the command to run instead.
+- Errors without `--json` end with `Try: <command>` when a command fixes them.
+- JSON Schemas for `efforge.jsonc` and the `--json` documents ship in the package under `schemas/`. New projects' `efforge.jsonc` points at its schema with `$schema`.
+- An agent skill, `skills/efforge/SKILL.md` (`npx skills add amagdy46/efforge`), an `llms.txt`, and a "For coding agents" section in the README.
+- The generated `AGENTS.md` says to add capabilities with `npx -y create-efforge@latest add <id> --json`.
+- `--completions` covers both bin names, `create-efforge` and `efforge`.
+- `efforge add ai` (or `infra`) means the slot's one add-on.
+
+### Changed
+
+- The `--json` output changed shape (see [ADR 0006](docs/decisions/0006-json-contract.md)): `list --json` is an object with `addons`, `add --json` reports `created` and `changed`, `nextSteps` entries are objects, and some error codes were renamed or split (`UnrecognizedOption` is now `UnknownFlag`).
+- `efforge add` with no ids prints a short error listing the add-ons the project can still add, not the help.
+- `CI` set to any value other than `0` or `false` counts as no terminal: a needed prompt fails at once and names the flag.
+- Hints and errors say `npx create-efforge`, never `efforge` alone, so every printed command works when copied.
+
+### Fixed
+
+- `npx create-efforge lst` no longer creates a project called "lst". A first argument one typo away from `list`, `add` or `create` is refused, with the corrected command.
+- Output without a terminal no longer starts with a section header (`◇ Data`) before an error.
+
 ## 0.2.1 (2026-11-18)
 
 `npm create efforge` starts again, and new projects with a database or realtime build again. Generated projects now use Effect 4.1.4.

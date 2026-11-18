@@ -375,7 +375,7 @@ export const create = (opts: CreateOptions) =>
       Effect.onInterrupt(() =>
         io.warn(
           !written
-            ? `Stopped while writing files. Delete ${inPlace ? "what was written here" : `./${dirName}`} and run efforge again.`
+            ? `Stopped while writing files. Delete ${inPlace ? "what was written here" : `./${dirName}`} and run the same command again.`
             : remaining.length === 0
               ? `Stopped. ./${dirName} is set up; only the last step was skipped.`
               : `Stopped. ./${dirName} is only partly set up: delete it, or finish with:\n  ${remaining.join("\n  ")}`,
