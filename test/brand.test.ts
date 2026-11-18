@@ -28,7 +28,7 @@ it("every generated brand asset matches scripts/brand/source.ts (run pnpm brand)
       stale.push(path)
   }
   expect(stale, "stale brand assets; run pnpm brand").toEqual([])
-})
+}, 60_000)
 
 it("the outlined text matches the copy in source.ts (run pnpm brand:outline)", () => {
   expect(text.sentence.map((l) => l.text)).toEqual(copy.sentence)

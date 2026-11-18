@@ -196,13 +196,20 @@ export const coverage = (
       if (ay === by) continue
       edges.push(ay < by ? [ax, ay, bx, by, 1] : [bx, by, ax, ay, -1])
     }
+  // active-edge list: edges sorted by top, added as the scanline reaches them
+  edges.sort((a, b) => a[1] - b[1])
+  let next = 0
+  let active: typeof edges = []
   const xs: Array<[number, number]> = []
   for (let row = 0; row < h; row++)
     for (let s = 0; s < S; s++) {
       const y = row + (s + 0.5) / S
+      while (next < edges.length && (edges[next] as (typeof edges)[number])[1] <= y)
+        active.push(edges[next++] as (typeof edges)[number])
+      active = active.filter((e) => e[3] > y)
       xs.length = 0
-      for (const [ax, ay, bx, by, dir] of edges)
-        if (y >= ay && y < by) xs.push([ax + ((y - ay) * (bx - ax)) / (by - ay), dir])
+      for (const [ax, ay, bx, by, dir] of active)
+        if (y >= ay) xs.push([ax + ((y - ay) * (bx - ax)) / (by - ay), dir])
       if (xs.length === 0) continue
       xs.sort((a, b) => a[0] - b[0])
       let wind = 0

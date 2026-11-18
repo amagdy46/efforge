@@ -8,7 +8,7 @@ export type Asset =
   | { readonly kind: "text"; readonly body: string }
   | { readonly kind: "png"; readonly w: number; readonly h: number; readonly rgba: Uint8Array }
 
-const { iron, paper, blued, steel } = palette
+const { iron, paper, blued } = palette
 const LOCKUP = { w: 300, h: 72 } as const
 
 // ---- SVG ----------------------------------------------------------------------------------
