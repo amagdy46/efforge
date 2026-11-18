@@ -111,6 +111,8 @@ export const announce = createServerFn({ method: "POST" })
 - Put the logic in a program in `packages/core` (`announce`, `createNote`, `greet`) and keep the server function to validation and `runOutcome`, so the test can run the same program.
 - The demo calls it as `run({ data: { text } })`; a GET without input as `run()`.
 - Keep the validator's limits and the input's `maxLength` the same, and the program's own limits inside them, so the program's tagged error is what a user sees. A validator rejection still arrives as `InvalidInput` with its messages.
+- A result that arrives over time can still be one call. A `ReadableStream` inside the value streams to the browser (the AI card returns its answer as `ReadableStream<{ text } | { failure }>`, so a failure part way through is a part, not a broken stream). A run that goes on after the call returns is followed with a second server function the demo calls again until it is done, each call waiting on the server for news (the workflows card reads `WorkflowInstance.subscribe` from the last event it saw). Either way, every wait has an end: a demo that can spin forever is a bug.
+- A card's server file may read the project's stack (`import { stack } from "./manifest"`) to word a state for it, for example the browser card's "turn containers on" step, which names `wrangler.jsonc` only when the project has it. Keep such text outside the region.
 
 ### Settings
 
@@ -165,6 +167,8 @@ layer(RealtimeInMemory)("announce", (it) => {
 })
 ```
 
+Put a test layer that app code could reuse in its own file next to the test and export it (`packages/core/test/jobs-in-memory.ts` exports `JobsInMemory`, `llm-fixed.ts` exports `LlmFixed`, `browser-in-memory.ts` exports `BrowserInMemory`), and name it in the add-on's `AGENTS.md` section. A file without `.test.` in its name is not run as a test.
+
 Use `it.effect` and `layer` from `@effect/vitest`; `Effect.run*` in a test is a lint error. A service with one fixed answer can be `Layer.succeed(Auth, Auth.of({ ... }))` (see `auth.test.ts`); time comes from `TestClock` (see `greeting.test.ts`). Test the program, not the fake: a test that only checks the test layer returns what it was given proves nothing.
 
 ## States a demo must handle
@@ -176,7 +180,7 @@ A demo talks to a real server, so it is honest about state. Use the helpers and 
 | Loading | `<Pending>Reading the note table…</Pending>`; disable the button that started it |
 | Empty | A plain sentence that says what to do: "No notes yet. Add the first one." |
 | Error | `<FailureNote error={state.error} />`: shows the `_tag` and the message |
-| Not configured | The same `FailureNote`: for `NotConfigured` it says which setting is missing and where to set it. Never a crash |
+| Not configured | The same `FailureNote`: for `NotConfigured` it says which setting is missing and where to set it. Never a crash. A setup step your add-on reports with its own tag (`LlmNotConfigured`: no key saved; `BrowserUnavailable`: no container in local dev) is shown the same way: pass `{ _tag: "NotConfigured", message }` |
 | Done | The result, and one line on what ran: "Answered at 7:55 PM by the Worker, through the `greet` program" |
 
 `useServerCall(serverFn)` gives `{ state, run }` with `state.status` one of `idle`, `running`, `done`, `failed`; `run` resolves to the outcome. Load on mount with `useEffect(() => { void run() }, [run])` when the demo starts from data (the database card does). A call the server rejects fails with its own tag (`Unauthorized`, `NotConfigured`), `InvalidInput` (the validator), `Unreachable` (no answer) or `Defect` (a bug), never a blank message.
