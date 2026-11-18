@@ -37,7 +37,9 @@
     "prepack": "pnpm build",
     "lint": "vp lint",
     "format": "vp fmt",
-    "check": "vp check"
+    "check": "vp check",
+    "brand": "node scripts/brand/build.ts",
+    "brand:outline": "node scripts/brand/outline.ts"
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",
@@ -50,7 +52,10 @@
   },
   "devDependencies": {
     "@effect/vitest": "4.0.5",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@fontsource/saira-semi-condensed": "5.3.0",
     "@types/node": "26.6.5",
+    "opentype.js": "2.0.0",
     "oxlint": "1.88.0",
     "oxlint-tsgolint": "7.0.2004",
     "playwright": "1.64.1",

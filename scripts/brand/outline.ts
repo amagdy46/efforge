@@ -1,0 +1,143 @@
+// Outlines the words in source.ts `copy` to paths and writes scripts/brand/text.ts, so the
+// assets render without the fonts. Run `pnpm brand:outline` after changing `copy`, then
+// `pnpm brand`. Also re-derives the wordmark and says whether it still matches source.ts.
+// Needs the dev dependencies opentype.js and the two @fontsource packages (no network).
+import { readFileSync, writeFileSync } from "node:fs"
+import { createRequire } from "node:module"
+import { fileURLToPath } from "node:url"
+import { copy, wordmark } from "./source.ts"
+
+interface Command {
+  readonly type: "M" | "L" | "Q" | "C" | "Z"
+  readonly x: number
+  readonly y: number
+  readonly x1: number
+  readonly y1: number
+  readonly x2: number
+  readonly y2: number
+}
+interface Glyph {
+  readonly advanceWidth: number
+  getPath(x: number, y: number, size: number): { readonly commands: ReadonlyArray<Command> }
+}
+interface Font {
+  readonly unitsPerEm: number
+  readonly tables: { readonly os2: { readonly sxHeight: number } }
+  charToGlyph(ch: string): Glyph
+  getKerningValue(a: Glyph, b: Glyph): number
+}
+const opentype = createRequire(import.meta.url)("opentype.js") as {
+  parse(buf: ArrayBuffer): Font
+}
+
+const fonts = {
+  saira: (weight: number) =>
+    `@fontsource/saira-semi-condensed/files/saira-semi-condensed-latin-${weight}-normal.woff`,
+  mono: (weight: number) =>
+    `@fontsource/jetbrains-mono/files/jetbrains-mono-latin-${weight}-normal.woff`,
+}
+// opentype.js 2.0's own toPathData sometimes prints NaN, so path data is written here,
+// in the same format: two decimals, whole numbers without them.
+const num = (v: number) => {
+  const r = Math.round(v * 100) / 100
+  return Number.isInteger(r) ? String(r === 0 ? 0 : r) : r.toFixed(2)
+}
+const pack = (vs: ReadonlyArray<number>) =>
+  vs.map((v, i) => (i > 0 && v >= 0 ? " " : "") + num(v)).join("")
+// Like opentype's optimized output: no repeated points, and subpaths close implicitly.
+const pathData = (g: Glyph, x: number, y: number, size: number) => {
+  let d = ""
+  let px = NaN
+  let py = NaN
+  let sx = NaN
+  let sy = NaN
+  const cmds = g.getPath(x, y, size).commands
+  for (const [i, c] of cmds.entries()) {
+    if (c.type === "Z") continue
+    if (c.type === "M") {
+      sx = c.x
+      sy = c.y
+    }
+    const same = (ax: number, ay: number) => num(c.x) === num(ax) && num(c.y) === num(ay)
+    if (c.type === "L" && (same(px, py) || ((cmds[i + 1]?.type ?? "Z") === "Z" && same(sx, sy))))
+      continue
+    const vs =
+      c.type === "Q"
+        ? [c.x1, c.y1, c.x, c.y]
+        : c.type === "C"
+          ? [c.x1, c.y1, c.x2, c.y2, c.x, c.y]
+          : [c.x, c.y]
+    d += c.type + pack(vs)
+    px = c.x
+    py = c.y
+  }
+  return d
+}
+
+const load = (file: string): Font => {
+  const buf = readFileSync(createRequire(import.meta.url).resolve(file))
+  return opentype.parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength))
+}
+
+/** Lays `text` out at `size` px on a baseline at y = 0, with kerning and optional tracking. */
+const outline = (font: Font, text: string, size: number, tracking = 0) => {
+  let x = 0
+  let d = ""
+  let prev: Glyph | undefined
+  for (const ch of text) {
+    const g = font.charToGlyph(ch)
+    if (prev) x += (font.getKerningValue(prev, g) * size) / font.unitsPerEm
+    d += pathData(g, x, 0, size)
+    x += (g.advanceWidth * size) / font.unitsPerEm + tracking
+    prev = g
+  }
+  return { text, width: Math.round((x - tracking) * 100) / 100, d }
+}
+
+// The wordmark as master/lockup.mjs made it: x-height 36 units, from x = 84, baseline 56.
+const saira600 = load(fonts.saira(600))
+{
+  const size = 36 / (saira600.tables.os2.sxHeight / saira600.unitsPerEm)
+  let x = 84
+  let d = ""
+  let prev: Glyph | undefined
+  for (const ch of "efforge") {
+    const g = saira600.charToGlyph(ch)
+    if (prev) x += (saira600.getKerningValue(prev, g) * size) / saira600.unitsPerEm
+    d += pathData(g, x, 56, size)
+    x += (g.advanceWidth * size) / saira600.unitsPerEm + 0.6
+    prev = g
+  }
+  console.log(
+    d === wordmark.d
+      ? "wordmark: matches source.ts"
+      : "wordmark: differs from source.ts (font version changed?); source.ts is unchanged",
+  )
+}
+
+const saira500 = load(fonts.saira(500))
+const mono500 = load(fonts.mono(500))
+// Sizes are 100 px; the build scales them. Tracking is in px at that size.
+const text = {
+  sentence: copy.sentence.map((line) => outline(saira500, line, 100)),
+  command: outline(mono500, copy.command, 100),
+  badge: outline(saira600, copy.badge, 100, 2),
+}
+const fontsUsed = {
+  sentence: "Saira Semi Condensed 500 (@fontsource/saira-semi-condensed 5.3.0, OFL-1.1)",
+  command: "JetBrains Mono 500 (@fontsource/jetbrains-mono 5.3.0, OFL-1.1)",
+  badge: "Saira Semi Condensed 600 (@fontsource/saira-semi-condensed 5.3.0, OFL-1.1)",
+}
+
+const out = fileURLToPath(new URL("./text.ts", import.meta.url))
+writeFileSync(
+  out,
+  `// Generated by scripts/brand/outline.ts from source.ts \`copy\`. Do not edit.
+// Each entry is outlined at 100 px on a baseline at y = 0; \`width\` is its advance.
+// Fonts: ${Object.entries(fontsUsed)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join("; ")}.
+export const text = ${JSON.stringify(text, null, 2)} as const
+`,
+)
+console.log(`wrote ${out}`)
