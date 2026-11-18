@@ -270,11 +270,15 @@
     {
       "name": "BETTER_AUTH_SECRET",
       "example": "change-me-to-a-long-random-string",
-      "description": "Signs sessions and cookies (local: .dev.vars; production: wrangler secret put BETTER_AUTH_SECRET)"
+
+      "dev": "dev-only-secret-replace-me-with-openssl-rand-base64-32",
+      "description": "Signs sessions and cookies (production: a Worker secret, `wrangler secret put BETTER_AUTH_SECRET` or the deploy env with Alchemy)"
     },
     {
       "name": "BETTER_AUTH_URL",
       "example": "https://app.example.com",
+
+      "dev": "",
       "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port)."
     }
   ],
@@ -290,17 +294,10 @@
       ]
     },
     "limits": [
-      "`.dev.vars` sets `BETTER_AUTH_URL=http://localhost:5173`. If Vite picks another port, sign-up fails with `INVALID_ORIGIN`; update the variable or free the port."
+      "Under `pnpm dev`, sign-in works from `localhost` and `127.0.0.1` on any port. From another host (a LAN address, a tunnel), set `BETTER_AUTH_URL` to that origin."
     ]
   },
   "transforms": [
-    {
-      "name": "addDevVar",
-      "args": {
-        "name": "BETTER_AUTH_SECRET",
-        "value": "dev-only-secret-replace-me-with-openssl-rand-base64-32"
-      }
-    },
     {
       "name": "addExport",
       "args": {

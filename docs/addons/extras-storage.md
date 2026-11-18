@@ -83,17 +83,17 @@ Your code asks for `Storage`, declared in `packages/core/src/storage.ts`. Its me
 - Declares `storage` and binds it to the Worker as `STORAGE`. Only with `infra=alchemy`.
 - Declares `storageSigningSecret` and binds it to the Worker as `STORAGE_SIGNING_SECRET`. Only with `infra=alchemy`.
 
-### `.dev.vars`
-
-- Sets `STORAGE_SIGNING_SECRET=dev-only-storage-signing-secret-replace-me` for local development.
-
 ### `AGENTS.md`
 
 - Adds the rules under [Rules it adds to AGENTS.md](#rules-it-adds-to-agentsmd).
 
 ### `.env.example`
 
-- Adds the environment variables listed below.
+- Adds the environment variables listed below, each with its local value, or empty where it needs a real secret.
+
+### `.dev.vars`
+
+- Adds the same lines: `pnpm dev` reads them from here (gitignored). With Alchemy the file is `.env`.
 
 ### `efforge.jsonc`
 
@@ -105,7 +105,7 @@ None.
 
 ## Environment variables
 
-- `STORAGE_SIGNING_SECRET`, for example `change-me-to-a-long-random-string`: HMAC secret for signed download URLs (wrangler secret put STORAGE_SIGNING_SECRET).
+- `STORAGE_SIGNING_SECRET`, for example `change-me-to-a-long-random-string`: HMAC secret for signed download URLs (wrangler secret put STORAGE_SIGNING_SECRET). Locally `dev-only-storage-signing-secret-replace-me`.
 
 ## Package scripts
 

@@ -28,12 +28,16 @@
     {
       "name": "MAIL_FROM",
       "example": "noreply@example.com",
+
+      "dev": "noreply@localhost",
       "description": "Sender address; its domain must be enabled for Cloudflare Email Sending (wrangler email sending enable <domain>)"
     },
     {
       "name": "MAIL_TRANSPORT",
       "example": "cloudflare",
-      "description": "cloudflare (default) sends through the EMAIL binding; console prints emails instead (used by .dev.vars)"
+
+      "dev": "console",
+      "description": "cloudflare (default) sends through the EMAIL binding; console prints emails instead (the local value)"
     }
   ],
   "requires": [],
@@ -66,20 +70,6 @@
         "import": "MailerLive",
         "from": "./mailer",
         "layer": "MailerLive"
-      }
-    },
-    {
-      "name": "addDevVar",
-      "args": {
-        "name": "MAIL_TRANSPORT",
-        "value": "console"
-      }
-    },
-    {
-      "name": "addDevVar",
-      "args": {
-        "name": "MAIL_FROM",
-        "value": "noreply@localhost"
       }
     },
     {

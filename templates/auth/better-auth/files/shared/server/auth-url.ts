@@ -1,4 +1,4 @@
-/** BETTER_AUTH_URL's value in .env.example, which means "not set yet". */
+/** BETTER_AUTH_URL's value in the .env.example of projects made before efforge 0.3, which means "not set yet". */
 const EXAMPLE_URL = "https://app.example.com"
 
 /** Under `pnpm dev`: the origin of each request on a local host, whatever port Vite picks. */

@@ -66,11 +66,6 @@ Your code asks for `Mailer`, declared in `packages/core/src/mailer.ts`. It has o
 
 - Adds `MailerLive` to `AppLayer`, imported from `./mailer`.
 
-### `.dev.vars`
-
-- Sets `MAIL_TRANSPORT=console` for local development.
-- Sets `MAIL_FROM=noreply@localhost` for local development.
-
 ### `apps/web/src/server/auth.ts`
 
 - Sets `sendInvitationEmail` in the options of the `organization` plugin. Only with `auth=better-auth-orgs`.
@@ -96,7 +91,11 @@ Your code asks for `Mailer`, declared in `packages/core/src/mailer.ts`. It has o
 
 ### `.env.example`
 
-- Adds the environment variables listed below.
+- Adds the environment variables listed below, each with its local value, or empty where it needs a real secret.
+
+### `.dev.vars`
+
+- Adds the same lines: `pnpm dev` reads them from here (gitignored). With Alchemy the file is `.env`.
 
 ### `efforge.jsonc`
 
@@ -108,8 +107,8 @@ None.
 
 ## Environment variables
 
-- `MAIL_FROM`, for example `noreply@example.com`: Sender address; its domain must be enabled for Cloudflare Email Sending (wrangler email sending enable &lt;domain&gt;).
-- `MAIL_TRANSPORT`, for example `cloudflare`: cloudflare (default) sends through the EMAIL binding; console prints emails instead (used by .dev.vars).
+- `MAIL_FROM`, for example `noreply@example.com`: Sender address; its domain must be enabled for Cloudflare Email Sending (wrangler email sending enable &lt;domain&gt;). Locally `noreply@localhost`.
+- `MAIL_TRANSPORT`, for example `cloudflare`: cloudflare (default) sends through the EMAIL binding; console prints emails instead (the local value). Locally `console`.
 
 ## Package scripts
 

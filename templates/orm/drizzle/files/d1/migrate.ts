@@ -7,6 +7,13 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs"
 const root = new URL("..", import.meta.url).pathname
 const source = `${root}drizzle`
 const target = `${root}migrations`
+const config = `${root}../../wrangler.jsonc`
+if (!existsSync(config)) {
+  console.error(
+    "No wrangler.jsonc: with Alchemy, `pnpm dev` migrates the local D1 and `pnpm run deploy` the deployed one.",
+  )
+  process.exit(1)
+}
 
 mkdirSync(target, { recursive: true })
 readdirSync(source)
@@ -20,13 +27,6 @@ readdirSync(source)
     )
   })
 
-const config = `${root}../../wrangler.jsonc`
-if (!existsSync(config)) {
-  console.error(
-    "No wrangler.jsonc: with Alchemy, `pnpm dev` migrates the local D1 and `pnpm run deploy` the deployed one.",
-  )
-  process.exit(1)
-}
 // wrangler refuses --local together with --remote
 const args = process.argv.slice(2)
 const result = spawnSync(

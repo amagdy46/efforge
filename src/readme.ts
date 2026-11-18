@@ -1,11 +1,12 @@
 import type { LoadedAddon } from "./addon.ts"
 import { addonIdsFor } from "./addon.ts"
+import { envGroups, localEnvFile, toFill } from "./env.ts"
 import { INSTALL } from "./exec.ts"
 import { matches } from "./generate.ts"
 import { projectDirName } from "./projectName.ts"
 import type { StackConfig } from "./stack.ts"
 import { type Filled, fillRegions } from "./regions.ts"
-import { versions } from "./versions.ts"
+import { pnpmVersion, versions } from "./versions.ts"
 
 /**
  * The generated README.md is the template's prose plus regions efforge owns: the text between
@@ -22,6 +23,7 @@ export const README_REGIONS = [
   "layout",
   "capabilities",
   "deploy",
+  "more",
 ] as const
 export type ReadmeRegion = (typeof README_REGIONS)[number]
 
@@ -30,10 +32,8 @@ export const README_PREFIX = "efforge:readme"
 export interface ReadmeInput {
   readonly stack: StackConfig
   readonly addons: ReadonlyMap<string, LoadedAddon>
-  /** Scripts of the root package.json, as the project has them. */
+  /** Scripts of the root package.json, as the project has them (committed, unlike `.dev.vars`). */
   readonly scripts: Readonly<Record<string, string>>
-  /** Whether the project has a `.dev.vars` (an add-on wrote development values to it). */
-  readonly devVars: boolean
 }
 
 /** One command to run after `create` or `add`, inside the project directory. */
@@ -45,13 +45,12 @@ export interface Step {
 }
 
 /**
- * What to run after `pnpm install` to see the app, in order: one source for the steps `create`
- * prints and the README's "Run it". With Alchemy, `alchemy dev` reads local values from `.env`.
+ * What to run after `pnpm install` to see the app, in order, from the stack alone: one source for
+ * the steps `create` and `add` print, their `--json` `nextSteps`, and the README's "Run it".
  */
-export const runSteps = (stack: StackConfig, o: { readonly devVars: boolean }): Step[] => {
+export const runSteps = (stack: StackConfig): Step[] => {
   const alchemy = stack.infra === "alchemy"
   const steps: Step[] = []
-  if (alchemy && o.devVars) steps.push({ command: "cp .dev.vars .env", note: "local values" })
   if (stack.database === "postgres") {
     steps.push({ command: "docker compose up -d --wait", note: "local Postgres" })
     steps.push({ command: "pnpm db:migrate", note: "create the tables" })
@@ -67,11 +66,15 @@ export const runSteps = (stack: StackConfig, o: { readonly devVars: boolean }): 
   return steps
 }
 
+/** The steps that set up what the app needs before `pnpm dev` (a database, its tables). */
+export const setupSteps = (stack: StackConfig): Step[] =>
+  runSteps(stack).filter((s) => s.longRunning !== true)
+
 /** What to run after `create`: the install when it was skipped, then {@link runSteps}. */
-export const planSteps = (
-  stack: StackConfig,
-  o: { readonly installed: boolean; readonly devVars: boolean },
-): Step[] => [...(o.installed ? [] : [{ command: INSTALL }]), ...runSteps(stack, o)]
+export const planSteps = (stack: StackConfig, o: { readonly installed: boolean }): Step[] => [
+  ...(o.installed ? [] : [{ command: INSTALL }]),
+  ...runSteps(stack),
+]
 
 /** `command  # note` lines, the notes aligned. */
 export const renderSteps = (steps: ReadonlyArray<Step>): string[] => {
@@ -138,22 +141,40 @@ const about = (input: ReadmeInput): string => {
 
 const run = (input: ReadmeInput): string => {
   const { stack } = input
-  const steps = renderSteps([{ command: "pnpm install" }, ...runSteps(stack, input)])
-  const out = ["```sh", ...steps, "```"]
-  const env = allEnv(input).filter((n) => n !== "CLOUDFLARE_ACCOUNT_ID")
-  if (stack.infra === "alchemy") {
+  const alchemy = stack.infra === "alchemy"
+  const needs = [
+    "Node 24.11+ (or 26+)",
+    `pnpm ${pnpmVersion.split(".").slice(0, 2).join(".")}+`,
+    ...(stack.database === "postgres" ? ["Docker, for the local Postgres"] : []),
+  ]
+  const out = [
+    `You need ${and(needs)}.`,
+    "",
+    "```sh",
+    ...renderSteps([{ command: "pnpm install" }, ...runSteps(stack)]),
+    "```",
+  ]
+  const groups = envGroups(stack, input.addons)
+  if (groups.length > 0) {
+    const file = localEnvFile(stack)
+    const fill = toFill(groups)
     out.push(
       "",
-      `\`pnpm dev\` runs \`alchemy dev\`: Vite and workerd with the bindings declared in \`infra/alchemy.run.ts\`, on stage \`dev_$USER\`. It reads local values from \`.env\`${input.devVars ? ", so the `cp` above copies the development values efforge wrote to `.dev.vars`" : ""}.`,
-    )
-  } else if (input.devVars) {
-    out.push(
-      "",
-      "`pnpm dev` reads local secrets from `.dev.vars`, which efforge wrote with development values. It is gitignored: in a fresh clone, create it from the names in `.env.example`.",
+      `\`pnpm dev\` reads local settings from \`${file}\` (gitignored), which efforge wrote with values that work on your machine. In a fresh clone, create it first: \`cp .env.example ${file}\`${fill.length > 0 ? `, then fill in ${and(fill.map(code))}` : ""}.`,
     )
   }
-  if (env.length > 0 && !input.devVars)
-    out.push("", `\`.env.example\` lists the variables the app reads: ${and(env.map(code))}.`)
+  if (alchemy)
+    out.push(
+      "",
+      "`pnpm dev` runs `alchemy dev`: Vite and workerd with the bindings declared in `infra/alchemy.run.ts`, on stage `dev_$USER`, with nothing created on Cloudflare.",
+    )
+  if (stack.database === "postgres")
+    out.push(
+      "",
+      alchemy
+        ? "Postgres on another port: change it in `docker-compose.yml` and in `DATABASE_URL` in `.env`, and run `pnpm db:migrate` with that `DATABASE_URL` set."
+        : "Postgres on another port: change it in `docker-compose.yml` and in `localConnectionString` in `wrangler.jsonc`, and run `pnpm db:migrate` with `DATABASE_URL` set to the same database.",
+    )
   if (stack.auth !== "none")
     out.push("", "Sign up at `/sign-up`; the dashboard at `/app` needs a signed-in user.")
   return out.join("\n")
@@ -267,7 +288,7 @@ export const capabilities = (
   addons: ReadonlyMap<string, LoadedAddon>,
 ): Capability[] => {
   const out: Capability[] = []
-  const list = loaded({ stack, addons, scripts: {}, devVars: false })
+  const list = loaded({ stack, addons, scripts: {} })
   for (const a of list) {
     const m = a.manifest
     if (m.id === "base" || /^(runtime|infra|database)\//.test(m.id)) continue
@@ -326,7 +347,7 @@ const capabilityList = (input: ReadmeInput): string => {
 /** What `infra/alchemy.run.ts` creates for each add-on, beside the Worker. */
 const alchemyResources = (stack: StackConfig): Record<string, string> => ({
   "database/postgres": "a Hyperdrive config for the Postgres at `DATABASE_URL`",
-  "database/d1": `a D1 database, migrated from \`packages/db/${stack.orm === "drizzle" ? "drizzle" : "migrations"}\``,
+  "database/d1": `a D1 database (migrated from \`packages/db/${stack.orm === "drizzle" ? "drizzle" : "migrations"}\`)`,
   "extras/storage": "an R2 bucket",
   "extras/realtime": "the `Room` Durable Object",
   "extras/workflows": "the example Workflow",
@@ -344,11 +365,11 @@ const deployWrangler = (input: ReadmeInput): string => {
   const steps = ["Sign in: `pnpm exec wrangler login` (or set `CLOUDFLARE_API_TOKEN`)."]
   if (stack.database === "postgres")
     steps.push(
-      `Create a Hyperdrive config for your production Postgres (reachable from the internet) and put the id it prints in place of the zeros under \`hyperdrive\` in \`wrangler.jsonc\`: \`pnpm exec wrangler hyperdrive create ${dir} --connection-string="${pg}"\`. Then create the tables: \`DATABASE_URL="${pg}" pnpm db:migrate\`.`,
+      `Create a Hyperdrive config for your production Postgres (reachable from the internet): \`pnpm exec wrangler hyperdrive create ${dir} --connection-string="${pg}"\`. When wrangler offers to add it to \`wrangler.jsonc\`, answer no: it would add a second entry and leave \`HYPERDRIVE\` on the zeros. Put the id it prints in place of the zeros under \`hyperdrive\` yourself. Then create the tables: \`DATABASE_URL="${pg}" pnpm db:migrate\`.`,
     )
   if (stack.database === "d1")
     steps.push(
-      `Create the database and put the \`database_name\` and \`database_id\` it prints under \`d1_databases\` in \`wrangler.jsonc\`: \`pnpm exec wrangler d1 create ${dir}\`. Then create the tables: \`pnpm db:migrate --remote\`.`,
+      `Create the database: \`pnpm exec wrangler d1 create ${dir}\`. When wrangler offers to add it to \`wrangler.jsonc\`, answer no: it would add a second entry and leave \`DB\` on the zeros. Put the \`database_name\` and \`database_id\` it prints in the \`DB\` entry under \`d1_databases\` yourself. Then create the tables: \`pnpm db:migrate --remote\`.`,
     )
   if (ids.includes("extras/email"))
     steps.push(
@@ -356,7 +377,7 @@ const deployWrangler = (input: ReadmeInput): string => {
     )
   if (secrets.length > 0)
     steps.push(
-      `Write the production values of ${and(secrets.map(code))} to \`.env.production\` (gitignored; \`.env.example\` says what each is), then upload them: \`pnpm exec wrangler secret bulk .env.production\`.`,
+      `Write the production values of ${and(secrets.map(code))} to \`.env.production\` (gitignored; \`.env.example\` says what each is), then upload them: \`pnpm exec wrangler secret bulk .env.production\`.${secrets.includes("BETTER_AUTH_URL") ? " \`BETTER_AUTH_URL\` can stay empty until the first deploy prints the URL." : ""}`,
     )
   const notes = [
     ...(ids.includes("extras/storage") ? ["creates the R2 bucket"] : []),
@@ -367,7 +388,7 @@ const deployWrangler = (input: ReadmeInput): string => {
     `Deploy: \`pnpm run deploy\` (builds \`apps/web\`, then \`wrangler deploy\`).${notes.length > 0 ? ` The first deploy ${and(notes)}.` : ""}${ids.includes("extras/browser") ? " Docker must be running: the deploy builds the `apps/browser` image and pushes it (Containers need the Workers Paid plan)." : ""}`,
   )
   return [
-    `\`wrangler.jsonc\` declares the Worker and its bindings. These steps follow wrangler ${versions.wrangler}'s own help; efforge's tests do not deploy to a Cloudflare account. \`pnpm run deploy --dry-run\` builds and checks everything without uploading.`,
+    `\`wrangler.jsonc\` declares the Worker and its bindings. These steps follow wrangler ${versions.wrangler}'s own help; efforge's tests do not deploy to a Cloudflare account. \`pnpm run deploy --dry-run\` builds the app and checks the config without uploading (it does not check that the ids are real).`,
     "",
     ...steps.map((s, i) => `${i + 1}. ${s}`),
   ].join("\n")
@@ -385,7 +406,7 @@ const deployAlchemy = (input: ReadmeInput): string => {
     ...allEnv(input).filter((n) => n !== "CLOUDFLARE_ACCOUNT_ID"),
   ]
   const steps = [
-    `Write the production values of ${and(env.map(code))} to \`.env.production\` (gitignored; \`.env.example\` says what each is). Check the Cloudflare credentials with \`pnpm exec alchemy provider check-env -c infra/alchemy.run.ts --env-file .env.production\`.`,
+    `Write the production values of ${and(env.map(code))} to \`.env.production\` (gitignored; \`.env.example\` says what each is). Check that the Cloudflare credentials are set (not that they work) with \`pnpm exec alchemy provider check-env -c infra/alchemy.run.ts --env-file .env.production\`.${env.includes("BETTER_AUTH_URL") ? " \`BETTER_AUTH_URL\` can stay empty: Better Auth then takes the origin from each request." : ""}`,
   ]
   if (stack.database === "postgres")
     steps.push(
@@ -397,13 +418,27 @@ const deployAlchemy = (input: ReadmeInput): string => {
     )
   steps.push(
     `Deploy the \`prod\` stage: \`pnpm run deploy --stage prod --env-file .env.production\`. It prints the Worker's URL.${ids.includes("extras/browser") ? " Docker must be running to build the browser image (Containers need the Workers Paid plan)." : ""} Any other \`--stage\` name is a separate copy of everything; \`pnpm run destroy --stage <name> --env-file .env.production\` removes one.`,
-    "In CI, `.github/workflows/deploy.yml` deploys `main` to `prod` and each pull request to its own stage; `infra/README.md` lists the repository secrets it needs.",
+    "In CI, `.github/workflows/deploy.yml` deploys `main` to `prod` and each pull request to its own stage; `infra/README.md` lists the repository secrets it needs. CI keeps Alchemy's state in a store on Cloudflare, while a deploy from your machine keeps it in `.alchemy/`: the two don't know about each other, and CI fails on resources a local `prod` deploy created. Deploy each stage from one place: once CI deploys `prod`, deploy from your machine only under another `--stage` name.",
   )
   return [
     `\`infra/alchemy.run.ts\` declares the Worker${resources.length > 0 ? ` and ${and(resources)}` : ""}; \`alchemy deploy\` creates or updates them. These steps follow alchemy ${versions.alchemy}'s own help; efforge's tests do not deploy to a Cloudflare account.`,
     "",
     ...steps.map((s, i) => `${i + 1}. ${s}`),
   ].join("\n")
+}
+
+/** Extras that `add` takes alone, in the order "Add more" suggests them. */
+const SUGGESTED = ["email", "storage", "realtime", "workflows", "browser"] as const
+
+/** "Add more": `list`, and `add` with one add-on this project doesn't have yet. */
+const more = (input: ReadmeInput): string => {
+  const { stack } = input
+  const next =
+    SUGGESTED.find((e) => !stack.extras.includes(e)) ??
+    (stack.infra === "none" ? "infra/alchemy" : undefined)
+  return next === undefined
+    ? "Every capability is an add-on, and this project has the ones that add alone. List them all:\n\n```sh\nnpx create-efforge list\n```"
+    : `Every capability is an add-on. List them, then add one:\n\n\`\`\`sh\nnpx create-efforge list\nnpx create-efforge add ${next}\n\`\`\``
 }
 
 /** The content of every region for this project. */
@@ -414,6 +449,7 @@ export const readmeRegions = (input: ReadmeInput): Record<ReadmeRegion, string> 
   layout: layout(input),
   capabilities: capabilityList(input),
   deploy: input.stack.infra === "alchemy" ? deployAlchemy(input) : deployWrangler(input),
+  more: more(input),
 })
 
 /**

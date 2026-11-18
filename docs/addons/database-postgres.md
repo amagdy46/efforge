@@ -87,7 +87,11 @@ None: this add-on adds no service of its own.
 
 ### `.env.example`
 
-- Adds the environment variables listed below.
+- Adds the environment variables listed below, each with its local value, or empty where it needs a real secret.
+
+### `.dev.vars`
+
+- Adds the same lines: `pnpm dev` reads them from here (gitignored). With Alchemy the file is `.env`.
 
 ### `efforge.jsonc`
 
@@ -112,7 +116,7 @@ None: this add-on adds no service of its own.
 
 ## Environment variables
 
-- `DATABASE_URL`, for example `postgres://postgres:postgres@localhost:5432/app`: Used by `pnpm db:migrate` and drizzle-kit, read from the shell; unset, they use the docker-compose database. The running app connects through the HYPERDRIVE binding.
+- `DATABASE_URL`, for example `postgres://postgres:postgres@localhost:5432/app`: Used by `pnpm db:migrate` and drizzle-kit, read from the shell; unset, they use the docker-compose database. The running app connects through the HYPERDRIVE binding. Locally `postgres://postgres:postgres@localhost:5432/app`.
 
 ## Package scripts
 
@@ -132,7 +136,7 @@ Only with `infra=none`:
 
 Only with `infra=alchemy`:
 
-- `infra/alchemy.run.ts` creates the Hyperdrive config from `DATABASE_URL`; on `dev_*` stages (`pnpm dev`) it defaults to the docker-compose database, and every other stage must set it.
+- `infra/alchemy.run.ts` creates the Hyperdrive config from `DATABASE_URL`: under `pnpm dev` the one in `.env` (the docker-compose database), and every deployed stage must set it. `pnpm dev` connects without TLS only to a database on this machine (`localhost`, `127.0.0.1`, `::1`).
 
 ## Limits
 

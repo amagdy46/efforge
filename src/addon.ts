@@ -90,7 +90,13 @@ export const AddonManifest = Schema.Struct({
   envVars: Schema.Array(
     Schema.Struct({
       name: Schema.String,
+      /** A production-style example, for the docs. */
       example: Schema.String,
+      /**
+       * The value that works for local development, written to `.env.example` and to the local
+       * settings file (`.dev.vars`, `.env` with Alchemy). Absent: a real secret, written empty.
+       */
+      dev: Schema.optionalKey(Schema.String),
       description: Schema.String,
       when: Schema.optionalKey(When),
     }),

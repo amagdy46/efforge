@@ -6,6 +6,7 @@ import { presentCardTransforms } from "./cards.ts"
 import { hash, manifestSchemaUrl, renderManifest } from "./manifest.ts"
 import { applyProjectName } from "./projectName.ts"
 import { syncAgents } from "./agents.ts"
+import { ENV_EXAMPLE, envExample, envGroups, localEnv, localEnvFile } from "./env.ts"
 import { AGENTS_FILE } from "./transforms/appendAgentsSection.ts"
 import { fillReadme, README_FILE, readmeRegions } from "./readme.ts"
 import { SlotId, type StackConfig, toCommand } from "./stack.ts"
@@ -56,7 +57,14 @@ const json = (value: unknown): string => {
 const sortKeys = (o: Record<string, string>): Record<string, string> =>
   Object.fromEntries(Object.entries(o).toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
 
-const computedNames = new Set(["pnpm-workspace.yaml", ".env.example", "efforge.jsonc"])
+// .dev.vars and .env are gitignored local settings, never hashed
+const computedNames = new Set([
+  "pnpm-workspace.yaml",
+  ".env.example",
+  "efforge.jsonc",
+  ".dev.vars",
+  ".env",
+])
 export const isComputed = (target: string) =>
   computedNames.has(target) || target === "package.json" || target.endsWith("/package.json")
 
@@ -91,8 +99,6 @@ export const generate = (
     const overlay = new Set<string>()
     const seams = new Set<string>()
     const used = new Set<string>()
-    const env = new Map<string, { title: string; vars: string[] }>()
-    const seenEnv = new Set<string>()
 
     const loaded: LoadedAddon[] = []
     for (const id of addonIdsFor(config)) {
@@ -185,15 +191,6 @@ export const generate = (
             ...scripts,
           }
         })
-
-      for (const v of manifest.envVars) {
-        if (!matches(v.when, config)) continue
-        if (seenEnv.has(v.name)) continue
-        seenEnv.add(v.name)
-        const group = env.get(manifest.id) ?? { title: manifest.title, vars: [] }
-        group.vars.push(`${v.name}=${v.example}`)
-        env.set(manifest.id, group)
-      }
     }
 
     // 3. every transform, in add-on order; an add-on's card transforms (its own, the session guard,
@@ -230,7 +227,6 @@ export const generate = (
           stack: config,
           addons,
           scripts: rootScripts(out.get("package.json")),
-          devVars: out.has(".dev.vars"),
         }),
       )
       if (filled.kind === "filled") {
@@ -249,11 +245,12 @@ export const generate = (
     workspace.set("catalog", catalog)
     out.set("pnpm-workspace.yaml", workspace.toString())
 
-    if (env.size > 0)
-      out.set(
-        ".env.example",
-        `${[...env.values()].map((g) => `# ${g.title}\n${g.vars.join("\n")}`).join("\n\n")}\n`,
-      )
+    // local settings: .env.example (committed) and the file `pnpm dev` reads, with the same values
+    const groups = envGroups(config, addons)
+    if (groups.length > 0) {
+      out.set(ENV_EXAMPLE, envExample(config, groups))
+      out.set(localEnvFile(config), localEnv(groups))
+    }
 
     const files = Object.fromEntries(
       [...overlay]

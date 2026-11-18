@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
@@ -93,11 +93,19 @@ it("the run steps are the ones each stack needs", async () => {
   expect(postgres.indexOf("docker compose up -d --wait")).toBeLessThan(
     postgres.indexOf("pnpm db:migrate"),
   )
-  expect(postgres).toContain(".dev.vars")
+  expect(postgres).toContain("`pnpm dev` reads local settings from `.dev.vars`")
+  expect(postgres).toContain("cp .env.example .dev.vars")
   expect(await steps(d1)).toContain("pnpm db:migrate")
+  // efforge writes .env itself on Alchemy: nothing to copy on the machine that ran create
   const alchemy = await steps(house)
-  expect(alchemy).toContain("cp .dev.vars .env")
-  expect(alchemy.indexOf("cp .dev.vars .env")).toBeLessThan(alchemy.indexOf("pnpm dev"))
+  expect(alchemy).not.toContain("cp .dev.vars")
+  expect(alchemy).toContain("cp .env.example .env")
+  expect(alchemy).not.toContain("fill in")
+  // without organizations the AI key is one the app reads: a secret to fill in
+  expect(await steps({ ...house, auth: "better-auth" })).toContain(
+    "`cp .env.example .env`, then fill in `LLM_API_KEY`.",
+  )
+  expect(alchemy).toContain("http://localhost:1337")
   // alchemy dev migrates a local D1 itself; db:migrate needs a wrangler.jsonc
   expect(await steps({ ...d1, infra: "alchemy" })).not.toContain("db:migrate")
 })
@@ -194,7 +202,7 @@ it("a region whose markers the user deleted keeps their text", async () => {
 })
 
 it("fillReadme fills nothing when a region is unclosed, and says there are no markers", async () => {
-  const regions = readmeRegions({ stack: pg, addons: await addons(), scripts: {}, devVars: false })
+  const regions = readmeRegions({ stack: pg, addons: await addons(), scripts: {} })
   expect(fillReadme("# x\n", regions)).toEqual({ kind: "no-markers" })
   const half = "<!-- efforge:readme:about -->\nmine\n"
   expect(fillReadme(half, regions)).toEqual({
@@ -297,4 +305,49 @@ it("add leaves a broken AGENTS.md alone and names the marker", async () => {
   expect(result.notes.find((n) => n.startsWith("AGENTS.md"))).toContain(
     "<!-- /efforge:section:database --> appears 2 times",
   )
+})
+
+// W2-D, B3: a region is a function of the stack in efforge.jsonc, never of untracked files
+const b3: Array<[string, StackConfig, string[]]> = [
+  ["default", pg, ["realtime"]],
+  ["Alchemy", house, ["browser"]],
+  ["Alchemy + d1", { ...d1, infra: "alchemy", extras: [] }, ["email"]],
+]
+for (const [name, config, add] of b3)
+  it(`${name}: add writes the same README whether or not .dev.vars, .env or node_modules exist`, async () => {
+    const start = { ...config, extras: config.extras.filter((e) => !add.includes(e)) }
+    const results: string[] = []
+    for (const variant of ["as created", "fresh clone", "installed"] as const) {
+      rmSync(dir, { recursive: true, force: true })
+      await run(writeTree(dir, await generated(start)))
+      if (variant === "fresh clone")
+        for (const f of [".dev.vars", ".env"]) rmSync(join(dir, f), { force: true })
+      if (variant === "installed") {
+        mkdirSync(join(dir, "node_modules", ".pnpm"), { recursive: true })
+        writeFileSync(join(dir, ".dev.vars"), "EXTRA=1\n")
+        writeFileSync(join(dir, ".env"), "OTHER=2\n")
+      }
+      await run(addAddons(dir, add, opts))
+      results.push(readme())
+    }
+    expect(results[1]).toBe(results[0])
+    expect(results[2]).toBe(results[0])
+    const stack = JSON.parse(
+      readFileSync(join(dir, "efforge.jsonc"), "utf8").replace(/^\s*\/\/.*$/gm, ""),
+    ).stack as StackConfig
+    expect(stack.extras).toEqual(expect.arrayContaining([...add]))
+    const fresh = (await generated(stack)).get("README.md") as string
+    expect(results[0]).toBe(fresh)
+  })
+
+it("Add more suggests an add-on the project lacks, and none when it has them all", async () => {
+  const more = async (c: StackConfig) =>
+    region((await generated(c)).get("README.md") as string, "more")
+  expect(await more(minimal)).toContain("npx create-efforge add email")
+  const withEmail = await more({ ...pg, extras: ["email"] })
+  expect(withEmail).not.toContain("add email")
+  expect(withEmail).toContain("npx create-efforge add storage")
+  const all = await more(house)
+  expect(all).toContain("npx create-efforge list")
+  expect(all).not.toContain("npx create-efforge add")
 })

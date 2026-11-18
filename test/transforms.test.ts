@@ -558,19 +558,6 @@ it("addServerFnMiddleware leaves an already gated server fn alone and reports mi
   expect(e).toBeInstanceOf(TransformAnchorMissing)
 })
 
-// ---- addDevVar
-it("addDevVar creates .dev.vars, appends, and never overwrites", async () => {
-  const dv = (name: string, value: string): TransformCall => ({
-    name: "addDevVar",
-    args: { name, value },
-  })
-  const t1 = await once({}, dv("A", "1"))
-  expect(t1.get(".dev.vars")).toMatch(/^# Local development secrets[\s\S]*\nA=1\n$/)
-  const t2 = await run(t1, dv("B", "2"))
-  const t3 = await run(t2, dv("A", "other"))
-  expect(t3.get(".dev.vars")).toMatch(/A=1\nB=2\n$/)
-})
-
 it("addServerFnMiddleware puts a one-line chain one call per line, as the formatter would", async () => {
   const source = `import { createServerFn } from "@tanstack/react-start"
 

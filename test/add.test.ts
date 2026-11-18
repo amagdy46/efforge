@@ -105,7 +105,8 @@ it("add email writes the overlays, edits the seam, merges deps, env and manifest
   })
   expect(pkg.private).toBe(true)
   expect(file("pnpm-workspace.yaml")).toContain("effect:")
-  expect(file(".env.example")).toContain("# Email\nMAIL_FROM=hi@example.com")
+  // no local value in the fixture: a secret to fill in, written empty
+  expect(file(".env.example")).toMatch(/\n# Email\n# Fill in: [^\n]+\nMAIL_FROM=\n/)
   expect(file(".env.example").match(/DATABASE_URL/g)).toHaveLength(1)
   const m = manifestOf()
   expect(m.stack.extras).toEqual(["email"])

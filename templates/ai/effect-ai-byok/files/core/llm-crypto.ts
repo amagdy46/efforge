@@ -16,7 +16,7 @@ const fromBase64 = (text: string): Uint8Array<ArrayBuffer> =>
 
 const invalidKey = new LlmConfigError({
   message:
-    "LLM_ENCRYPTION_KEY must be 32 random bytes, base64 encoded. Generate one with `openssl rand -base64 32` and set it as a secret (.dev.vars locally).",
+    "LLM_ENCRYPTION_KEY must be 32 random bytes, base64 encoded. Generate one with `openssl rand -base64 32` and set it as a secret (.dev.vars locally, .env with Alchemy).",
 })
 
 /** Imports the AES-GCM key from `LLM_ENCRYPTION_KEY`; fails with a clear message when it is unusable. */

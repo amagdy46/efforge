@@ -255,6 +255,8 @@
     {
       "name": "LLM_ENCRYPTION_KEY",
       "example": "openssl rand -base64 32",
+
+      "dev": "ZGV2LW9ubHktbGxtLWtleS1yZXBsYWNlLW1lLTMyISE=",
       "description": "AES-GCM key (32 random bytes, base64) that encrypts each organization's saved API key; the app refuses to start without a valid one",
       "when": {
         "auth": [
@@ -265,6 +267,8 @@
     {
       "name": "LLM_PROVIDER",
       "example": "anthropic",
+
+      "dev": "anthropic",
       "description": "anthropic | openai | openrouter | ollama",
       "when": {
         "auth": [
@@ -276,6 +280,8 @@
     {
       "name": "LLM_MODEL",
       "example": "claude-sonnet-5-5",
+
+      "dev": "claude-sonnet-5-5",
       "description": "Model id for the provider",
       "when": {
         "auth": [
@@ -298,6 +304,8 @@
     {
       "name": "LLM_BASE_URL",
       "example": "",
+
+      "dev": "",
       "description": "Optional OpenAI-compatible endpoint (openai, ollama)",
       "when": {
         "auth": [
@@ -382,44 +390,6 @@
       "when": {
         "auth": [
           "better-auth-orgs"
-        ]
-      }
-    },
-    {
-      "name": "addDevVar",
-      "args": {
-        "name": "LLM_ENCRYPTION_KEY",
-        "value": "ZGV2LW9ubHktbGxtLWtleS1yZXBsYWNlLW1lLTMyISE="
-      },
-      "when": {
-        "auth": [
-          "better-auth-orgs"
-        ]
-      }
-    },
-    {
-      "name": "addDevVar",
-      "args": {
-        "name": "LLM_PROVIDER",
-        "value": "anthropic"
-      },
-      "when": {
-        "auth": [
-          "none",
-          "better-auth"
-        ]
-      }
-    },
-    {
-      "name": "addDevVar",
-      "args": {
-        "name": "LLM_MODEL",
-        "value": "claude-sonnet-5-5"
-      },
-      "when": {
-        "auth": [
-          "none",
-          "better-auth"
         ]
       }
     },

@@ -3,7 +3,6 @@ import type { Tree } from "../tree.ts"
 import { ALCHEMY_FILE, addAlchemyResource } from "./addAlchemyResource.ts"
 import { addArrayItem } from "./addArrayItem.ts"
 import { AUTH_FILE, addAuthPlugin } from "./addAuthPlugin.ts"
-import { addDevVar } from "./addDevVar.ts"
 import { addExport } from "./addExport.ts"
 import { addImport } from "./addImport.ts"
 import { addLayer } from "./addLayer.ts"
@@ -45,7 +44,6 @@ const registry: Readonly<Record<string, Entry>> = {
   addWranglerBinding: { run: addWranglerBinding, targets: fixed(WRANGLER_FILE) },
   setWranglerValue: { run: setWranglerValue, targets: fixed(WRANGLER_FILE) },
   addServerFnMiddleware: { run: addServerFnMiddleware, targets: onFile },
-  addDevVar: { run: addDevVar, targets: fixed(".dev.vars") },
 }
 
 const entry = (name: string): Entry | undefined =>

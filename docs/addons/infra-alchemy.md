@@ -72,7 +72,11 @@ It removes `wrangler.jsonc`, because `infra/alchemy.run.ts` declares the Worker 
 
 ### `.env.example`
 
-- Adds the environment variables listed below.
+- Adds the environment variables listed below, each with its local value, or empty where it needs a real secret.
+
+### `.dev.vars`
+
+- Adds the same lines: `pnpm dev` reads them from here (gitignored). With Alchemy the file is `.env`.
 
 ### `efforge.jsonc`
 
@@ -91,7 +95,7 @@ It removes `wrangler.jsonc`, because `infra/alchemy.run.ts` declares the Worker 
 
 ## Environment variables
 
-- `CLOUDFLARE_ACCOUNT_ID`, for example `your-account-id`: Needed by `pnpm run deploy`, with CLOUDFLARE_API_TOKEN; `pnpm exec alchemy provider check-env -c infra/alchemy.run.ts` checks both.
+- `CLOUDFLARE_ACCOUNT_ID`, for example `your-account-id`: Needed by `pnpm run deploy`, with CLOUDFLARE_API_TOKEN; `pnpm exec alchemy provider check-env -c infra/alchemy.run.ts` checks both. Empty locally.
 
 ## Package scripts
 
@@ -114,5 +118,5 @@ It removes `wrangler.jsonc`, because `infra/alchemy.run.ts` declares the Worker 
 ## Limits
 
 - It uses an Alchemy 2.0 beta; the exact version is under Dependencies.
-- Local secrets are read from `.env`, not `.dev.vars`.
-- On D1, `pnpm db:migrate` still expects a `wrangler.jsonc`.
+- Local settings are in `.env`, not `.dev.vars`: `efforge add infra/alchemy` moves them there.
+- On D1, `pnpm db:migrate` is not used: `pnpm dev` and `pnpm run deploy` apply the migrations.

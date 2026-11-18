@@ -24,13 +24,34 @@ import { installOwed } from "../installed.ts"
 import { introLine } from "../intro.ts"
 import { EfforgeManifest, hash, renderManifest } from "../manifest.ts"
 import { applyProjectName } from "../projectName.ts"
-import { fillReadme, README_FILE, readmeNote, readmeRegions, type Step } from "../readme.ts"
+import {
+  fillReadme,
+  README_FILE,
+  readmeNote,
+  readmeRegions,
+  setupSteps,
+  type Step,
+} from "../readme.ts"
 import { generateRouteTree } from "../routeTree.ts"
 import { IncompatibleStack, validate } from "../rules.ts"
 import { type SlotDef, slots } from "../slots.ts"
 import { type StackConfig, toCommand } from "../stack.ts"
 import { AGENTS_FILE } from "../transforms/appendAgentsSection.ts"
 import { agentsNote, syncAgents } from "../agents.ts"
+import {
+  appendBlock,
+  assignments,
+  assigns,
+  assignsValue,
+  DEV_VARS,
+  ENV_EXAMPLE,
+  envGroups,
+  exampleHeader,
+  LOCAL_HEADER,
+  localEnvFile,
+  nameOf,
+  renderGroups,
+} from "../env.ts"
 import { WRANGLER_FILE } from "../transforms/addWranglerBinding.ts"
 import {
   runTransform,
@@ -48,7 +69,7 @@ import {
   pnpmWildcardOverrides,
   versions,
 } from "../versions.ts"
-import { assigns, type EnvVar, localEnvFile, PnpmMissing, TemplatesDir } from "./create.ts"
+import { type EnvVar, PnpmMissing, TemplatesDir } from "./create.ts"
 
 export class NotAnEfforgeProject extends Schema.TaggedError<NotAnEfforgeProject>()(
   "NotAnEfforgeProject",
@@ -500,9 +521,12 @@ export const addAddons = (
         ...cardTransforms(m).flatMap(transformTargets),
       ])
         if (!present.has(file) && safe(file) && (yield* read(file)) !== undefined) present.add(file)
+    // AGENTS.md's sections are placed by syncAgents below, in the add-ons' order; the section
+    // transforms only run on a project without AGENTS.md, where they say what to add by hand
+    const hasAgents = (yield* read(AGENTS_FILE)) !== undefined
     const active = scope.flatMap(({ manifest: m }) =>
-      [...m.transforms, ...presentCardTransforms(m, (file) => present.has(file))].filter((t) =>
-        switchedOn(m.id, t.when),
+      [...m.transforms, ...presentCardTransforms(m, (file) => present.has(file))].filter(
+        (t) => switchedOn(m.id, t.when) && !(hasAgents && t.name === "appendAgentsSection"),
       ),
     )
     const wanted = new Set<string>()
@@ -689,32 +713,72 @@ export const addAddons = (
       }
     }
 
-    // 6. env vars
-    const envText = (yield* read(".env.example")) ?? ""
+    // 6. env vars: new ones go to .env.example and to the file `pnpm dev` reads (.dev.vars, or
+    // .env with Alchemy), with the values that work locally
+    const envText = (yield* read(ENV_EXAMPLE)) ?? ""
     const have = new Set(envText.split("\n").map((l) => l.split("=")[0]?.trim()))
-    const groups: string[] = []
-    const envVars: EnvVar[] = []
     const envFile = localEnvFile(stack)
-    const local = out.get(envFile) ?? (yield* read(envFile))
-    for (const { manifest: m } of scope) {
-      const vars = m.envVars.filter((v) => switchedOn(m.id, v.when) && !have.has(v.name))
-      for (const v of vars) {
-        have.add(v.name)
-        envVars.push({
-          name: v.name,
-          description: v.description,
-          file: envFile,
-          set: assigns(local, v.name),
-        })
+    const newEnv = envGroups(stack, addons)
+      .map((g) => ({
+        id: g.id,
+        title: g.title,
+        vars: g.vars.filter((v) => switchedOn(g.id, v.when) && !have.has(v.name)),
+      }))
+      .filter((g) => g.vars.length > 0)
+    if (newEnv.length > 0) {
+      const base = envText.replace(exampleHeader(manifest.stack), exampleHeader(stack))
+      out.set(
+        ENV_EXAMPLE,
+        appendBlock(base === "" ? exampleHeader(stack) : base, renderGroups(newEnv)),
+      )
+      written.add(ENV_EXAMPLE)
+    } else if (
+      stack.infra !== manifest.stack.infra &&
+      envText.includes(exampleHeader(manifest.stack))
+    ) {
+      out.set(ENV_EXAMPLE, envText.replace(exampleHeader(manifest.stack), exampleHeader(stack)))
+      written.add(ENV_EXAMPLE)
+    }
+    const localBefore = yield* read(envFile)
+    let local = localBefore ?? LOCAL_HEADER
+    // Alchemy reads .env: what .dev.vars held moves there, and .dev.vars goes
+    if (envFile !== DEV_VARS) {
+      const devVars = yield* read(DEV_VARS)
+      if (devVars !== undefined && localBefore === undefined) {
+        // .env doesn't exist yet: .dev.vars becomes it, as it is
+        local = devVars
+        removed.add(DEV_VARS)
+      } else if (devVars !== undefined) {
+        const moved = assignments(devVars).filter((l) => !assigns(local, nameOf(l)))
+        if (moved.length > 0)
+          local = appendBlock(
+            local,
+            `# From .dev.vars (efforge add ${newIds.join(" ")})\n${moved.join("\n")}`,
+          )
+        removed.add(DEV_VARS)
       }
-      if (vars.length > 0)
-        groups.push(`# ${m.title}\n${vars.map((v) => `${v.name}=${v.example}`).join("\n")}`)
     }
-    if (groups.length > 0) {
-      const base = envText === "" || envText.endsWith("\n") ? envText : `${envText}\n`
-      out.set(".env.example", `${base}${base === "" ? "" : "\n"}${groups.join("\n\n")}\n`)
-      written.add(".env.example")
+    // a project without any local settings (a fresh clone) gets every setting, else the new ones
+    const toWrite = (local === LOCAL_HEADER ? envGroups(stack, addons) : newEnv)
+      .map((g) => ({
+        id: g.id,
+        title: g.title,
+        vars: g.vars.filter((v) => !assigns(local, v.name)),
+      }))
+      .filter((g) => g.vars.length > 0)
+    if (toWrite.length > 0) local = appendBlock(local, renderGroups(toWrite))
+    if (local !== (localBefore ?? LOCAL_HEADER)) {
+      out.set(envFile, local)
+      written.add(envFile)
     }
+    const envVars: EnvVar[] = newEnv.flatMap((g) =>
+      g.vars.map((v) => ({
+        name: v.name,
+        description: v.description,
+        file: envFile,
+        set: v.dev !== undefined || assignsValue(local, v.name),
+      })),
+    )
 
     // 6b. the README's marked regions describe the new stack; a README without them is the user's
     if (newIds.length > 0) {
@@ -726,7 +790,6 @@ export const addAddons = (
             stack,
             addons,
             scripts: rootScripts(out.get("package.json") ?? (yield* read("package.json"))),
-            devVars: out.has(".dev.vars") || (yield* read(".dev.vars")) !== undefined,
           }),
         )
         if (filled.kind !== "filled") notes.push(readmeNote(filled))
@@ -1160,17 +1223,10 @@ export const addHandler = (input: {
     // a new database needs its tables before the app (or sign-up) can use it; when the last
     // install never finished, neither did the steps after it, so count the ids already there too
     const touched = [...result.added.map((a) => a.id), ...(owed ? result.skipped : [])]
-    const database = touched.find((id) => id.startsWith("database/"))?.split("/")[1]
-    const alchemy = manifest.stack.infra === "alchemy" || touched.includes("infra/alchemy")
-    const afterInstall: Step[] = [
-      ...(database === "postgres"
-        ? [
-            { command: "docker compose up -d --wait", note: "local Postgres" },
-            { command: "pnpm db:migrate" },
-          ]
-        : []),
-      ...(database === "d1" && !alchemy ? [{ command: "pnpm db:migrate", note: "local D1" }] : []),
-    ]
+    // the same setup steps `create` and the README's "Run it" give for this stack
+    const afterInstall: Step[] = touched.some((id) => id.startsWith("database/"))
+      ? setupSteps(result.stack)
+      : []
     const steps: Step[] = [
       ...(!installs && (owed || !installed || (changes && depsChanged))
         ? [{ command: INSTALL }]
@@ -1282,7 +1338,7 @@ export const addHandler = (input: {
       ...steps.map((s) => `  ${pc.cyan(s.command)}`),
       ...(result.envVars.length > 0
         ? [
-            `${steps.length > 0 ? "\n" : ""}${pc.bold("New env vars")} ${pc.dim("(in .env.example; local values in .dev.vars)")}`,
+            `${steps.length > 0 ? "\n" : ""}${pc.bold("New env vars")} ${pc.dim(`(in .env.example; local values in ${localEnvFile(result.stack)})`)}`,
             // full descriptions, wrapped under the name: the hint at the end is often the useful part
             ...result.envVars.map(
               (v) =>

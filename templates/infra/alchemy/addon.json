@@ -26,6 +26,8 @@
     {
       "name": "CLOUDFLARE_ACCOUNT_ID",
       "example": "your-account-id",
+
+      "dev": "",
       "description": "Needed by `pnpm run deploy`, with CLOUDFLARE_API_TOKEN; `pnpm exec alchemy provider check-env -c infra/alchemy.run.ts` checks both."
     }
   ],
@@ -35,8 +37,8 @@
     "purpose": "Declares the Worker and its bindings in TypeScript, in `infra/alchemy.run.ts`, instead of `wrangler.jsonc`, which it removes. `pnpm dev` and `pnpm run deploy` go through Alchemy, and `.github/workflows/deploy.yml` deploys a preview stage for each pull request.",
     "limits": [
       "It uses an Alchemy 2.0 beta; the exact version is under Dependencies.",
-      "Local secrets are read from `.env`, not `.dev.vars`.",
-      "On D1, `pnpm db:migrate` still expects a `wrangler.jsonc`."
+      "Local settings are in `.env`, not `.dev.vars`: `efforge add infra/alchemy` moves them there.",
+      "On D1, `pnpm db:migrate` is not used: `pnpm dev` and `pnpm run deploy` apply the migrations."
     ]
   },
   "transforms": [

@@ -34,11 +34,7 @@
 
 ## Add more
 
-Every capability is an add-on. List them, then add one:
-
-```sh
-npx create-efforge list
-npx create-efforge add email
-```
+<!-- efforge:readme:more -->
+<!-- /efforge:readme:more -->
 
 `add` writes the add-on's files, wires its layer into `apps/web/src/server/layers.ts`, adds its variables to `.env.example` and updates the marked sections of this README. [`AGENTS.md`](AGENTS.md) says how to work in this code, for people and coding agents.

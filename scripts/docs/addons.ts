@@ -78,8 +78,6 @@ const describe = (t: AddonManifest["transforms"][number]): string => {
       return `Declares ${code(a.name ?? "")} and binds it to the Worker as ${code(a.binding ?? "")}.`
     case "addWorkflowSecret":
       return `Passes the ${code(a.name ?? "")} secret to the deploy job.`
-    case "addDevVar":
-      return `Sets ${code(`${a.name}=${a.value}`)} for local development.`
     case "appendAgentsSection":
       return "Adds the rules under [Rules it adds to AGENTS.md](#rules-it-adds-to-agentsmd)."
     default:
@@ -481,7 +479,16 @@ const page = (m: AddonManifest, dir: string, existing: ReadonlySet<string>): str
       `Sets the ${plural(names.length, "script", "scripts")} ${names.map(code).join(", ")}; a script of the same name is replaced.`,
     )
   }
-  if (m.envVars.length > 0) edit(".env.example", "Adds the environment variables listed below.")
+  if (m.envVars.length > 0) {
+    edit(
+      ".env.example",
+      "Adds the environment variables listed below, each with its local value, or empty where it needs a real secret.",
+    )
+    edit(
+      ".dev.vars",
+      "Adds the same lines: `pnpm dev` reads them from here (gitignored). With Alchemy the file is `.env`.",
+    )
+  }
   edit("efforge.jsonc", "Records the add-on in the stack and the hashes of the files it wrote.")
   for (const [file, edits] of byFile) {
     lines.push("", `### ${code(file)}`, "")
@@ -508,8 +515,14 @@ const page = (m: AddonManifest, dir: string, existing: ReadonlySet<string>): str
   if (m.envVars.length === 0) lines.push("None.")
   for (const v of m.envVars) {
     const example = v.example === "" ? "" : `, for example ${code(v.example)}`
+    const local =
+      v.dev === undefined
+        ? " No local value: fill it in."
+        : v.dev === ""
+          ? " Empty locally."
+          : ` Locally ${code(v.dev)}.`
     lines.push(
-      `- ${code(v.name)}${example}: ${escapeMarkdown(v.description.replace(/\.$/, ""))}.${onlyWhen(v.when)}`,
+      `- ${code(v.name)}${example}: ${escapeMarkdown(v.description.replace(/\.$/, ""))}.${local}${onlyWhen(v.when)}`,
     )
   }
 

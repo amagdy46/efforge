@@ -31,6 +31,8 @@
     {
       "name": "STORAGE_SIGNING_SECRET",
       "example": "change-me-to-a-long-random-string",
+
+      "dev": "dev-only-storage-signing-secret-replace-me",
       "description": "HMAC secret for signed download URLs (wrangler secret put STORAGE_SIGNING_SECRET)"
     }
   ],
@@ -124,13 +126,6 @@
         "infra": [
           "alchemy"
         ]
-      }
-    },
-    {
-      "name": "addDevVar",
-      "args": {
-        "name": "STORAGE_SIGNING_SECRET",
-        "value": "dev-only-storage-signing-secret-replace-me"
       }
     },
     {

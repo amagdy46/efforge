@@ -5,7 +5,7 @@ import { Context, Effect, Exit, Option, Path, Schema } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { parse as parseJsonc } from "jsonc-parser"
 import pc from "picocolors"
-import { addonIdsFor, type LoadedAddon, loadAddons } from "../addon.ts"
+import { type LoadedAddon, loadAddons } from "../addon.ts"
 import {
   BIN,
   type Failure,
@@ -17,10 +17,11 @@ import {
 } from "../contract.ts"
 import { COMMIT, exec, FORMAT, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
 import { alternative, finish, fix, meantName, withFlag } from "../fix.ts"
-import { generate, matches } from "../generate.ts"
+import { generate } from "../generate.ts"
 import { askStack, DEFAULT_NAME, type StackFlags } from "../prompts/flow.ts"
 import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
 import { projectDirName } from "../projectName.ts"
+import { envGroups, localEnvFile } from "../env.ts"
 import { planSteps, renderSteps, type Step } from "../readme.ts"
 
 export type { Step } from "../readme.ts"
@@ -106,7 +107,7 @@ export const leftBehind = (o: {
   // the setup still owed, then what a finished create would have said
   nextSteps: [
     ...o.remaining.map((command) => ({ command })),
-    ...planSteps(o.stack, { installed: o.installRequested, devVars: false }),
+    ...planSteps(o.stack, { installed: o.installRequested }),
   ].map((s) => Object.assign({}, s, { cwd: o.dir })),
   warnings: o.warnings,
 })
@@ -124,7 +125,6 @@ export const nextSteps = (
     readonly dirName: string
     readonly inPlace: boolean
     readonly installed: boolean
-    readonly devVars: boolean
   },
 ): string => {
   const steps: Step[] = [
@@ -151,35 +151,17 @@ export interface EnvVar {
   readonly set: boolean
 }
 
-export const localEnvFile = (stack: StackConfig): string =>
-  stack.infra === "alchemy" ? ".env" : ".dev.vars"
-
-/** True when `text` (a .dev.vars or .env file) assigns `name`. */
-export const assigns = (text: string | undefined, name: string): boolean =>
-  text !== undefined && text.split("\n").some((l) => l.trimStart().startsWith(`${name}=`))
-
 /** Every env var of `stack`, in add-on order, as `create` leaves them. */
-export const envFor = (
-  stack: StackConfig,
-  addons: ReadonlyMap<string, LoadedAddon>,
-  tree: ReadonlyMap<string, string>,
-): EnvVar[] => {
-  const file = localEnvFile(stack)
-  const seen = new Set<string>()
-  const out: EnvVar[] = []
-  for (const id of addonIdsFor(stack))
-    for (const v of addons.get(id)?.manifest.envVars ?? []) {
-      if (!matches(v.when, stack) || seen.has(v.name)) continue
-      seen.add(v.name)
-      out.push({
-        name: v.name,
-        description: v.description,
-        file,
-        set: assigns(tree.get(file), v.name),
-      })
-    }
-  return out
-}
+export const envFor = (stack: StackConfig, addons: ReadonlyMap<string, LoadedAddon>): EnvVar[] =>
+  envGroups(stack, addons).flatMap((g) =>
+    g.vars.map((v) => ({
+      name: v.name,
+      description: v.description,
+      file: localEnvFile(stack),
+      // efforge wrote a value that works locally; a real secret is written empty
+      set: v.dev !== undefined,
+    })),
+  )
 
 /** validate -> generate -> (dry-run | write -> git init -> pnpm install -> route tree -> format -> commit). */
 export const create = (opts: CreateOptions) =>
@@ -240,7 +222,7 @@ export const create = (opts: CreateOptions) =>
     const addons = yield* loadAddons(templatesDir)
     const tree = yield* generate(stack, addons)
     const files = [...tree.keys()].toSorted()
-    const env = envFor(stack, addons, tree)
+    const env = envFor(stack, addons)
 
     const shownCommand = inPlace
       ? command.replace(` create ${stack.name} --yes`, " create . --yes")
@@ -397,7 +379,6 @@ export const create = (opts: CreateOptions) =>
       ),
     )
 
-    const devVars = tree.has(".dev.vars")
     if (opts.json)
       return yield* printSuccess({
         dryRun: false,
@@ -408,15 +389,12 @@ export const create = (opts: CreateOptions) =>
         installed: opts.install,
         git: gitState,
         env,
-        nextSteps: planSteps(stack, { installed: opts.install, devVars }).map((s) =>
+        nextSteps: planSteps(stack, { installed: opts.install }).map((s) =>
           Object.assign({}, s, { cwd: dir }),
         ),
         warnings,
       })
-    yield* io.note(
-      nextSteps(stack, { dirName, inPlace, installed: opts.install, devVars }),
-      "Next steps",
-    )
+    yield* io.note(nextSteps(stack, { dirName, inPlace, installed: opts.install }), "Next steps")
     yield* io.outro(
       `${pc.green("Done.")} ${pc.dim("Add more later:")} ${BIN} list${inPlace ? "" : ` --cwd ${dirName}`}\n   ${pc.dim("Same stack again:")} ${command}`,
     )
@@ -718,7 +696,7 @@ export const createFailure = (
       const rest = project.remaining
       const steps = [
         ...rest.map((command) => ({ command })),
-        ...planSteps(project.stack, { installed: true, devVars: false }),
+        ...planSteps(project.stack, { installed: true }),
       ].map((x) => Object.assign({}, x, { cwd: dir }))
       // only the project this command would have made is finished; anything else is a choice
       const same = requested !== undefined && sameStack(project.stack, requested)
