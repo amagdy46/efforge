@@ -165,7 +165,7 @@ const parseId = (raw: string): Effect.Effect<{ slot: SlotDef; option: string }, 
       ? id.split("/", 2)
       : [undefined, id]
   const unknown = (message: string) => Effect.fail(new UnknownAddon({ id: raw, message }))
-  if (option === "none") return unknown(`Removing an add-on isn't supported in v0.1 ("${raw}").`)
+  if (option === "none") return unknown(`Removing an add-on isn't supported yet ("${raw}").`)
   const candidates = slots.filter(
     (s) => (slotPart === undefined || s.id === slotPart) && s.options.some((o) => o.id === option),
   )
@@ -212,7 +212,7 @@ const applyIds = (
           slot.id,
           option,
           [current],
-          `${slot.id} is already "${current}"; swapping an existing choice isn't supported in v0.1. Create a new project to use a different ${slot.id}.`,
+          `${slot.id} is already "${current}"; swapping an existing choice isn't supported yet. Create a new project to use a different ${slot.id}.`,
         )
     }
     const valid = yield* validate(next).pipe(

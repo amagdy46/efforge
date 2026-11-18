@@ -88,7 +88,7 @@ export const nextSteps = (
   if (!o.installed) steps.push(["pnpm install"])
   if (stack.infra === "alchemy") {
     steps.push(["cp .env.example .env", "local values for Alchemy"])
-    // D1 migrations still need wrangler.jsonc under Alchemy (a known v0.1 gap, docs/limits.md)
+    // D1 migrations still need wrangler.jsonc under Alchemy (a known gap, docs/limits.md)
     if (stack.database === "postgres") {
       steps.push(["docker compose up -d --wait", "local Postgres"])
       steps.push(["pnpm db:migrate"])
