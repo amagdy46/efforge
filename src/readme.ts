@@ -55,7 +55,10 @@ export const runSteps = (stack: StackConfig, o: { readonly devVars: boolean }): 
   // alchemy dev applies D1 migrations to its local database itself
   if (stack.database === "d1" && !alchemy)
     steps.push({ command: "pnpm db:migrate", note: "create the tables in the local D1" })
-  steps.push({ command: "pnpm dev", note: "http://localhost:5173" })
+  steps.push({
+    command: "pnpm dev",
+    note: alchemy ? "http://localhost:1337" : "http://localhost:5173",
+  })
   return steps
 }
 
@@ -346,9 +349,8 @@ const deployWrangler = (input: ReadmeInput): string => {
     )
   const notes = [
     ...(ids.includes("extras/storage") ? ["creates the R2 bucket"] : []),
-    ...(ids.includes("extras/workflows") || ids.includes("extras/realtime")
-      ? ["registers the Durable Objects and Workflows declared in `wrangler.jsonc`"]
-      : []),
+    ...(ids.includes("extras/realtime") ? ["registers the `Room` Durable Object"] : []),
+    ...(ids.includes("extras/workflows") ? ["registers the example Workflow"] : []),
   ]
   steps.push(
     `Deploy: \`pnpm run deploy\` (builds \`apps/web\`, then \`wrangler deploy\`).${notes.length > 0 ? ` The first deploy ${and(notes)}.` : ""}${ids.includes("extras/browser") ? " Docker must be running: the deploy builds the `apps/browser` image and pushes it (Containers need the Workers Paid plan)." : ""}`,

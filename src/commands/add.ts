@@ -838,12 +838,11 @@ const wrap = (text: string, width: number): string[] => {
 
 const list = (files: ReadonlyArray<string>, mark: string) => files.map((f) => `${mark} ${f}`)
 
-/** An added add-on's title, then where its card, AGENTS.md sections and docs are. */
+/** An added add-on's title, then where its card and AGENTS.md sections are. */
 const addedLines = (a: AddedAddon): string[] => {
   const facts: Array<[string, string]> = []
   if (a.card !== undefined) facts.push(["card", `${a.card} ${pc.dim("(on /app)")}`])
   if (a.agents !== undefined) facts.push(["AGENTS.md", a.agents.map((h) => `"${h}"`).join(", ")])
-  if (a.docs !== undefined) facts.push(["docs", a.docs])
   if (facts.length === 0) return []
   return [`\n${pc.bold(a.title)}`, ...facts.map(([k, v]) => `  ${pc.dim(k.padEnd(9))} ${v}`)]
 }
@@ -982,6 +981,9 @@ export const addHandler = (input: {
       ...result.added.flatMap(addedLines),
     ]
     if (steps.length > 0) yield* io.note(steps.join("\n").replace(/^\n/, ""), "Next steps")
+    // outside the box, so a narrow terminal does not break the links
+    const docs = result.added.flatMap((a) => (a.docs === undefined ? [] : [a.docs]))
+    if (docs.length > 0) yield* io.info(`Docs:\n${docs.join("\n")}`)
     yield* io.outro(`${pc.green("Done.")} ${pc.dim("Review the changes with")} git diff`)
   }).pipe(
     Effect.catch((e) =>
