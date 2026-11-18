@@ -393,10 +393,9 @@ export const create = (opts: CreateOptions) =>
         installed: opts.install,
         git: gitState,
         env,
-        nextSteps: planSteps(stack, { installed: opts.install }).map((s) => ({
-          ...s,
-          cwd: dir,
-        })),
+        nextSteps: planSteps(stack, { installed: opts.install }).map((s) =>
+          Object.assign({}, s, { cwd: dir }),
+        ),
         warnings,
       })
     yield* io.note(nextSteps(stack, { dirName, inPlace, installed: opts.install }), "Next steps")
@@ -450,7 +449,9 @@ export const createConfig = {
     Flag.withDefault(false),
   ),
   json: Flag.Boolean("json").pipe(
-    Flag.withDescription("Print one JSON document on stdout, nothing else (implies --yes; docs/json.md)"),
+    Flag.withDescription(
+      "Print one JSON document on stdout, nothing else (implies --yes; docs/json.md)",
+    ),
     Flag.withDefault(false),
   ),
   install: Flag.Boolean("install").pipe(
@@ -580,7 +581,12 @@ export const createFailure = (
             code: "IncompatibleStack",
             message: `--${slot}=${value} can't be used here${typeof e.reason === "string" ? `: ${e.reason}.` : `. Options: ${allowed.join(", ")}.`}`,
             fix,
-            details: { flag: `--${slot}`, value, allowed, ...(typeof e.reason === "string" ? { reason: e.reason } : {}) },
+            details: {
+              flag: `--${slot}`,
+              value,
+              allowed,
+              ...(typeof e.reason === "string" ? { reason: e.reason } : {}),
+            },
           }
         : {
             code: "UnknownValue",
@@ -600,7 +606,12 @@ export const createFailure = (
     }
     case "TargetNotEmpty": {
       const dir = String(e.dir)
-      const taken = nameIndex(args) === undefined ? DEFAULT_NAME : flags.name === "." ? basename(dir) : (flags.name ?? DEFAULT_NAME)
+      const taken =
+        nameIndex(args) === undefined
+          ? DEFAULT_NAME
+          : flags.name === "."
+            ? basename(dir)
+            : (flags.name ?? DEFAULT_NAME)
       return {
         code: "TargetNotEmpty",
         message: `${dir} already exists and isn't empty. Pick another name or remove it.`,

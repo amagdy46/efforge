@@ -56,8 +56,28 @@ const stackFlags = ["--auth=none", "--infra=none", "--ai=none"]
 it("dry-run --json prints the contract's create document and writes nothing", async () => {
   await cli(["app", "--dry-run", "--json", ...stackFlags, "--extras=email"]).p
   const out = JSON.parse(logs.join("\n"))
-  expect(Object.keys(out).toSorted()).toEqual(["command", "contract", "directory", "dryRun", "efforge", "env", "files", "git", "installed", "nextSteps", "ok", "stack", "warnings"])
-  expect(out).toMatchObject({ ok: true, contract: 1, dryRun: true, installed: false, git: "skipped" })
+  expect(Object.keys(out).toSorted()).toEqual([
+    "command",
+    "contract",
+    "directory",
+    "dryRun",
+    "efforge",
+    "env",
+    "files",
+    "git",
+    "installed",
+    "nextSteps",
+    "ok",
+    "stack",
+    "warnings",
+  ])
+  expect(out).toMatchObject({
+    ok: true,
+    contract: 1,
+    dryRun: true,
+    installed: false,
+    git: "skipped",
+  })
   expect(out.stack).toMatchObject({
     name: "app",
     database: "postgres",
@@ -197,7 +217,21 @@ it("--json without --dry-run keeps stdout JSON-only and writes the project", asy
   await p
   expect(s.output).toEqual([])
   const out = JSON.parse(logs.join("\n"))
-  expect(Object.keys(out).toSorted()).toEqual(["command", "contract", "directory", "dryRun", "efforge", "env", "files", "git", "installed", "nextSteps", "ok", "stack", "warnings"])
+  expect(Object.keys(out).toSorted()).toEqual([
+    "command",
+    "contract",
+    "directory",
+    "dryRun",
+    "efforge",
+    "env",
+    "files",
+    "git",
+    "installed",
+    "nextSteps",
+    "ok",
+    "stack",
+    "warnings",
+  ])
   expect(out).toMatchObject({ dryRun: false, installed: false, git: "skipped" })
   expect(existsSync(join(tmp, "app", "efforge.jsonc"))).toBe(true)
 })

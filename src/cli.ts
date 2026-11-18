@@ -202,10 +202,7 @@ export const completionScript = (shell: "bash" | "zsh" | "fish" | "powershell"):
   const script = Completions.generate("create-efforge", shell, Completions.fromCommand(root))
   switch (shell) {
     case "bash":
-      return script.replace(
-        /^(complete -F (\S+) create-efforge)$/m,
-        "$1\ncomplete -F $2 efforge",
-      )
+      return script.replace(/^(complete -F (\S+) create-efforge)$/m, "$1\ncomplete -F $2 efforge")
     case "zsh":
       return script
         .replace(/^#compdef create-efforge$/m, "#compdef create-efforge efforge")

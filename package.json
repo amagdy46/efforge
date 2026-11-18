@@ -25,6 +25,7 @@
   },
   "files": [
     "dist",
+    "schemas",
     "templates"
   ],
   "type": "module",
@@ -38,7 +39,8 @@
     "lint": "vp lint",
     "format": "vp fmt",
     "check": "vp check",
-    "smoke:pack": "node scripts/smoke-pack.ts"
+    "smoke:pack": "node scripts/smoke-pack.ts",
+    "schemas": "node scripts/schemas.ts"
   },
   "devDependencies": {
     "@clack/prompts": "1.9.0",

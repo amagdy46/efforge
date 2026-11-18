@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/create-efforge/schemas/error.schema.json",
+  "type": "object",
+  "properties": {
+    "efforge": {
+      "type": "string",
+      "description": "The CLI version that printed this."
+    },
+    "contract": {
+      "type": "number",
+      "enum": [
+        1
+      ],
+      "description": "The version of this contract. It changes only when a field is renamed, removed or changes meaning."
+    },
+    "ok": {
+      "type": "boolean",
+      "enum": [
+        false
+      ]
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "UnknownFlag",
+            "InvalidFlagValue",
+            "UnexpectedArgument",
+            "UnknownCommand",
+            "NeedsInput",
+            "UnknownValue",
+            "IncompatibleStack",
+            "InvalidProjectName",
+            "TargetNotEmpty",
+            "PnpmMissing",
+            "SetupIncomplete",
+            "WriteFailed",
+            "NotAnEfforgeProject",
+            "NoAddonIds",
+            "UnknownAddon",
+            "SlotAlreadySet",
+            "RemoveNotSupported",
+            "OverlayConflict",
+            "TransformAnchorMissing",
+            "CommandFailed",
+            "InternalError"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "fix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A command to run instead, or null when there is none."
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "fix"
+      ],
+      "additionalProperties": true,
+      "description": "More fields depend on `code`; see docs/json.md."
+    }
+  },
+  "required": [
+    "efforge",
+    "contract",
+    "ok",
+    "error"
+  ],
+  "additionalProperties": true,
+  "title": "efforge --json error"
+}

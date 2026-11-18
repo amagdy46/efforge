@@ -86,7 +86,7 @@ export const isCI = (): boolean => {
 }
 
 /** Prompts need a terminal on stdin, and never run in CI: there a missing answer fails at once. */
-export const canPrompt = (): boolean => process.stdin.isTTY === true && !isCI()
+export const canPrompt = (): boolean => process.stdin.isTTY && !isCI()
 
 /** A section header waits for the first prompt under it, so a run that prompts for nothing prints none. */
 let pendingSection: string | undefined

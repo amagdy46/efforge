@@ -10,7 +10,6 @@ import { type AddonLoadError, addonIdsFor, loadAddons } from "../addon.ts"
 import {
   commandLine,
   distance,
-  dropFlag,
   type Failure,
   inDir,
   insertAt,
@@ -149,7 +148,13 @@ const suggest = (id: string): string[] => {
   const partial = allIds.filter((full) => full.split("/").some((part) => part.startsWith(id)))
   if (partial.length > 0) return partial
   const best = allIds
-    .flatMap((full) => [[full, full], [full, full.split("/")[1] as string]] as const)
+    .flatMap(
+      (full) =>
+        [
+          [full, full],
+          [full, full.split("/")[1] as string],
+        ] as const,
+    )
     .map(([full, c]) => [full, distance(id, c)] as const)
     .toSorted((a, b) => a[1] - b[1])[0]
   return best !== undefined && best[1] <= 3 ? [best[0]] : []
@@ -634,6 +639,7 @@ export const addAddons = (
       out.set(
         "efforge.jsonc",
         renderManifest({
+          ...(manifest.$schema === undefined ? {} : { $schema: manifest.$schema }),
           efforgeVersion: manifest.efforgeVersion,
           stack,
           command: toCommand(stack),
@@ -781,7 +787,8 @@ export const addFailure = (
       return {
         code: "IncompatibleStack",
         message: `Can't add ${String(e.slot)}/${String(e.value)}: ${typeof e.reason === "string" ? e.reason : "not compatible with the current stack."}`,
-        fix: needs.length > 0 && first !== undefined ? run(insertAt(args, first[0], ...needs)) : null,
+        fix:
+          needs.length > 0 && first !== undefined ? run(insertAt(args, first[0], ...needs)) : null,
         details: {
           slot: String(e.slot),
           value: String(e.value),
@@ -931,8 +938,7 @@ export const addHandler = (input: {
 
     const manifest = yield* readManifest(dir)
     // a picker for people belongs here later; for now, say what there is to add
-    if (input.ids.length === 0)
-      return yield* new NoAddonIds({ available: addable(manifest.stack) })
+    if (input.ids.length === 0) return yield* new NoAddonIds({ available: addable(manifest.stack) })
     if (newer(manifest.efforgeVersion, efforgeVersion))
       yield* io.warn(
         `This project was made with efforge ${manifest.efforgeVersion}, newer than this CLI (${efforgeVersion}). Use npx create-efforge@latest add.`,
@@ -1012,7 +1018,7 @@ export const addHandler = (input: {
         replacedScripts: result.replacedScripts,
         installed: installs,
         env: result.envVars,
-        nextSteps: steps.map((s) => ({ ...s, cwd: dir })),
+        nextSteps: steps.map((s) => Object.assign({}, s, { cwd: dir })),
         warnings,
       })
     }
