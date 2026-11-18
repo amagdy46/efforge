@@ -59,6 +59,8 @@ const cardsRequireSession = async (page: Page) => {
   await database.getByRole("button", { name: "Add note" }).click()
   await database.getByText("written by Ann").waitFor()
   const realtime = page.locator("#realtime")
+  // a signed-in user's socket is let in
+  await realtime.getByText("Connected", { exact: true }).waitFor()
   await realtime.getByRole("button", { name: "Send from the server" }).click()
   await realtime.getByText(/broadcast it to/).waitFor()
 
@@ -77,11 +79,29 @@ const cardsRequireSession = async (page: Page) => {
       Buffer.from(call.url().split("/_serverFn/")[1]?.split("?")[0] ?? "", "base64url").toString(),
     ).export as string
     names.add(name.split("_")[0] as string)
-    if (!body.includes("Unauthorized"))
+    // the guard's own refusal: its tag and its message, not merely the word somewhere in the body
+    if (!body.includes("Unauthorized") || !body.includes("Not signed in"))
       throw new Error(
         `${name} answered a request without a session: ${response.status} ${body.slice(0, 200)}`,
       )
   }
+  // the realtime room refuses a socket without a session, with a close code the card can show
+  const socket = new WebSocket(
+    `${page
+      .url()
+      .replace(/^http/, "ws")
+      .replace(/\/app.*$/, "")}/ws/rooms/demo`,
+  )
+  const closed = await new Promise<{ code: number; reason: string }>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("an anonymous socket was not closed")), 15_000)
+    socket.addEventListener("message", () => reject(new Error("an anonymous socket got a message")))
+    socket.addEventListener("close", ({ code, reason }) => {
+      clearTimeout(timer)
+      resolve({ code, reason })
+    })
+  })
+  if (closed.code !== 4401)
+    throw new Error(`an anonymous socket closed with ${closed.code} ${closed.reason}, not 4401`)
   for (const fn of ["greet", "listNotes", "addNote", "announce"])
     if (!names.has(fn))
       throw new Error(`the dashboard never called ${fn}; replayed ${[...names].join(", ")}`)

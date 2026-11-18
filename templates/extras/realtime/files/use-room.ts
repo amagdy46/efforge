@@ -6,7 +6,11 @@ export interface RoomMessage {
   readonly text: string
 }
 
-export type RoomStatus = "connecting" | "open" | "closed"
+/** `refused`: the room turned the socket away (no session on a stack with auth); no retry. */
+export type RoomStatus = "connecting" | "open" | "closed" | "refused"
+
+/** The close code the Worker uses for an upgrade without a session (realtime-route.ts). */
+export const NOT_SIGNED_IN = 4401
 
 // answered by Cloudflare without waking the room (see `installKeepalive` in realtime/Room.ts)
 const PING = "effect-cf:ping"
@@ -16,6 +20,7 @@ const PONG = "effect-cf:pong"
 export function useRoom(roomId: string) {
   const [messages, setMessages] = useState<ReadonlyArray<RoomMessage>>([])
   const [status, setStatus] = useState<RoomStatus>("connecting")
+  const [reason, setReason] = useState("")
   const nextId = useRef(0)
   const socket = useRef<WebSocket | null>(null)
 
@@ -36,6 +41,8 @@ export function useRoom(roomId: string) {
       ws.addEventListener("open", () => {
         setStatus("open")
         attempt = 0
+        // the first ping tells the room a client is here (see realtime/Room.ts)
+        ws.send(PING)
         ping = setInterval(() => ws.send(PING), 30_000)
       })
       ws.addEventListener("message", ({ data }: MessageEvent) => {
@@ -44,10 +51,15 @@ export function useRoom(roomId: string) {
           setMessages((all) => [...all, message].slice(-MAX_KEPT_MESSAGES))
         }
       })
-      ws.addEventListener("close", () => {
+      ws.addEventListener("close", (event: CloseEvent) => {
         clearInterval(ping)
-        setStatus("closed")
-        if (!closed) retry = setTimeout(connect, reconnectDelay(attempt++))
+        if (event.code === NOT_SIGNED_IN) {
+          setStatus("refused")
+          setReason(event.reason)
+        } else {
+          setStatus("closed")
+          if (!closed) retry = setTimeout(connect, reconnectDelay(attempt++))
+        }
       })
     }
     // #endregion
@@ -57,7 +69,11 @@ export function useRoom(roomId: string) {
       closed = true
       clearTimeout(retry)
       clearInterval(ping)
-      socket.current?.close()
+      const ws = socket.current
+      // closing mid-handshake can leave the room's end open; close once the handshake is done
+      if (ws?.readyState === WebSocket.CONNECTING)
+        ws.addEventListener("open", () => ws.close(), { once: true })
+      else ws?.close()
     }
   }, [roomId])
 
@@ -65,5 +81,5 @@ export function useRoom(roomId: string) {
     if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(message)
   }, [])
 
-  return { messages, status, send }
+  return { messages, status, reason, send }
 }
