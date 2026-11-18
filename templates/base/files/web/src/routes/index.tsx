@@ -171,13 +171,15 @@ function Landing() {
       <footer className="border-t">
         <p className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-4 text-xs text-muted-foreground sm:px-6">
           <EfforgeMark />
-          Made with{" "}
-          <a
-            href="https://github.com/amagdy46/efforge"
-            className="underline-offset-4 hover:text-foreground hover:underline"
-          >
-            efforge
-          </a>
+          <span>
+            Made with{" "}
+            <a
+              href="https://github.com/amagdy46/efforge"
+              className="underline-offset-4 hover:text-foreground hover:underline"
+            >
+              efforge
+            </a>
+          </span>
         </p>
       </footer>
     </div>

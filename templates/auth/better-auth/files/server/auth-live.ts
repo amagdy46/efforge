@@ -21,10 +21,10 @@ const BetterAuthLive = Layer.effect(
     return makeAuth({
       database,
       secret: Redacted.value(secret),
-      // in `pnpm dev` the origin comes from each request, so sign-in works on whatever port Vite
-      // picks; a deployed Worker uses BETTER_AUTH_URL when it is set
+      // under `pnpm dev` the origin comes from each request on a local host, so sign-in works on
+      // whatever port Vite picks; a deployed Worker uses BETTER_AUTH_URL when it is set
       baseURL: import.meta.env.DEV
-        ? undefined
+        ? { allowedHosts: ["localhost:*", "127.0.0.1:*"], protocol: "http" }
         : Option.getOrUndefined(Option.filter(baseURL, (url) => url !== "")),
     })
   }),

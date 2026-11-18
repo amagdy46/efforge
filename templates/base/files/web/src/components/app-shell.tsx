@@ -51,12 +51,14 @@ export function AppShell({
 }) {
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
-      <aside className="sticky top-0 hidden h-screen flex-col gap-6 border-r bg-muted/40 p-4 lg:flex">
-        <ProjectLink />
-        {sidebar}
-        <nav aria-label="App" className="flex flex-col gap-1">
-          <NavLinks compact={false} />
-        </nav>
+      <aside className="hidden border-r bg-muted/40 lg:block">
+        <div className="sticky top-0 flex flex-col gap-6 p-4">
+          <ProjectLink />
+          {sidebar}
+          <nav aria-label="App" className="flex flex-col gap-1">
+            <NavLinks compact={false} />
+          </nav>
+        </div>
       </aside>
       <div className="flex min-w-0 flex-col">
         <header className="sticky top-0 z-10 flex items-center gap-3 border-b bg-background/90 px-4 py-2.5 backdrop-blur lg:px-8">
