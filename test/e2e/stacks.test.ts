@@ -38,6 +38,16 @@ const sh = (cwd: string, command: string) => {
 }
 
 /**
+ * Unmet peers inside third-party packages that efforge can't fix from a template. Upstream as of
+ * 2026-11-18: @alchemy.run/cloudflare-runtime depends on `unenv: ^2.0.0-rc.24` (now rc.25) and on
+ * @cloudflare/unenv-preset, which peers on exactly 2.0.0-rc.24. The stack still passes its gate.
+ */
+const knownUpstreamPeer = (peer: string, parents: ReadonlyArray<{ name: string }>) =>
+  peer === "unenv" &&
+  parents.some((p) => p.name === "@alchemy.run/cloudflare-runtime") &&
+  parents.at(-1)?.name === "@cloudflare/unenv-preset"
+
+/**
  * What the drift guard promises, checked against the real install: every package released with
  * `effect` resolved to the catalog's `effect` version (not only the ones the project names), and
  * pnpm reports no unmet peers.
@@ -57,7 +67,28 @@ const checkEffectLockstep = (dir: string) => {
   })
   if (drifted.length > 0)
     throw new Error(`Effect packages not at effect ${effect}: ${drifted.join(", ")}`)
-  sh(dir, "pnpm peers check")
+  // optional peers outside their range are warnings (alchemy's capnp-es asks for typescript 5 or
+  // 6); a required peer, or any Effect package, out of range is a failure
+  const peers = spawnSync("pnpm", ["peers", "check", "--json"], { cwd: dir, encoding: "utf8" })
+  type Issue = {
+    optional: boolean
+    wantedRange?: string
+    foundVersion?: string
+    parents: Array<{ name: string }>
+  }
+  const report = JSON.parse(peers.stdout) as Record<
+    string,
+    { bad: Record<string, Issue[]>; missing: Record<string, Issue[]> }
+  >
+  const unmet = Object.entries(report).flatMap(([project, r]) =>
+    [...Object.entries(r.bad), ...Object.entries(r.missing)].flatMap(([peer, issues]) =>
+      issues
+        .filter((i) => !i.optional || isEffectLockstep(peer))
+        .filter((i) => !knownUpstreamPeer(peer, i.parents))
+        .map((i) => `${project}: ${peer} ${i.foundVersion ?? "missing"}, wanted ${i.wantedRange}`),
+    ),
+  )
+  if (unmet.length > 0) throw new Error(`unmet peers:\n${unmet.join("\n")}`)
 }
 
 /** Generates `config` into a tmp dir and installs it, ready for the checks `create` runs next. */
