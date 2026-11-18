@@ -34,7 +34,7 @@ let port = Number(values.port)
 let base = `http://localhost:${port}`
 const rounds = Number(values.rounds)
 const scenarios =
-  values.scenario === "both" ? ["socket-first", "concurrent"] : [values.scenario as string]
+  values.scenario === "both" ? ["socket-first", "concurrent"] : [values.scenario]
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
