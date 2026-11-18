@@ -11,10 +11,21 @@ export interface Transform {
 }
 const identity: Transform = { scale: 1, x: 0, y: 0 }
 
-const tokenize = (d: string): Array<string | number> =>
-  (d.match(/[A-Za-z]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/g) ?? []).map((t) =>
-    /[A-Za-z]/.test(t) ? t : Number(t),
-  )
+type Token = { readonly cmd: string } | { readonly num: number; readonly raw: string }
+
+const TOKEN = /([A-Za-z])|(-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)|([\s,]+)|(.)/gy
+
+/** Splits path data into commands and numbers; throws on any character it cannot read. */
+const tokenize = (d: string): Token[] => {
+  const out: Token[] = []
+  for (const m of d.matchAll(TOKEN)) {
+    if (m[1] !== undefined) out.push({ cmd: m[1] })
+    else if (m[2] !== undefined) out.push({ num: Number(m[2]), raw: m[2] })
+    else if (m[4] !== undefined)
+      throw new Error(`path data: unexpected ${JSON.stringify(m[4])} at offset ${m.index}`)
+  }
+  return out
+}
 
 /** Flattens a path into closed polygons, in device coordinates. */
 export const flatten = (d: string, t: Transform = identity): Pt[][] => {
@@ -27,7 +38,27 @@ export const flatten = (d: string, t: Transform = identity): Pt[][] => {
   let sy = 0
   let cmd = ""
   let i = 0
-  const num = () => tokens[i++] as number
+  let closed = false
+  const num = (): number => {
+    const tok = tokens[i]
+    if (tok === undefined || !("num" in tok))
+      throw new Error(
+        `path data: ${cmd} needs a number, got ${tok === undefined ? "the end" : tok.cmd} (token ${i})`,
+      )
+    i++
+    return tok.num
+  }
+  // An arc flag is one digit, 0 or 1. Optimizers write flags without separators ("A4 4 0 008 52"),
+  // which this parser does not split, so refuse anything else rather than draw the wrong arc.
+  const flag = (): boolean => {
+    const tok = tokens[i]
+    if (tok === undefined || !("num" in tok) || (tok.raw !== "0" && tok.raw !== "1"))
+      throw new Error(
+        `path data: arc flag must be 0 or 1, got ${tok === undefined ? "the end" : "num" in tok ? tok.raw : tok.cmd} (token ${i}); write arc flags with separators`,
+      )
+    i++
+    return tok.num !== 0
+  }
   const tol = 0.1 / t.scale
   const push = (x: number, y: number) => poly.push([x * t.scale + t.x, y * t.scale + t.y])
   const close = () => {
@@ -36,7 +67,17 @@ export const flatten = (d: string, t: Transform = identity): Pt[][] => {
   }
   const steps = (len: number) => Math.max(2, Math.min(64, Math.ceil(Math.sqrt(len / tol) / 2)))
   while (i < tokens.length) {
-    if (typeof tokens[i] === "string") cmd = tokens[i++] as string
+    const tok = tokens[i] as Token
+    if ("cmd" in tok) {
+      cmd = tok.cmd
+      i++
+    } else if (cmd === "" || cmd.toUpperCase() === "Z")
+      throw new Error(`path data: number ${tok.raw} with no command before it (token ${i})`)
+    if (closed && cmd.toUpperCase() !== "M" && cmd.toUpperCase() !== "Z")
+      throw new Error(
+        `path data: subpath continues after Z with ${cmd}; start it with M (token ${i})`,
+      )
+    closed = false
     const rel = cmd === cmd.toLowerCase()
     const ox = rel ? cx : 0
     const oy = rel ? cy : 0
@@ -107,8 +148,8 @@ export const flatten = (d: string, t: Transform = identity): Pt[][] => {
         const rx0 = num()
         const ry0 = num()
         const phi = (num() * Math.PI) / 180
-        const large = num() !== 0
-        const sweep = num() !== 0
+        const large = flag()
+        const sweep = flag()
         const x = ox + num()
         const y = oy + num()
         arc(cx, cy, rx0, ry0, phi, large, sweep, x, y, tol, push)
@@ -120,9 +161,10 @@ export const flatten = (d: string, t: Transform = identity): Pt[][] => {
         cx = sx
         cy = sy
         close()
+        closed = true
         break
       default:
-        throw new Error(`unsupported path command ${cmd}`)
+        throw new Error(`path data: unsupported command ${cmd} (supported: M L H V Q C A Z)`)
     }
   }
   close()
