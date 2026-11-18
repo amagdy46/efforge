@@ -24,7 +24,7 @@ const sendWelcome = (to: string) =>
 
 // Test layer: keeps each message in an array instead of sending it.
 const outbox: Array<MailMessage> = []
-const MailerInMemory = Layer.succeed(
+const MailerTest = Layer.succeed(
   Mailer,
   Mailer.of({ send: (message) => Effect.sync(() => outbox.push(message)) }),
 )
@@ -35,7 +35,7 @@ const MailerDown = Layer.succeed(
   Mailer.of({ send: () => Effect.fail(new MailerError({ operation: "send", cause: "down" })) }),
 )
 
-layer(MailerInMemory)("with a working mailer", (it) => {
+layer(MailerTest)("with a working mailer", (it) => {
   it.effect("sends the welcome message", () =>
     Effect.gen(function* () {
       expect(yield* sendWelcome("ada@example.com")).toBe("sent")
@@ -58,9 +58,9 @@ layer(MailerDown)("with a mailer that is down", (it) => {
 What each part does:
 
 - **`sendWelcome`** is the code under test. In a real app it would live in `packages/core/src`; it is in the test file here to keep the example in one place. It asks for `Mailer` with `yield* Mailer`, and turns a `MailerError` into the value `"not sent"` with `Effect.catchTag`.
-- **`MailerInMemory`** is a test layer. `Layer.succeed(Mailer, Mailer.of({ ... }))` builds a layer from a plain object that has the service's methods. Its `send` pushes the message into `outbox`.
+- **`MailerTest`** is a test layer. `Layer.succeed(Mailer, Mailer.of({ ... }))` builds a layer from a plain object that has the service's methods. Its `send` pushes the message into `outbox`.
 - **`MailerDown`** is a second test layer, for the failure path. Its `send` fails with the same tagged error the real layer uses, so the test exercises the `catchTag` branch.
-- **`layer(MailerInMemory)(name, (it) => { ... })`** from `@effect/vitest` builds the layer once for the tests inside, and provides it to each `it.effect`.
+- **`layer(MailerTest)(name, (it) => { ... })`** from `@effect/vitest` builds the layer once for the tests inside, and provides it to each `it.effect`.
 - **`it.effect`** runs a test written as an Effect: `yield*` the code under test, then assert with `expect`.
 
 The real `MailerLive` is never imported, so the test needs no Cloudflare runtime, no `EMAIL` binding and no network.

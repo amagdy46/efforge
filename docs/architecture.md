@@ -1,8 +1,8 @@
 # Why your app is shaped like this
 
-In an efforge project, every server capability (the database, auth, email, storage, AI) is built the same way, from three pieces: an interface, a layer that implements it, and one line in one file that puts the layer in the app. A test swaps that layer for another. This page walks through the pieces with email as the example, then the two places where Cloudflare and Effect meet, then the path of one request.
+Every server capability in an efforge project (database, auth, email, storage, AI) is built from the same three pieces: an interface, a layer that implements it, and one line in one file that puts the layer in the app. A test swaps the layer for another. This page shows the pieces with email as the example, then the two places where Cloudflare and Effect meet, then the path of one request.
 
-It assumes you know TypeScript and have heard of Effect. Every Effect term is defined where it first appears. The code is from a project made with `npm create efforge my-app -- --yes --extras=email` (the default stack plus email); `test/docs.test.ts` checks every sample against the files efforge generates.
+You need TypeScript and to have heard of Effect; each Effect term is defined where it first appears. The code comes from `npm create efforge my-app -- --yes --extras=email`, and `test/docs.test.ts` checks every sample against what efforge generates.
 
 ## The idea in one picture
 
@@ -22,7 +22,7 @@ The same facts as text:
 
 ## 1. A capability is an interface
 
-Here is the email capability's interface, from `packages/core/src/mailer.ts`:
+The email interface, from `packages/core/src/mailer.ts`:
 
 <!-- sample: packages/core/src/mailer.ts -->
 ```ts
@@ -32,9 +32,9 @@ export class Mailer extends Context.Service<
 >()("@repo/core/Mailer") {}
 ```
 
-`send` returns an `Effect.Effect<void, MailerError>`. An **Effect** is a description of work that has not run yet. When something runs it, it either succeeds with a value (here `void`) or fails with an error of the type in the second slot (here `MailerError`). Failures are part of the type, so the compiler knows how `send` can fail.
+An **Effect** is a description of work that has not run yet. When it runs, it succeeds with a value (here `void`) or fails with an error of the second type (here `MailerError`). Failures are part of the type, so the compiler knows how `send` can fail.
 
-`Mailer` is a **service**: a named interface that code asks for, instead of importing an implementation. Code that sends mail looks like this (from the [testing guide's example](examples/extras-email/mailer.test.ts)):
+`Mailer` is a **service**: a named interface that code asks for instead of importing an implementation. Sending mail looks like this (from the [testing guide's example](examples/extras-email/mailer.test.ts)):
 
 <!-- sample: repo:docs/examples/extras-email/mailer.test.ts -->
 ```ts
@@ -46,23 +46,15 @@ const sendWelcome = (to: string) =>
   }).pipe(Effect.catchTag("MailerError", () => Effect.succeed("not sent" as const)))
 ```
 
-`Effect.gen` lets you write Effect code like `async` code, with `yield*` where you would write `await`. `yield* Mailer` asks for the service. The type of `sendWelcome` records that it needs a `Mailer`; it does not run until one is provided.
+`Effect.gen` reads like `async` code, with `yield*` for `await`. `yield* Mailer` asks for the service.
 
 `MailerError` is a **tagged error**: a class with a `_tag` field, so code can handle each kind of failure by name, as `Effect.catchTag("MailerError", ...)` does above.
 
-<!-- sample: packages/core/src/mailer.ts -->
-```ts
-export class MailerError extends Data.TaggedError("MailerError")<{
-  readonly operation: string
-  readonly cause: unknown
-}> {}
-```
-
-Interfaces and their errors live in `packages/core`. That package has no Cloudflare code, so it type-checks and tests anywhere.
+Interfaces and their errors live in `packages/core`. It has no Cloudflare code, so it type-checks and tests anywhere.
 
 ## 2. A layer implements it
 
-A **layer** builds a service. It may need other services, and it can fail while it builds. Here is the smallest one in the email add-on, from `apps/web/src/server/mailer.ts`. It prints each message instead of sending it:
+A **layer** builds a service. It may need other services, and it can fail while it builds. The smallest one in the email add-on, from `apps/web/src/server/mailer.ts`, prints each message instead of sending it:
 
 <!-- sample: apps/web/src/server/mailer.ts -->
 ```ts
@@ -78,7 +70,7 @@ const ConsoleMailer = (from: string) =>
   )
 ```
 
-`MailerLive`, in the same file, is the layer the app uses. It reads `MAIL_TRANSPORT`: `console` picks the layer above (`.dev.vars` sets it for `pnpm dev`), anything else picks one that sends through Cloudflare Email Service. If `MAIL_FROM` is missing in production, `MailerLive` fails with `MailerConfigError` when it is built, before any mail is sent.
+`MailerLive`, in the same file, is the layer the app uses. With `MAIL_TRANSPORT=console` (set in `.dev.vars` for `pnpm dev`) it picks the layer above; otherwise it sends through Cloudflare Email Service, and fails with `MailerConfigError` when it is built if `MAIL_FROM` is missing.
 
 Layers live in `apps/web/src/server`, next to the Cloudflare code they use.
 
@@ -97,28 +89,28 @@ export const AppLayer = Layer.mergeAll(
 )
 ```
 
-`AppLayer` provides every service the app has. `efforge add` adds a layer here, before the `/* efforge:layers */` marker, so keep the `Layer.mergeAll(...)` shape. To change how a service works, change which layer is listed; the code that asks for `Mailer` stays the same.
+`AppLayer` provides every service the app has. `efforge add` adds layers before the `/* efforge:layers */` marker, so keep the `Layer.mergeAll(...)` shape. To change how a service works, change the layer listed here; code that asks for `Mailer` stays the same.
 
 ## 4. A test swaps one out
 
-A **test layer** is a second implementation of the same interface, made for tests. This one keeps messages in an array:
+A **test layer** is another implementation of the same interface, made for tests:
 
 <!-- sample: repo:docs/examples/extras-email/mailer.test.ts -->
 ```ts
 const outbox: Array<MailMessage> = []
-const MailerInMemory = Layer.succeed(
+const MailerTest = Layer.succeed(
   Mailer,
   Mailer.of({ send: (message) => Effect.sync(() => outbox.push(message)) }),
 )
 ```
 
-The test runs `sendWelcome` with this layer instead of `MailerLive`, so it needs no Cloudflare and sends no mail. [Swap a layer to test](testing.md) has the full test and the rules for tests.
+The test runs `sendWelcome` with `MailerTest` instead of `MailerLive`, so it needs no Cloudflare and sends no mail. [Swap a layer to test](testing.md) has the whole test.
 
 ## Two seams that keep this working on Workers
 
 ### Only `cloudflare.ts` reads the Worker environment
 
-A **binding** is how a Worker reaches a Cloudflare resource: the `HYPERDRIVE` database connection, an R2 bucket, the `EMAIL` sender. Cloudflare passes bindings in an object called `env`. One file reads it:
+A **binding** is how a Worker reaches a Cloudflare resource: the `HYPERDRIVE` database connection, an R2 bucket, the `EMAIL` sender. Cloudflare passes bindings in an object called `env`, and one file reads it:
 
 <!-- sample: apps/web/src/server/cloudflare.ts -->
 ```ts
@@ -134,23 +126,21 @@ import { WorkerEnvironment } from "effect-cf"
 export const WorkerEnvLive = Layer.succeed(WorkerEnvironment, env)
 ```
 
-Bindings arrive with each request, but layers are built once and reused. Importing `env` from `cloudflare:workers` gives the bindings outside any request, so `WorkerEnvLive` is a plain layer, and every other layer gets its binding from it through [effect-cf](https://github.com/danieljvdm/effect-cf) (`DatabaseLayer`, for example, takes `HYPERDRIVE`).
+Bindings arrive with each request, but layers are built once and reused. Importing `env` from `cloudflare:workers` gives the bindings outside any request, so `WorkerEnvLive` is a plain layer, and every other layer gets its binding from it through [effect-cf](https://github.com/danieljvdm/effect-cf).
 
-What this prevents: `cloudflare:workers` exists only inside workerd, Cloudflare's runtime. A file that imports it cannot load under Vitest in Node. With one file reading `env`, the rest of the code never imports it, and a test replaces the layers above it instead. Lint enforces the rule: importing `env` anywhere else fails `pnpm check` with "Read bindings through effect-cf layers; only server/cloudflare.ts reads env."
+What this prevents: `cloudflare:workers` exists only inside workerd, Cloudflare's runtime, so a file that imports it cannot load under Vitest in Node. Because only `cloudflare.ts` imports it, the rest of the code loads in tests. Lint enforces the rule: importing `env` anywhere else fails `pnpm check` with "Read bindings through effect-cf layers; only server/cloudflare.ts reads env."
 
 ### One file runs your Effects: `runtime.ts`
 
-A **runtime** runs Effects. It builds the layers an Effect needs, runs the Effect, and closes what the layers opened. Server functions never run Effects themselves; they hand them to `runtime.runPromise`, which returns a Promise that settles when the Effect succeeds or fails.
+A **runtime** runs Effects. It builds the layers an Effect needs, runs it, and closes what the layers opened. Server functions hand their Effects to `runtime.runPromise`, which returns a Promise.
 
-Which `runtime.ts` you get depends on the database. Without Postgres (D1, or no database), it is one `ManagedRuntime` per isolate (an **isolate** is one running copy of your Worker; it serves many requests):
+Without Postgres (D1, or no database), `runtime.ts` is one `ManagedRuntime` per isolate. An **isolate** is one running copy of your Worker; it serves many requests. The runtime builds `AppLayer` on the first request and reuses it:
 
 <!-- sample: repo:templates/base/files/web/src/server/runtime.ts -->
 ```ts
 /** One runtime per Worker isolate; server functions run their Effects on it. */
 export const runtime = ManagedRuntime.make(AppLayer)
 ```
-
-It builds `AppLayer` on the first request and reuses it for the rest.
 
 With Postgres, it builds `AppLayer` for each call and closes it afterwards:
 
@@ -167,13 +157,13 @@ export const runtime = {
 }
 ```
 
-What this prevents: Workers do not let one request use an I/O object, such as a socket, that another request opened. Cloudflare fails it with "Cannot perform I/O on behalf of a different request". And a handler whose Promise never settles fails with "The script will never generate a response". Keeping the runtime in one file decides once, for every handler, when layers are built and closed, and every handler gets a Promise that settles.
+What this prevents: a Worker may not use a socket that another request opened (Cloudflare fails it with "Cannot perform I/O on behalf of a different request"), and a handler whose Promise never settles fails with "The script will never generate a response". Because the runtime lives in one file, one place decides when layers are built and closed, for every handler.
 
-One exception: `apps/web/src/server/invitation-email.ts` makes its own runtime for `MailerLive`, because Better Auth calls it from inside the auth layer, and importing `runtime.ts` there would be an import cycle.
+Exception: `apps/web/src/server/invitation-email.ts` has its own runtime for `MailerLive`, because Better Auth calls it from inside the auth layer.
 
 ## How a request flows
 
-The dashboard at `/app` lists notes. Here is that request, from the browser to Postgres:
+The dashboard at `/app` lists notes. That request, from the browser to Postgres:
 
 ```text
 GET /app
@@ -187,7 +177,7 @@ GET /app
   Postgres       through Hyperdrive
 ```
 
-The server function is the whole middle of that list:
+A **server function** is a TanStack Start function that runs on the server and can be called from a route or a component. This one is the middle of the list:
 
 <!-- sample: apps/web/src/server/notes.ts -->
 ```ts
@@ -201,20 +191,13 @@ export const listNotes = createServerFn({ method: "GET" }).handler(() =>
 )
 ```
 
-A **server function** is a TanStack Start function that runs on the server and can be called from a route or a component. Each one is a thin shell: it hands an Effect program to the runtime. The program asks for services, the runtime provides them from `AppLayer`, and each layer reaches its binding through `WorkerEnvLive`.
-
 ## What `efforge add` changes, and what it leaves alone
 
-`efforge add extras/email` writes the add-on's own files and makes small, listed edits to the files that compose the app. For email:
+`efforge add extras/email` writes the add-on's own files (the interface and the layers) and makes small edits to the files that compose the app: `layers.ts`, the re-exports in `packages/core/src/index.ts`, the binding in `wrangler.jsonc` or `infra/alchemy.run.ts`, `.dev.vars`, `.env.example`, `AGENTS.md` and `efforge.jsonc`. [The email page](addons/extras-email.md) lists each edit.
 
-- **New files:** `packages/core/src/mailer.ts` (the interface), `apps/web/src/server/mailer.ts` (the layers), and with organizations `apps/web/src/server/invitation-email.ts`.
-- **Edits:** a re-export in `packages/core/src/index.ts`, `MailerLive` in `layers.ts`, the `EMAIL` binding in `wrangler.jsonc` (or `infra/alchemy.run.ts`), two lines in `.dev.vars`, the variables in `.env.example`, a section in `AGENTS.md`, and the stack in `efforge.jsonc`.
-
-It edits code with AST transforms (edits to the parsed code, not text search and replace), so each edit touches only what it adds, and running it twice changes nothing. It never touches your routes, components, schema or the code that uses services. It records a hash of each file it generates in `efforge.jsonc` and refuses to replace one you have edited unless you pass `--overwrite`. It works out every change first and writes nothing if any step fails. [The email page](addons/extras-email.md) lists every edit; each add-on has a page under [docs/addons](addons/README.md).
+It edits code with AST transforms (changes to the parsed code, not text replacement), so an edit touches only what it adds, and running it twice changes nothing. It never touches your routes, components, schema or the code that uses services. It refuses to replace a generated file you have edited unless you pass `--overwrite`, and it writes nothing if any step fails.
 
 ## Where to go next
 
 - [Swap a layer to test](testing.md): test layers and the test rules.
 - [Add-ons](addons/README.md): what each add-on adds and edits.
-- [CLI reference](cli.md): every flag.
-- The generated `AGENTS.md`: the same rules, written for coding agents.

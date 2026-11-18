@@ -12,7 +12,7 @@ const sendWelcome = (to: string) =>
 
 // Test layer: keeps each message in an array instead of sending it.
 const outbox: Array<MailMessage> = []
-const MailerInMemory = Layer.succeed(
+const MailerTest = Layer.succeed(
   Mailer,
   Mailer.of({ send: (message) => Effect.sync(() => outbox.push(message)) }),
 )
@@ -23,7 +23,7 @@ const MailerDown = Layer.succeed(
   Mailer.of({ send: () => Effect.fail(new MailerError({ operation: "send", cause: "down" })) }),
 )
 
-layer(MailerInMemory)("with a working mailer", (it) => {
+layer(MailerTest)("with a working mailer", (it) => {
   it.effect("sends the welcome message", () =>
     Effect.gen(function* () {
       expect(yield* sendWelcome("ada@example.com")).toBe("sent")
