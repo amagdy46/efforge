@@ -5,6 +5,8 @@ import { addonIdsFor } from "./addon.ts"
 import { presentCardTransforms } from "./cards.ts"
 import { hash, manifestSchemaUrl, renderManifest } from "./manifest.ts"
 import { applyProjectName } from "./projectName.ts"
+import { syncAgents } from "./agents.ts"
+import { AGENTS_FILE } from "./transforms/appendAgentsSection.ts"
 import { fillReadme, README_FILE, readmeRegions } from "./readme.ts"
 import { SlotId, type StackConfig, toCommand } from "./stack.ts"
 import {
@@ -211,6 +213,13 @@ export const generate = (
     // final (named) content and `add` sees an unedited README/wrangler.jsonc as unchanged.
     const out = new Map(applyProjectName(tree, config.name))
 
+    // AGENTS.md's sections, in the add-ons' order, as `add` keeps them
+    const agents = out.get(AGENTS_FILE)
+    if (agents !== undefined) {
+      const synced = syncAgents(agents, config, addons)
+      if (synced.kind === "synced") out.set(AGENTS_FILE, synced.text)
+    }
+
     // the README's marked regions describe the final stack; `add` rewrites them, so the README is a
     // seam, never hash-checked
     const readme = out.get(README_FILE)
@@ -224,8 +233,8 @@ export const generate = (
           devVars: out.has(".dev.vars"),
         }),
       )
-      if (filled !== undefined) {
-        out.set(README_FILE, filled)
+      if (filled.kind === "filled") {
+        out.set(README_FILE, filled.text)
         seams.add(README_FILE)
       }
     }

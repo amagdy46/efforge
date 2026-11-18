@@ -427,22 +427,47 @@ const section = (id: string, content: string): TransformCall => ({
   args: { id, content },
 })
 
-it("appendAgentsSection inserts before the footer, once per id, in order", async () => {
+it("appendAgentsSection inserts before the footer between markers, and rewrites its own section", async () => {
   const a = await once({ "AGENTS.md": AGENTS }, section("db", "## Database\nUse migrations.\n"))
   expect(a.get("AGENTS.md")).toBe(
-    "# Agents\n\nBody\n\n<!-- efforge:section:db -->\n\n## Database\nUse migrations.\n\n<!-- efforge:agents -->\n",
+    "# Agents\n\nBody\n\n<!-- efforge:section:db -->\n\n## Database\nUse migrations.\n\n<!-- /efforge:section:db -->\n\n<!-- efforge:agents -->\n",
   )
   const b = await once(Object.fromEntries(a), section("rt", "## Realtime"))
   expect(b.get("AGENTS.md")).toBe(
-    "# Agents\n\nBody\n\n<!-- efforge:section:db -->\n\n## Database\nUse migrations.\n\n<!-- efforge:section:rt -->\n\n## Realtime\n\n<!-- efforge:agents -->\n",
+    "# Agents\n\nBody\n\n<!-- efforge:section:db -->\n\n## Database\nUse migrations.\n\n<!-- /efforge:section:db -->\n\n<!-- efforge:section:rt -->\n\n## Realtime\n\n<!-- /efforge:section:rt -->\n\n<!-- efforge:agents -->\n",
   )
-  const c = await run(b, section("db", "## Changed"))
-  expect(c).toBe(b)
+  expect(await run(b, section("rt", "## Realtime"))).toBe(b)
+  const c = await once(Object.fromEntries(b), section("db", "## Changed"))
+  expect(c.get("AGENTS.md")).toBe(
+    (b.get("AGENTS.md") as string).replace("## Database\nUse migrations.", "## Changed"),
+  )
+})
+
+it("appendAgentsSection keeps the old format (no closing markers) and leaves broken markers alone", async () => {
+  const old =
+    "# Agents\n\n<!-- efforge:section:db -->\n\n## Database\n\nmine\n\n<!-- efforge:agents -->\n"
+  const t = await once({ "AGENTS.md": old }, section("rt", "## Realtime"))
+  expect(t.get("AGENTS.md")).toBe(
+    old.replace(
+      "<!-- efforge:agents -->",
+      "<!-- efforge:section:rt -->\n\n## Realtime\n\n<!-- efforge:agents -->",
+    ),
+  )
+  expect(await run(new Map([["AGENTS.md", old]]), section("db", "## Changed"))).toEqual(
+    new Map([["AGENTS.md", old]]),
+  )
+  const broken =
+    "# A\n\n<!-- efforge:section:db -->\nx\n<!-- /efforge:section:db -->\n<!-- /efforge:section:db -->\n"
+  expect(await run(new Map([["AGENTS.md", broken]]), section("rt", "## R"))).toEqual(
+    new Map([["AGENTS.md", broken]]),
+  )
 })
 
 it("appendAgentsSection appends when the footer is gone and fails without AGENTS.md", async () => {
   const t = await once({ "AGENTS.md": "# Agents\n" }, section("x", "## X"))
-  expect(t.get("AGENTS.md")).toBe("# Agents\n\n<!-- efforge:section:x -->\n\n## X\n")
+  expect(t.get("AGENTS.md")).toBe(
+    "# Agents\n\n<!-- efforge:section:x -->\n\n## X\n\n<!-- /efforge:section:x -->\n",
+  )
   const e = await fail(new Map(), section("x", "## X"))
   expect(e).toBeInstanceOf(TransformAnchorMissing)
 })

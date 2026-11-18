@@ -193,11 +193,14 @@ it("a region whose markers the user deleted keeps their text", async () => {
   expect(region(readme(), "capabilities")).toContain("**Storage**")
 })
 
-it("fillReadme ignores an unclosed region and returns undefined without markers", async () => {
+it("fillReadme fills nothing when a region is unclosed, and says there are no markers", async () => {
   const regions = readmeRegions({ stack: pg, addons: await addons(), scripts: {}, devVars: false })
-  expect(fillReadme("# x\n", regions)).toBeUndefined()
+  expect(fillReadme("# x\n", regions)).toEqual({ kind: "no-markers" })
   const half = "<!-- efforge:readme:about -->\nmine\n"
-  expect(fillReadme(half, regions)).toBeUndefined()
+  expect(fillReadme(half, regions)).toEqual({
+    kind: "malformed",
+    problems: ["<!-- efforge:readme:about --> (line 1) has no <!-- /efforge:readme:about -->"],
+  })
 })
 
 it("add tells where each new add-on's card, AGENTS.md sections and docs are", async () => {
@@ -238,4 +241,60 @@ it("the ORM, database and Alchemy add-ons each bring an AGENTS.md section", asyn
   expect(s).toContain("## Queries and migrations (Effect SQL)")
   expect(s).not.toContain("Infrastructure (Alchemy)")
   expect((await agents(minimal)).match(/efforge:section:/g)).toBeNull()
+})
+
+// the review's three ways a marker string occurring twice cost user text (W2-D, B2)
+for (const [name, damage, problem] of [
+  [
+    "a marker quoted in prose above its region",
+    (t: string) =>
+      t.replace("## Run it", "Do not remove `<!-- efforge:readme:run -->` below.\n\n## Run it"),
+    undefined,
+  ],
+  [
+    "an opening marker twice, with the user's text between",
+    (t: string) =>
+      t.replace(
+        "<!-- efforge:readme:run -->",
+        "<!-- efforge:readme:run -->\n\nOur note between.\n\n<!-- efforge:readme:run -->",
+      ),
+    "<!-- efforge:readme:run --> appears 2 times",
+  ],
+  [
+    "a closing marker gone, and a second pair lower down",
+    (t: string) =>
+      `${t.replace("<!-- /efforge:readme:run -->", "")}\n## Appendix\n\nOurs.\n\n<!-- efforge:readme:run -->\n\nold\n\n<!-- /efforge:readme:run -->\n`,
+    "<!-- efforge:readme:run --> appears 2 times",
+  ],
+] as const)
+  it(`add keeps every user line when ${name}`, async () => {
+    await run(writeTree(dir, await generated(minimal)))
+    const mine = damage(readme())
+    writeFileSync(join(dir, "README.md"), mine)
+    const result = await run(addAddons(dir, ["database/d1", "orm/drizzle"], opts))
+    const note = result.notes.find((n) => n.startsWith("README.md"))
+    if (problem === undefined) {
+      // prose, not a marker: the regions are rewritten and the sentence stays
+      expect(note).toBeUndefined()
+      expect(readme()).toContain("Do not remove `<!-- efforge:readme:run -->` below.\n\n## Run it")
+      expect(region(readme(), "run")).toContain("pnpm db:migrate")
+    } else {
+      expect(readme()).toBe(mine)
+      expect(note).toContain(problem)
+    }
+  })
+
+it("add leaves a broken AGENTS.md alone and names the marker", async () => {
+  await run(writeTree(dir, await generated(pg)))
+  const path = join(dir, "AGENTS.md")
+  const mine = readFileSync(path, "utf8").replace(
+    "<!-- /efforge:section:database -->",
+    "<!-- /efforge:section:database -->\n\n<!-- /efforge:section:database -->",
+  )
+  writeFileSync(path, mine)
+  const result = await run(addAddons(dir, ["email"], opts))
+  expect(readFileSync(path, "utf8")).toBe(mine)
+  expect(result.notes.find((n) => n.startsWith("AGENTS.md"))).toContain(
+    "<!-- /efforge:section:database --> appears 2 times",
+  )
 })

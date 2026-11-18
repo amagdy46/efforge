@@ -24,12 +24,13 @@ import { installOwed } from "../installed.ts"
 import { introLine } from "../intro.ts"
 import { EfforgeManifest, hash, renderManifest } from "../manifest.ts"
 import { applyProjectName } from "../projectName.ts"
-import { fillReadme, README_FILE, readmeRegions, type Step } from "../readme.ts"
+import { fillReadme, README_FILE, readmeNote, readmeRegions, type Step } from "../readme.ts"
 import { generateRouteTree } from "../routeTree.ts"
 import { IncompatibleStack, validate } from "../rules.ts"
 import { type SlotDef, slots } from "../slots.ts"
 import { type StackConfig, toCommand } from "../stack.ts"
 import { AGENTS_FILE } from "../transforms/appendAgentsSection.ts"
+import { agentsNote, syncAgents } from "../agents.ts"
 import { WRANGLER_FILE } from "../transforms/addWranglerBinding.ts"
 import {
   runTransform,
@@ -531,6 +532,19 @@ export const addAddons = (
           else out.delete(file)
         }
     }
+    // AGENTS.md's sections follow the new stack: rewritten in order, stale ones dropped
+    if (newIds.length > 0) {
+      const agents = current.get(AGENTS_FILE) ?? (yield* read(AGENTS_FILE))
+      if (agents !== undefined) {
+        const synced = syncAgents(agents, stack, addons)
+        if (synced.kind === "malformed") notes.push(agentsNote(synced.problems))
+        else if (synced.text !== agents) {
+          seams.add(AGENTS_FILE)
+          if (synced.text !== disk.get(AGENTS_FILE)) out.set(AGENTS_FILE, synced.text)
+          else out.delete(AGENTS_FILE)
+        }
+      }
+    }
     const transformed = new Set<string>()
     for (const file of seams) {
       // seam files are re-edited by transforms on every add, never hash-checked
@@ -715,15 +729,12 @@ export const addAddons = (
             devVars: out.has(".dev.vars") || (yield* read(".dev.vars")) !== undefined,
           }),
         )
-        if (filled === undefined)
-          notes.push(
-            `${README_FILE} has no efforge:readme markers (made before efforge 0.3, or rewritten), so it was left as it is.`,
-          )
-        else if (filled !== readme) {
-          out.set(README_FILE, filled)
+        if (filled.kind !== "filled") notes.push(readmeNote(filled))
+        else if (filled.text !== readme) {
+          out.set(README_FILE, filled.text)
           if (!written.has(README_FILE)) transformed.add(README_FILE)
         }
-        if (filled !== undefined) seams.add(README_FILE)
+        if (filled.kind !== "no-markers") seams.add(README_FILE)
       }
     }
 

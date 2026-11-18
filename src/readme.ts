@@ -4,6 +4,7 @@ import { INSTALL } from "./exec.ts"
 import { matches } from "./generate.ts"
 import { projectDirName } from "./projectName.ts"
 import type { StackConfig } from "./stack.ts"
+import { type Filled, fillRegions } from "./regions.ts"
 import { versions } from "./versions.ts"
 
 /**
@@ -24,8 +25,7 @@ export const README_REGIONS = [
 ] as const
 export type ReadmeRegion = (typeof README_REGIONS)[number]
 
-const open = (id: string) => `<!-- efforge:readme:${id} -->`
-const close = (id: string) => `<!-- /efforge:readme:${id} -->`
+export const README_PREFIX = "efforge:readme"
 
 export interface ReadmeInput {
   readonly stack: StackConfig
@@ -417,22 +417,15 @@ export const readmeRegions = (input: ReadmeInput): Record<ReadmeRegion, string> 
 })
 
 /**
- * `text` with the content of each marked region replaced, or undefined when it has no region at
- * all. A region whose closing marker is missing is left alone; text outside regions never changes.
+ * `text` with the body of each region replaced (see `fillRegions`): `no-markers` for a README
+ * without regions, `malformed` (and nothing replaced) when a marker is duplicated, unpaired, out of
+ * order or nested.
  */
-export const fillReadme = (
-  text: string,
-  regions: Readonly<Record<ReadmeRegion, string>>,
-): string | undefined => {
-  let out = text
-  let found = false
-  for (const id of README_REGIONS) {
-    const start = out.indexOf(open(id))
-    const end = out.indexOf(close(id), start)
-    if (start === -1 || end === -1) continue
-    found = true
-    const from = start + open(id).length
-    out = `${out.slice(0, from)}\n\n${regions[id].trim()}\n\n${out.slice(end)}`
-  }
-  return found ? out : undefined
-}
+export const fillReadme = (text: string, regions: Readonly<Record<ReadmeRegion, string>>): Filled =>
+  fillRegions(text, README_PREFIX, regions)
+
+/** The one-line note `add` prints when it leaves the README as it is. */
+export const readmeNote = (filled: Exclude<Filled, { kind: "filled" }>): string =>
+  filled.kind === "no-markers"
+    ? `${README_FILE} has no efforge:readme markers (made before efforge 0.3, or rewritten), so it was left as it is.`
+    : `${README_FILE} was left as it is: ${filled.problems.join("; ")}. Keep one opening and one closing marker per region, each on a line of its own; the next efforge add rewrites the regions.`
