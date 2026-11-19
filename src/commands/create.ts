@@ -18,7 +18,14 @@ import {
 import { COMMIT, exec, FORMAT, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
 import { alternative, finish, fix, intentOf, meantName, withFlag } from "../fix.ts"
 import { generate, matches } from "../generate.ts"
-import { askStack, CUSTOM, DEFAULT_NAME, type StackFlags } from "../prompts/flow.ts"
+import {
+  askStack,
+  CUSTOM,
+  DEFAULT_NAME,
+  isPreset,
+  presetFlags,
+  type StackFlags,
+} from "../prompts/flow.ts"
 import { type Preset, presetIds, presets } from "../presets.ts"
 import { cancelled, PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
 import { projectDirName } from "../projectName.ts"
@@ -53,32 +60,46 @@ export interface CreateOptions {
   readonly git: boolean
 }
 
-/** The summary's title: says which preset, if one was used, filled the stack. */
-const stackTitle = (preset: Preset | undefined): string =>
-  preset === undefined ? "Your stack" : `Your stack (the ${preset.title} preset)`
+/** The summary's title: says which preset, if one was used, filled the stack, and if it changed. */
+const stackTitle = (preset: Preset | undefined, stack: StackConfig): string =>
+  preset === undefined
+    ? "Your stack"
+    : `Your stack (the ${preset.title} preset${isPreset(preset, stack) ? "" : ", changed"})`
 
-const summary = (stack: StackConfig): string =>
+/** The stack part by part; from a preset, also the flags that make it without the prompts. */
+const summary = (stack: StackConfig, preset: Preset | undefined): string =>
   [
     `${pc.dim("name".padEnd(9))} ${stack.name}`,
     ...slots.map((s) => {
       const v = s.id === "extras" ? stack.extras.join(", ") : stack[s.id]
       return `${pc.dim(s.id.padEnd(9))} ${v === "" ? "none" : v}`
     }),
+    ...(preset === undefined
+      ? []
+      : ["", `${pc.dim("flags".padEnd(9))} ${presetFlags(preset, stack)}`]),
   ].join("\n")
 
 /** Seconds since `start`, for the last line of a run. */
 export const elapsed = (start: number): string =>
   `${((performance.now() - start) / 1000).toFixed(1)}s`
 
-/** Label-value lines with the values in one column, each after the outro's own indent. */
+/**
+ * Label-value lines with the values in one column, each after the outro's own indent. A value
+ * that doesn't fit beside its label goes on the next line, whole (it is a command to copy).
+ */
 export const outroLines = (
   first: string,
   rows: ReadonlyArray<readonly [string, string]>,
+  columns: number = process.stdout.columns || 80,
 ): string => {
   const width = Math.max(0, ...rows.map(([label]) => label.length))
   return [
     first,
-    ...rows.map(([label, value]) => `   ${pc.dim(label.padEnd(width))}  ${value}`),
+    ...rows.map(([label, value]) =>
+      3 + width + 2 + value.length <= columns
+        ? `   ${pc.dim(label.padEnd(width))}  ${value}`
+        : `   ${pc.dim(label)}\n   ${value}`,
+    ),
   ].join("\n")
 }
 
@@ -286,21 +307,25 @@ export const create = (opts: CreateOptions) =>
     const targetFor = (name: string) =>
       inPlace ? process.cwd() : path.resolve(projectDirName(name))
     let preset: Preset | undefined
-    const stack = yield* askStack(flags, io, {
+    const dropped: string[] = []
+    const askOptions = {
       yes,
-      onPreset: (p) => {
+      onPreset: (p: Preset) => {
         preset = p
       },
+      onDropped: (m: string) => void dropped.push(m),
       checkName: opts.dryRun
         ? undefined
-        : (name) => {
+        : (name: string) => {
             const dir = targetFor(name)
             return isOccupied(dir)
               ? `${path.relative(process.cwd(), dir) || "."} already exists and isn't empty; pick another name`
               : undefined
           },
-    })
-    const command = toCommand(stack)
+    }
+    let stack = yield* askStack(flags, io, askOptions)
+    // a choice of the preset that a flag left no room for: a line here, a warning under --json
+    for (const m of dropped) yield* io.warn(m)
     const dirName = projectDirName(stack.name)
     const dir = targetFor(stack.name)
     // Fail before generating (and before the confirm prompt) rather than after the user answered everything.
@@ -310,6 +335,41 @@ export const create = (opts: CreateOptions) =>
         project === undefined ? { dir, requested: stack } : { dir, project, requested: stack },
       )
     }
+    if (!opts.dryRun)
+      for (;;) {
+        yield* io.note(summary(stack, preset), stackTitle(preset, stack))
+        if (yes) break
+        const message = `Create it in ${inPlace ? "this directory" : `./${dirName}`}?`
+        // from a preset, a person can also go through the parts, with the preset's as the defaults
+        const answer =
+          preset === undefined
+            ? yield* io.confirm({ id: "confirm", message, initial: true })
+            : yield* io.select({
+                id: "confirm",
+                message,
+                options: [
+                  { value: "yes", label: "Yes" },
+                  {
+                    value: "change",
+                    label: "Change parts",
+                    hint: "each part, with these as the defaults",
+                  },
+                  { value: "no", label: "No" },
+                ],
+                initial: "yes",
+                canGoBack: false,
+              })
+        if (answer === true || answer === "yes") break
+        if (answer !== "change") {
+          yield* io.outro("Nothing written.")
+          return
+        }
+        stack = yield* askStack({ ...flags, name: stack.name }, io, {
+          ...askOptions,
+          seed: { stack, preset },
+        })
+      }
+    const command = toCommand(stack)
     const addons = yield* loadAddons(templatesDir)
     const tree = yield* generate(stack, addons)
     const files = [...tree.keys()].toSorted()
@@ -343,7 +403,7 @@ export const create = (opts: CreateOptions) =>
           warnings,
         })
       } else {
-        yield* io.note(summary(stack), stackTitle(preset))
+        yield* io.note(summary(stack, preset), stackTitle(preset, stack))
         yield* io.note(
           filesByOrigin(stack, addons, files, opts.verbose === true),
           `Would write ${files.length} files`,
@@ -353,19 +413,6 @@ export const create = (opts: CreateOptions) =>
         )
       }
       return
-    }
-
-    yield* io.note(summary(stack), stackTitle(preset))
-    if (!yes) {
-      const ok = yield* io.confirm({
-        id: "confirm",
-        message: `Create it in ${inPlace ? "this directory" : `./${dirName}`}?`,
-        initial: true,
-      })
-      if (ok !== true) {
-        yield* io.outro("Nothing written.")
-        return
-      }
     }
 
     const remaining: string[] = []
@@ -689,7 +736,9 @@ export interface Alternative {
 
 /**
  * Every one-flag change of `flags` that resolves a conflict on `slot`: another value of any slot,
- * or `value` left out of `--extras`. None of them is a `fix`, since each drops or swaps a choice.
+ * another preset, or `value` left out of `--extras`; then every change of two slots where neither
+ * alone resolves it (auth on the minimal preset needs a database and an ORM). None of them is a
+ * `fix`, since each drops or swaps a choice.
  */
 const waysOut = (
   args: ReadonlyArray<string>,
@@ -698,30 +747,52 @@ const waysOut = (
   value: string,
 ): Alternative[] => {
   const out: Alternative[] = []
-  const add = (name: string, to: string, description: string) => {
-    const command = alternative(args, (i) => withFlag(i, name, to))
+  const add = (to: ReadonlyArray<readonly [string, string]>, description: string) => {
+    const command = alternative(args, (i) => to.reduce((x, [name, v]) => withFlag(x, name, v), i))
     if (command !== null) out.push({ command, description })
   }
+  const use = (name: string, to: string, current: string | undefined) =>
+    current === undefined ? `--${name}=${to}` : `--${name}=${to} instead of --${name}=${current}`
+  /** Each other value of each single-choice slot, with the flags it makes. */
+  const changes: Array<{ slot: string; to: string; flags: StackFlags }> = []
   for (const s of slots) {
     if (s.options.length <= 1) continue
     if (s.id === "extras") {
       const rest = (flags.extras ?? []).filter((x) => x !== value)
       if (slot === "extras" && resolves({ ...flags, extras: rest }))
-        add("extras", rest.join(","), `Leave ${value} out of --extras`)
+        add([["extras", rest.join(",")]], `Leave ${value} out of --extras`)
       continue
     }
-    const current = flags[s.id]
-    for (const o of s.options) {
-      if (o.id === current || !resolves({ ...flags, [s.id]: o.id })) continue
+    for (const o of s.options)
+      if (o.id !== flags[s.id])
+        changes.push({ slot: s.id, to: o.id, flags: { ...flags, [s.id]: o.id } })
+  }
+  const alone = new Set<string>()
+  for (const c of changes) {
+    if (!resolves(c.flags)) continue
+    alone.add(`${c.slot}=${c.to}`)
+    add(
+      [[c.slot, c.to]],
+      `Use ${use(c.slot, c.to, flags[c.slot as keyof StackFlags] as string | undefined)}`,
+    )
+  }
+  if (flags.preset !== undefined)
+    for (const p of presetIds)
+      if (p !== flags.preset && resolves({ ...flags, preset: p }))
+        add([["preset", p]], `Use ${use("preset", p, flags.preset)}`)
+  for (const [k, a] of changes.entries())
+    for (const b of changes.slice(k + 1)) {
+      if (a.slot === b.slot || alone.has(`${a.slot}=${a.to}`) || alone.has(`${b.slot}=${b.to}`))
+        continue
+      if (!resolves({ ...a.flags, [b.slot]: b.to })) continue
       add(
-        s.id,
-        o.id,
-        current === undefined
-          ? `Use --${s.id}=${o.id}`
-          : `Use --${s.id}=${o.id} instead of --${s.id}=${current}`,
+        [
+          [a.slot, a.to],
+          [b.slot, b.to],
+        ],
+        `Use ${use(a.slot, a.to, flags[a.slot as keyof StackFlags] as string | undefined)} and ${use(b.slot, b.to, flags[b.slot as keyof StackFlags] as string | undefined)}`,
       )
     }
-  }
   return out
 }
 

@@ -964,8 +964,7 @@ export const pickAddons = (
         const id = `${s.id}/${o.id}`
         if (s.id === "extras" ? stack.extras.includes(o.id as never) : current === o.id) continue
         const m = addons.get(id)?.manifest
-        const clause = (m?.description ?? "").split(/[:;,]\s|\.(?:\s|$)/)[0] ?? ""
-        const about = clause.length > 60 ? `${clause.slice(0, 59).trimEnd()}…` : clause
+        const about = (m?.description ?? "").split(/[:;,]\s|\.(?:\s|$)/)[0] ?? ""
         const blocked = current !== undefined && current !== "none"
         const needs =
           s.id === "auth" && stack.database === "none"
@@ -975,15 +974,19 @@ export const pickAddons = (
               : s.id === "orm" && stack.database === "none"
                 ? "needs a database: pick one too"
                 : undefined
-        // the hint shows beside the line under the cursor (always, for a disabled one)
+        // the hint shows beside the line under the cursor (always, for a disabled one), cut so
+        // the line fits 80 columns: "│  ◻ " before the label, " (" and ")" around the hint
+        const label = `${s.id.padEnd(width)}  ${m?.title ?? o.label}`
+        const room = 80 - 5 - label.length - 3
+        const hint = blocked
+          ? `this project has ${current}; add can't swap it`
+          : needs === undefined
+            ? about
+            : `${needs}. ${about}`
         choices.push({
           value: id,
-          label: `${s.id.padEnd(width)}  ${m?.title ?? o.label}`,
-          hint: blocked
-            ? `this project's ${s.id} is ${current}; add can't swap it`
-            : needs === undefined
-              ? about
-              : `${needs}. ${about}`,
+          label,
+          hint: hint.length > room ? `${hint.slice(0, room - 1).trimEnd()}…` : hint,
           ...(blocked ? { disabled: true } : {}),
         })
       }
@@ -1322,7 +1325,7 @@ export const addHandler = (input: {
       if (picked !== undefined) {
         const args = yield* Invocation
         const same = alternative(args, (i) => ({ ...i, operands: picked }))
-        if (same !== null) yield* io.info(`The same without the picker: ${same}`)
+        if (same !== null) yield* io.info(`The same without the picker:\n${same}`)
         ids = picked
       }
     }

@@ -12,12 +12,15 @@ import {
 import { availableParallelism, tmpdir } from "node:os"
 import { delimiter, join, relative, resolve } from "node:path"
 import { afterAll, beforeAll, expect, it } from "vitest"
+import { Completions } from "effect/cli"
+import { root as efforge } from "../src/cli.ts"
 import { isTypo } from "../src/contract.ts"
 import { commands, reservedWords } from "../src/fix.ts"
+import { slots } from "../src/slots.ts"
 
 // "`fix` is a promise" (docs/json.md), tested as a property. Invocations are generated from a
-// seed (commands, typos, invented verbs, names, flags with good and bad values, `--` anywhere,
-// three working directories), plus the 2026-11 re-review's corpus as fixed cases. Each runs against
+// seed (every command and every flag the CLI defines, typos of each, invented verbs, names, flags
+// with good and bad values, `--` anywhere, three working directories), plus the 2026-11 re-review's corpus as fixed cases. Each runs against
 // the built CLI in its own copy of a sandbox, and its `fix` is followed up to three times. For
 // every one: stdout is one document under --json; nothing prompts; no project is created unless
 // the original was a create of that name; a fix of anything else never creates; a create's fix
@@ -89,26 +92,59 @@ const random = (seed: number) => {
   }
 }
 
-const verbs: Record<"create" | "add" | "list" | "other", ReadonlyArray<ReadonlyArray<string>>> = {
-  create: [[], ["create"], ["Create"], ["CREATE"], ["crate"], ["creat"]],
-  add: [["add"], ["ad"], ["Add"], ["ADD"], ["adds"]],
-  list: [["list"], ["lst"], ["lsit"], ["LIST"], ["List"]],
-  other: [
-    ["update"],
-    ["remove"],
-    ["init"],
-    ["new"],
-    ["install"],
-    ["help"],
-    ["version"],
-    ["ls"],
-    ["deploy"],
-    ["doctor"],
-    ["hlep"],
-    ["run"],
-    ["foo"],
-  ],
+// Commands and their flags come from the CLI's own definitions (what completions are made from),
+// so a new command or flag is generated without anyone listing it here.
+type FlagDef = {
+  readonly name: string
+  readonly aliases: ReadonlyArray<string>
+  readonly type: { readonly _tag: string; readonly values?: ReadonlyArray<string> }
 }
+type CommandDef = {
+  readonly name: string
+  readonly flags: ReadonlyArray<FlagDef>
+  readonly subcommands: ReadonlyArray<CommandDef>
+}
+const cli = Completions.fromCommand(efforge) as unknown as CommandDef
+const defs = new Map<string, CommandDef>(cli.subcommands.map((c) => [c.name, c]))
+
+/** Near misses people and agents type: a letter dropped, two swapped, one doubled, an s. */
+const typosOf = (w: string): string[] =>
+  w.length < 3
+    ? [`${w}s`]
+    : [
+        w.slice(0, -1),
+        `${w[0]}${w[2]}${w[1]}${w.slice(3)}`,
+        `${w.slice(0, 2)}${w[1]}${w.slice(2)}`,
+        `${w}s`,
+      ]
+
+const verbs: Record<string, ReadonlyArray<ReadonlyArray<string>>> = Object.fromEntries(
+  [...defs.keys()].map((c) => [
+    c,
+    [
+      ...(c === "create" ? [[]] : []),
+      [c],
+      [c.toUpperCase()],
+      [`${c[0]?.toUpperCase()}${c.slice(1)}`],
+      ...typosOf(c).map((t) => [t]),
+    ],
+  ]),
+)
+const other: ReadonlyArray<ReadonlyArray<string>> = [
+  ["update"],
+  ["remove"],
+  ["init"],
+  ["new"],
+  ["install"],
+  ["help"],
+  ["version"],
+  ["ls"],
+  ["deploy"],
+  ["doctor"],
+  ["hlep"],
+  ["run"],
+  ["foo"],
+]
 const names = [
   "my-app",
   "app2",
@@ -140,44 +176,50 @@ const ids = [
   "ai/none",
   "workflows",
 ]
-const flags = [
-  ["--dry-run"],
-  ["--no-install"],
-  ["--no-git"],
-  ["--yes"],
-  ["-y"],
-  ["--json=false"],
-  ["--cwd", "my-app"],
-  ["--cwd=my-app"],
-  ["--cwd"],
-  ["--cwd", "nope"],
-  ["--cwd", "my-app/package.json"],
-  ["--cwd", "empty1"],
-  ["--database=d1"],
-  ["--database=postgress"],
-  ["--database=mysql"],
-  ["--database=none"],
-  ["--database"],
-  ["--orm=drizle"],
-  ["--orm=none"],
-  ["--auth=better-auth"],
-  ["--auth=none"],
-  ["--extras=email,emial"],
-  ["--extras=stripe"],
-  ["--extras="],
-  ["--databse=d1"],
-  ["--jsn"],
-  ["--no-instal"],
-  ["--install=maybe"],
+/** Positional words each command takes, good and bad. */
+const operands: Record<string, ReadonlyArray<string>> = {
+  create: names,
+  add: ids,
+  info: ids,
+}
+const cwds = ["my-app", "nope", "my-app/package.json", "empty1", "my-app/apps/web"]
+/** Good values for a string flag, then bad ones. */
+const valuesOf = (flag: string): ReadonlyArray<string> => {
+  if (flag === "cwd") return cwds
+  const slot = slots.find((s) => s.id === flag)
+  const good = slot?.options.map((o) => o.id) ?? ["x"]
+  return [...good, ...good.flatMap((v) => typosOf(v).slice(0, 1)), "mysql", ""]
+}
+
+/** Every way to pass `f`: good and bad values, none, a typo of its name, its alias. */
+const formsOf = (f: FlagDef): string[][] => {
+  const out: string[][] = []
+  const n = f.name
+  if (f.type._tag === "Boolean")
+    out.push([`--${n}`], [`--no-${n}`], [`--${n}=maybe`], [`--${n}=false`])
+  else {
+    const values = f.type.values ?? valuesOf(n)
+    for (const v of values) out.push([`--${n}=${v}`], [`--${n}`, v])
+    for (const v of f.type.values ?? [])
+      out.push([`--${n}=${v.toUpperCase()}`], [`--${n}=${typosOf(v)[0]}`])
+    out.push([`--${n}`], [`--${n}=nope`])
+  }
+  for (const t of typosOf(n).slice(0, 2)) out.push([`--${t}`])
+  for (const a of f.aliases) out.push([`-${a}`])
+  return out
+}
+/** Each command's flags, in every form; and flags that belong to no command. */
+const flagsOf: Record<string, ReadonlyArray<ReadonlyArray<string>>> = Object.fromEntries(
+  [...defs].map(([c, d]) => [c, d.flags.flatMap(formsOf)]),
+)
+const stray: ReadonlyArray<ReadonlyArray<string>> = [
   ["--completions=nushell"],
   ["--completions"],
   ["--log-level=nope"],
   ["--log-level=debug"],
   ["--name=n2"],
-  ["--overwrite"],
   ["--with-stripe"],
-  ["--ai"],
-  ["--infra=alchmy"],
+  ["--cwd"],
 ]
 const where = ["", "", "", "my-app", "my-app", "my-app/apps/web"]
 
@@ -192,16 +234,22 @@ const generate = (seed: number, count: number): Case[] => {
   const pick = <A>(xs: ReadonlyArray<A>): A => xs[Math.floor(next() * xs.length)] as A
   const cases: Case[] = []
   for (let n = 0; n < count; n++) {
-    const kind = pick(["create", "create", "add", "add", "list", "other"] as const)
-    const verb = [...pick(verbs[kind])]
+    // create and add twice as often: they write
+    const kind = pick(["create", "add", ...defs.keys(), "other"])
+    const verb = [...pick(kind === "other" ? other : (verbs[kind] ?? other))]
     const words: string[] = []
     const many = Math.floor(next() * 3)
-    for (let k = 0; k < many; k++)
-      words.push(kind === "add" ? pick(ids) : kind === "list" ? pick(["extra", "x"]) : pick(names))
+    for (let k = 0; k < many; k++) words.push(pick(operands[kind] ?? ["extra", "x"]))
     const opts: string[] = []
     if (next() < 0.85) opts.push("--json")
     const extra = Math.floor(next() * 4)
-    for (let k = 0; k < extra; k++) opts.push(...pick(flags))
+    // mostly the command's own flags, sometimes another command's, sometimes none of them
+    for (let k = 0; k < extra; k++) {
+      const r = next()
+      const own = flagsOf[kind] ?? flagsOf.create ?? []
+      const any = flagsOf[pick([...defs.keys()])] ?? []
+      opts.push(...pick(r < 0.7 ? own : r < 0.9 ? any : stray))
+    }
     if (kind === "create" && next() < 0.6 && !opts.includes("--dry-run")) opts.push("--dry-run")
     // the command word usually comes first, sometimes after the flags
     let args = next() < 0.85 ? [...verb, ...words, ...opts] : [...opts, ...verb, ...words]
@@ -343,6 +391,32 @@ const reviewed: Case[] = [
     ["create", "my-app", "--json", "--database=postgres", "--extras=email"],
     ["create", "my-app", "--json", "--no-install", "--database=d1", "--auth=better-auth"],
   ].map((args) => ({ args, cwd: "" })),
+  // the presets, info and graph (reports/w4b-review.md)
+  ...[
+    ["create", "p1", "--json", "--preset=saas", "--database=none", "--no-install"],
+    ["create", "p2", "--json", "--dry-run", "--preset=minimal", "--auth=better-auth"],
+    ["create", "p3", "--json", "--dry-run", "--preset=minimal", "--database=d1"],
+    ["create", "p4", "--json", "--dry-run", "--preset=sass"],
+    ["create", "p5", "--json", "--dry-run", "--preset=SaaS"],
+    ["create", "p6", "--json", "--dry-run", "--preset"],
+    ["create", "p7", "--json", "--dry-run", "--preset=saas", "--preset=ai"],
+    ["create", "p8", "--json", "--dry-run", "--verbose"],
+    ["x1", "--write", "--json"],
+    ["x2", "--format=text", "--json"],
+    ["create", "x3", "--cwd", "my-app", "--json", "--dry-run"],
+    ["info", "emial", "--json"],
+    ["info", "--json"],
+    ["info", "email", "--json", "--cwd", "my-app"],
+    ["info", "auth/better-auth", "--json", "--cwd", "empty1"],
+    ["inf", "email", "--json"],
+    ["graph", "--json"],
+    ["graph", "--json", "--cwd", "my-app", "--format=txt"],
+    ["graph", "--json", "--cwd", "my-app", "--write"],
+    ["grap", "--json", "--cwd", "my-app"],
+    ["graph", "extra", "--json", "--cwd", "my-app"],
+    ["add", "--json", "--cwd", "my-app"],
+  ].map((args) => ({ args, cwd: "" })),
+  { args: ["graph", "--json", "--format=text"], cwd: "my-app/apps/web" },
   { args: ["update", "--json", "--no-install", "--no-git"], cwd: "my-app" },
   { args: ["--json"], cwd: "my-app" },
   { args: ["list", "--json"], cwd: "my-app/apps/web" },
@@ -394,7 +468,14 @@ const builtIn = (args: ReadonlyArray<string>) => {
   )
 }
 
-const valueFlags = ["database", "orm", "auth", "infra", "ai", "extras", "cwd", "runtime"]
+/** Flags that take a value, from the definitions. */
+const valueFlags = [
+  ...new Set(
+    [...defs.values()].flatMap((d) =>
+      d.flags.filter((f) => f.type._tag !== "Boolean").map((f) => f.name),
+    ),
+  ),
+]
 const valueFlags2 = ["completions", "log-level"]
 
 /** Positional words, read independently of the code under test. */
@@ -466,16 +547,7 @@ const projects = (dir: string): string[] => {
 }
 
 const knownFlags = new Set([
-  "json",
-  "dry-run",
-  "yes",
-  "install",
-  "no-install",
-  "git",
-  "no-git",
-  "overwrite",
-  "cwd",
-  ...valueFlags,
+  ...[...defs.values()].flatMap((d) => d.flags.flatMap((f) => [f.name, `no-${f.name}`])),
   ...valueFlags2,
 ])
 
@@ -495,9 +567,10 @@ const check = async (c: Case, n: number): Promise<string[]> => {
       const end = a.indexOf("--")
       return end < 0 ? [] : a.slice(end + 1)
     }
+    // every command but create, as the definitions name them
     const isCreate = (args: ReadonlyArray<string>) => {
       const [first] = words(args)
-      return first !== "add" && first !== "list"
+      return first === undefined || first === "create" || !defs.has(first)
     }
     const seen = new Set<string>()
     let step: { args: string[]; cwd: string } | undefined = { args: [...c.args], cwd: start }
@@ -626,3 +699,19 @@ it(
     expect(await all(reviewed, 100_000)).toEqual([])
   },
 )
+
+it("the generated invocations cover every command and every flag the CLI defines", () => {
+  expect([...defs.keys()].toSorted()).toEqual([...commands].toSorted())
+  const cases = generate(SEED, CASES)
+  for (const c of defs.keys())
+    expect(
+      cases.some((x) => x.args.includes(c)),
+      c,
+    ).toBe(true)
+  for (const d of defs.values())
+    for (const f of d.flags)
+      expect(
+        cases.some((x) => x.args.some((a) => a === `--${f.name}` || a.startsWith(`--${f.name}=`))),
+        `--${f.name}`,
+      ).toBe(true)
+})

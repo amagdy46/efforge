@@ -17,10 +17,19 @@ layer (the cards, the manifests, and now the CLI), and the three would drift.
 ## Decision
 
 - Presets live in one place, `src/presets.ts`: an id, a title, a one-line description and a
-  full stack. `create --preset=<id>` fills every slot no flag set; a stack flag overrides its
-  slot, and where a flag rules out a preset's value, that slot takes its default. The prompt asks
+  full stack. `create --preset=<id>` fills every slot no flag set. A flag always wins and is
+  never dropped. A preset's choice that can't stand next to a flag is dropped (its slot becomes
+  none, or it leaves the extras) and the run says so, as a line and a `--json` warning. A preset
+  gives way only by leaving a part out: when a flag needs something neither it nor another flag
+  gives (`--preset=minimal --auth=better-auth` needs a database), it is `IncompatibleStack` with
+  alternatives, some of which change two flags (a database and an ORM). An earlier version took
+  the default for a slot the flag ruled out, and it depended on slot order: `--database=none`
+  silently dropped auth, while `--auth=better-auth` on minimal was an error. The prompt asks
   for a preset (or "choose each part") right after the name, so Back from the first slot returns
-  to it; the name prompt cannot go back, so asking it first keeps the preset reachable.
+  to it; the name prompt cannot go back, so asking it first keeps the preset reachable. After a
+  preset, the confirmation offers Change parts: every part again, with the preset's as the
+  defaults, and the summary gives the flags that make the result (`--preset=saas
+  --database=d1`), so a person learns the form an agent uses.
 - Nothing records a preset's name. The summary, `command` in `efforge.jsonc` and the `--json`
   document give the stack flag by flag. A preset can change between versions (a new extra in
   `saas`); the recorded command keeps making the same project.

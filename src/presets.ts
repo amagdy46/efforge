@@ -4,7 +4,7 @@ import { type StackConfig, toCommand } from "./stack.ts"
 export interface Preset {
   readonly id: string
   readonly title: string
-  /** One line, for the prompt and `list`. */
+  /** One line, for the prompt and `list`: short enough that the prompt fits 80 columns. */
   readonly description: string
   readonly stack: Omit<StackConfig, "name">
 }
@@ -16,7 +16,7 @@ export const presets: ReadonlyArray<Preset> = [
   {
     id: "saas",
     title: "SaaS",
-    description: "Postgres, Drizzle, Better Auth with organizations, email and storage",
+    description: "Postgres, Drizzle, auth with orgs, email, storage",
     stack: {
       runtime: "cloudflare",
       database: "postgres",
@@ -30,7 +30,7 @@ export const presets: ReadonlyArray<Preset> = [
   {
     id: "ai",
     title: "AI",
-    description: "D1, Effect SQL, Better Auth, AI with your own key, and realtime",
+    description: "D1, Effect SQL, auth, AI with your own key, realtime",
     stack: {
       runtime: "cloudflare",
       database: "d1",
@@ -44,7 +44,7 @@ export const presets: ReadonlyArray<Preset> = [
   {
     id: "minimal",
     title: "Minimal",
-    description: "No database and no auth: the app, its layers and the dashboard",
+    description: "No database, no auth: the app and its dashboard",
     stack: {
       runtime: "cloudflare",
       database: "none",

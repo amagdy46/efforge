@@ -441,7 +441,7 @@ npx -y create-efforge list --json
     {
       "id": "saas",
       "title": "SaaS",
-      "description": "Postgres, Drizzle, Better Auth with organizations, email and storage",
+      "description": "Postgres, Drizzle, auth with orgs, email, storage",
       "stack": {
         "runtime": "cloudflare",
         "database": "postgres",
@@ -458,7 +458,7 @@ npx -y create-efforge list --json
     {
       "id": "ai",
       "title": "AI",
-      "description": "D1, Effect SQL, Better Auth, AI with your own key, and realtime",
+      "description": "D1, Effect SQL, auth, AI with your own key, realtime",
       "stack": {
         "runtime": "cloudflare",
         "database": "d1",
@@ -474,7 +474,7 @@ npx -y create-efforge list --json
     {
       "id": "minimal",
       "title": "Minimal",
-      "description": "No database and no auth: the app, its layers and the dashboard",
+      "description": "No database, no auth: the app and its dashboard",
       "stack": {
         "runtime": "cloudflare",
         "database": "none",
@@ -542,7 +542,7 @@ npx -y create-efforge list --json --cwd my-app
     {
       "id": "saas",
       "title": "SaaS",
-      "description": "Postgres, Drizzle, Better Auth with organizations, email and storage",
+      "description": "Postgres, Drizzle, auth with orgs, email, storage",
       "stack": {
         "runtime": "cloudflare",
         "database": "postgres",
@@ -559,7 +559,7 @@ npx -y create-efforge list --json --cwd my-app
     {
       "id": "ai",
       "title": "AI",
-      "description": "D1, Effect SQL, Better Auth, AI with your own key, and realtime",
+      "description": "D1, Effect SQL, auth, AI with your own key, realtime",
       "stack": {
         "runtime": "cloudflare",
         "database": "d1",
@@ -575,7 +575,7 @@ npx -y create-efforge list --json --cwd my-app
     {
       "id": "minimal",
       "title": "Minimal",
-      "description": "No database and no auth: the app, its layers and the dashboard",
+      "description": "No database, no auth: the app and its dashboard",
       "stack": {
         "runtime": "cloudflare",
         "database": "none",

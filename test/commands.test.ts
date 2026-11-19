@@ -243,7 +243,7 @@ it("add with no ids: a picker by slot, disabled where the slot is filled, re-ask
   // a filled slot shows its other options, disabled
   expect(shown?.disabled).toEqual(["database/postgres", "orm/effect-sql"])
   expect(r.s.output).toContain(
-    "info: The same without the picker: npx -y create-efforge add auth/better-auth --cwd app --dry-run",
+    "info: The same without the picker:\nnpx -y create-efforge add auth/better-auth --cwd app --dry-run",
   )
 
   const nothing = await cli(["add", "--cwd", "app"], [[]])
