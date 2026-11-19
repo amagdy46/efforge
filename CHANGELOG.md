@@ -112,6 +112,7 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 
 ### Fixed
 
+- `upgrade` of a 0.2.x project whose dashboard the owner edited left it failing its gate: a file held back for the owner's dashboard lost what it imported (`server/mailer.ts` stayed while the `Mailer` it builds moved), and the old server functions it kept failed the session lint. A held file now keeps what it imports, and on a stack with auth a held server file of efforge's gets `requireSession`.
 - `add` of an add-on that brings a migration lists `pnpm db:migrate` (or the stack's setup steps) in its next steps: `add auth` on a project with a database returned none, and sign-up had no tables. A test covers every add-on that ships a migration.
 - Under `alchemy dev` the realtime card said "Disconnected, retrying" and disabled Send while connected: the socket React's StrictMode had closed reported its late close. `connectRoom` ignores a socket it has given up on.
 - At 390 px the storage card with a long file name, and the database card with a long unbroken note, pushed their buttons out of view; the browser flow now checks every card at 390 px with long input.
