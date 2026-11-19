@@ -1,13 +1,11 @@
-import { TriangleAlert } from "lucide-react"
 import { type SubmitEvent, useCallback, useEffect, useRef, useState } from "react"
-import { FailureNote, Pending } from "@/components/demo"
+import { FailureNote, OpenEndpoint, Pending } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { asFailure } from "@/lib/failure"
 import { type AnswerPart, askModel } from "@/server/ai-demo"
 import type { Failure } from "@/server/outcome"
-import { getStack } from "@/server/stack"
 import program from "../../../../packages/core/src/llm.ts?region=card"
 import serverFn from "../server/ai-demo.ts?region=card"
 import type { Capability } from "./types"
@@ -68,26 +66,9 @@ function useAnswer() {
   return { answer, ask }
 }
 
-/** Whether this project has no sign-in, so anyone who can reach the app can call the model. */
-function useOpenEndpoint() {
-  const [open, setOpen] = useState(false)
-  useEffect(() => {
-    let live = true
-    getStack().then(
-      ({ stack }) => live && setOpen(stack.auth === "none"),
-      () => {},
-    )
-    return () => {
-      live = false
-    }
-  }, [])
-  return open
-}
-
 function AiDemo() {
   const [prompt, setPrompt] = useState("In one sentence, what is an Effect layer?")
   const { answer, ask } = useAnswer()
-  const open = useOpenEndpoint()
   const busy = answer.status === "waiting" || answer.status === "streaming"
 
   const submit = (event: SubmitEvent) => {
@@ -115,16 +96,11 @@ function AiDemo() {
           answer is a paid call to your provider, with your key.
         </p>
       </form>
-      {open ? (
-        <p className="flex gap-2 rounded-md border border-dashed p-3 text-sm">
-          <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          <span>
-            <span className="font-medium">Open endpoint.</span> This project has no sign-in, so
-            anyone who can reach it can call <code className="font-mono">askModel</code> and spend
-            your key. Add auth before you deploy it.
-          </span>
-        </p>
-      ) : null}
+      <OpenEndpoint>
+        This project has no auth, so anyone who can reach it can call{" "}
+        <code className="font-mono">askModel</code> and spend your key. Add auth before you deploy
+        it.
+      </OpenEndpoint>
       <div aria-live="polite" className="space-y-3">
         {answer.status === "idle" ? (
           <p className="text-sm text-muted-foreground">

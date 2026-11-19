@@ -208,6 +208,10 @@
       "target": "apps/web/src/lib/use-server-call.ts"
     },
     {
+      "path": "files/web/src/lib/use-stack.ts",
+      "target": "apps/web/src/lib/use-stack.ts"
+    },
+    {
       "path": "files/web/src/lib/layer-graph.ts",
       "target": "apps/web/src/lib/layer-graph.ts"
     },

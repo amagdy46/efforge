@@ -1,11 +1,11 @@
 import { type SubmitEvent, useEffect, useState } from "react"
-import { FailureNote, Pending } from "@/components/demo"
+import { FailureNote, OpenEndpoint, Pending } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useServerCall } from "@/lib/use-server-call"
+import { useStack } from "@/lib/use-stack"
 import { mailSettings, sendTestEmail } from "@/server/email-demo"
-import { getStack } from "@/server/stack"
 import program from "../../../../packages/core/src/mailer.ts?region=card"
 import serverFn from "../server/email-demo.ts?region=card"
 import layer from "../server/mailer.ts?region=card"
@@ -24,12 +24,11 @@ function EmailDemo() {
   const settings = useServerCall(mailSettings)
   const sending = useServerCall(sendTestEmail)
   const [to, setTo] = useState("")
-  const [stack, setStack] = useState<{ auth: string; infra: string } | undefined>()
+  const stack = useStack()
   const load = settings.run
 
   useEffect(() => {
     void load()
-    void getStack().then((result) => setStack(result.stack))
   }, [load])
 
   const submit = (event: SubmitEvent) => {
@@ -84,11 +83,11 @@ function EmailDemo() {
         <p className="text-xs text-muted-foreground">
           Type something that is not an address to see{" "}
           <code className="font-mono">InvalidAddress</code> come back.
-          {stack?.auth === "none"
-            ? " This project has no auth, so anyone who can reach the app can send from it."
-            : null}
         </p>
       </form>
+      <OpenEndpoint>
+        This project has no auth, so anyone who can reach the app can send a test email from it.
+      </OpenEndpoint>
       <div aria-live="polite">
         {sending.state.status === "running" ? <Pending>Sending…</Pending> : null}
         {sending.state.status === "failed" ? <FailureNote error={sending.state.error} /> : null}

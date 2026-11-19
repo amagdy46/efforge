@@ -1,7 +1,7 @@
 import { ExternalLink } from "lucide-react"
-import { type SubmitEvent, useEffect, useState } from "react"
+import { type SubmitEvent, useState } from "react"
 import { isMessageTooLarge, MAX_MESSAGE_BYTES } from "@repo/core/realtime-limits"
-import { FailureNote } from "@/components/demo"
+import { FailureNote, OpenEndpoint } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,7 +9,6 @@ import { type RoomStatus, useRoom } from "@/lib/use-room"
 import { useServerCall } from "@/lib/use-server-call"
 import { cn } from "@/lib/utils"
 import { announce } from "@/server/realtime-demo"
-import { getStack } from "@/server/stack"
 import program from "../../../../packages/core/src/realtime.ts?region=card"
 import serverFn from "../server/realtime-demo.ts?region=card"
 import hook from "../lib/use-room.ts?region=card"
@@ -27,14 +26,6 @@ function RealtimeDemo() {
   const { messages, status, reason, send } = useRoom("demo")
   const [text, setText] = useState("")
   const server = useServerCall(announce)
-  // without auth the room has no access check; say so rather than imply one
-  const [open, setOpen] = useState(false)
-  useEffect(() => {
-    getStack().then(
-      ({ stack }) => setOpen(stack.auth === "none"),
-      () => setOpen(false),
-    )
-  }, [])
   const tooLarge = isMessageTooLarge(text)
 
   const submit = (event: SubmitEvent) => {
@@ -69,12 +60,10 @@ function RealtimeDemo() {
           }}
         />
       ) : null}
-      {open ? (
-        <p className="text-xs text-muted-foreground">
-          This project has no auth, so the room has no access check: anyone who can reach the app
-          can join it and read what is sent. Add auth and it refuses a socket without a session.
-        </p>
-      ) : null}
+      <OpenEndpoint>
+        This project has no auth, so the room has no access check: anyone who can reach the app can
+        join it and read what is sent. Add auth and it refuses a socket without a session.
+      </OpenEndpoint>
       <ul
         aria-label="Room messages"
         aria-live="polite"

@@ -1,7 +1,7 @@
 import type { JobEvent } from "@repo/core/jobs"
 import { CircleCheck, CircleDashed, CircleX, LoaderCircle, RotateCw } from "lucide-react"
 import { type SubmitEvent, useCallback, useEffect, useRef, useState } from "react"
-import { FailureNote, Pending } from "@/components/demo"
+import { FailureNote, OpenEndpoint, Pending } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -166,6 +166,10 @@ function WorkflowsDemo() {
           anything starts.
         </p>
       </form>
+      <OpenEndpoint>
+        This project has no auth, so anyone who can reach the app can start runs of the example
+        workflow.
+      </OpenEndpoint>
       <div aria-live="polite" className="space-y-3">
         {start.state.status === "running" ? <Pending>Starting the workflow…</Pending> : null}
         {start.state.status === "failed" ? <FailureNote error={start.state.error} /> : null}

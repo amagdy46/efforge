@@ -1,5 +1,6 @@
-import { CircleAlert, LoaderCircle, Settings2 } from "lucide-react"
+import { CircleAlert, LoaderCircle, Settings2, TriangleAlert } from "lucide-react"
 import type { ReactNode } from "react"
+import { useStack } from "@/lib/use-stack"
 import type { Failure } from "@/server/outcome"
 
 /** A failed call, shown as a normal state: what failed (`_tag`) and what to do about it. */
@@ -33,5 +34,22 @@ export function Pending({ children }: { children: ReactNode }) {
       <LoaderCircle aria-hidden className="size-4 animate-spin" />
       {children}
     </p>
+  )
+}
+
+/**
+ * Shown only while the project has no auth: who can call this demo's server functions. With auth
+ * every one of them requires a session, so the notice goes away by itself after `efforge add auth`.
+ */
+export function OpenEndpoint({ children }: { children: ReactNode }) {
+  const stack = useStack()
+  if (stack?.auth !== "none") return null
+  return (
+    <div role="note" className="flex gap-2 rounded-md border border-dashed p-3 text-sm">
+      <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <p>
+        <span className="font-medium">Open endpoint.</span> {children}
+      </p>
+    </div>
   )
 }

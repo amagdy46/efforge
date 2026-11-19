@@ -1,11 +1,10 @@
 import { ExternalLink } from "lucide-react"
 import { type SubmitEvent, useCallback, useEffect, useRef, useState } from "react"
-import { FailureNote, Pending } from "@/components/demo"
+import { FailureNote, OpenEndpoint, Pending } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useServerCall } from "@/lib/use-server-call"
-import { getStack } from "@/server/stack"
 import { deleteFile, listFiles, uploadFile } from "@/server/storage-demo"
 import program from "../../../../packages/core/src/storage.ts?region=card"
 import serverFn from "../server/storage-demo.ts?region=card"
@@ -28,13 +27,11 @@ function StorageDemo() {
   const adding = useServerCall(uploadFile)
   const removing = useServerCall(deleteFile)
   const [file, setFile] = useState<File | undefined>()
-  const [open, setOpen] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   const load = files.run
 
   useEffect(() => {
     void load()
-    void getStack().then(({ stack }) => setOpen(stack.auth === "none"))
   }, [load])
 
   const submit = useCallback(
@@ -77,9 +74,12 @@ function StorageDemo() {
         <p className="text-xs text-muted-foreground">
           Pick one over 1 MB to see the <code className="font-mono">FileTooLarge</code> error come
           back.
-          {open ? " This project has no auth, so anyone who can reach the app can upload." : null}
         </p>
       </form>
+      <OpenEndpoint>
+        This project has no auth, so anyone who can reach the app can upload files to the bucket and
+        delete them.
+      </OpenEndpoint>
       <div aria-live="polite" className="space-y-2">
         {adding.state.status === "running" ? <Pending>Uploading to R2…</Pending> : null}
         {adding.state.status === "failed" ? <FailureNote error={adding.state.error} /> : null}
