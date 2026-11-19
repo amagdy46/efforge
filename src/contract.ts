@@ -63,6 +63,8 @@ export const errorCodes = {
   SlotAlreadySet:
     "The project already has a different choice for that slot; `add` can't swap it. No fix: create a new project.",
   RemoveNotSupported: "Removing an add-on (`ai/none`) isn't supported yet. No fix.",
+  UpgradeFirst:
+    "`add` would write cards the project's card boundary (apps/web/src/server/outcome.ts, from an older efforge) can't typecheck. Nothing was written. `fix` is `upgrade` in the same project; `then` is the add to run after it.",
   OverlayConflict:
     "`add` would replace files you edited. Nothing was written. `fix` adds --overwrite, which discards your edits to `files`.",
   TransformAnchorMissing:

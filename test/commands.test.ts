@@ -17,6 +17,7 @@ import {
   textGraph,
   writeGraph,
 } from "../src/graph.ts"
+import { hash, renderManifest } from "../src/manifest.ts"
 import { presetIds } from "../src/presets.ts"
 import { type Answer, scriptedPromptIO } from "../src/prompts/navigable.ts"
 import { GraphOutput, InfoOutput } from "../src/schemas.ts"
@@ -524,3 +525,35 @@ it("an add-on that brings a migration lists the migrate step: every add-on that 
   }
   expect(seen).toEqual(["ai/effect-ai-byok", "auth/better-auth", "auth/better-auth-orgs"])
 }, 120_000)
+
+it("add on a project whose card boundary is older than its cards refuses, with upgrade as the fix; after upgrade it adds", async () => {
+  await create("app", "--database=d1", "--orm=effect-sql", "--auth=none")
+  // a project made between releases: server functions still answer { ok, value }, and
+  // efforge.jsonc records that file as efforge's
+  const old = readFileSync(new URL("fixtures/outcome-before-exit.ts.txt", import.meta.url), "utf8")
+  const file = "apps/web/src/server/outcome.ts"
+  writeFileSync(join("app", file), old)
+  const manifestText = readFileSync(join("app", "efforge.jsonc"), "utf8")
+  const manifest = JSON.parse(manifestText.slice(manifestText.indexOf("{")))
+  manifest.files[file] = hash(old)
+  writeFileSync(join("app", "efforge.jsonc"), renderManifest(manifest))
+  const before = readFileSync(join("app", "apps/web/src/capabilities/registry.ts"), "utf8")
+  const r = await cli(["add", "realtime", "--json", "--no-install", "--cwd", "app"])
+  expect(r.exitCode).toBe(1)
+  expect(json(r.out).error).toMatchObject({
+    code: "UpgradeFirst",
+    fix: "npx -y create-efforge upgrade --json --cwd app",
+    file,
+    addons: ["extras/realtime"],
+    then: "npx -y create-efforge add realtime --json --no-install --cwd app",
+  })
+  // nothing written
+  expect(readFileSync(join("app", "apps/web/src/capabilities/registry.ts"), "utf8")).toBe(before)
+  // an add-on without a card is not held up
+  expect((await cli(["add", "infra", "--json", "--no-install", "--cwd", "app"])).exitCode).toBe(0)
+  const up = await cli(["upgrade", "--json", "--no-install", "--cwd", "app"])
+  expect(up.exitCode, up.out).toBe(0)
+  expect(readFileSync(join("app", file), "utf8")).toContain("failureCodec")
+  const again = await cli(["add", "realtime", "--json", "--no-install", "--cwd", "app"])
+  expect(again.exitCode, again.out).toBe(0)
+})

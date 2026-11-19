@@ -2248,6 +2248,36 @@ npx -y create-efforge add auth/none --json --cwd my-app
 }
 ```
 
+### `UpgradeFirst`
+
+`add` would write a dashboard card that the project's card boundary can't typecheck: `apps/web/src/server/outcome.ts` is from an efforge made before server functions returned an `Exit` (a project made between releases). Nothing was written. An add-on without a card is not held up.
+
+Fields: `file` (the boundary file), `addons` (the add-ons whose cards need the newer boundary), `then` (this `add`, to run once `upgrade` is done). `fix`: `upgrade` in the same project (keeping `--cwd` and `--json`), which brings the boundary up to date; then run `then`.
+
+<!-- example: UpgradeFirst -->
+
+```sh
+npx -y create-efforge add realtime --json --cwd my-app
+```
+
+```json
+{
+  "efforge": "0.2.1",
+  "contract": 1,
+  "ok": false,
+  "error": {
+    "code": "UpgradeFirst",
+    "message": "apps/web/src/server/outcome.ts is from an older efforge: the dashboard card of extras/realtime would not typecheck against it. Nothing was written. Run npx -y create-efforge upgrade --json --cwd my-app first, then this add again.",
+    "fix": "npx -y create-efforge upgrade --json --cwd my-app",
+    "file": "apps/web/src/server/outcome.ts",
+    "addons": [
+      "extras/realtime"
+    ],
+    "then": "npx -y create-efforge add realtime --json --cwd my-app"
+  }
+}
+```
+
 ### `OverlayConflict`
 
 `add` would replace files you changed since efforge wrote them. Nothing was written.

@@ -19,6 +19,7 @@ import {
   PUBLIC_LIST_FILE,
   presentCardTransforms,
   REGISTRY_FILE,
+  SERVER_DIR,
   START_FILE,
 } from "../cards.ts"
 import {
@@ -36,10 +37,13 @@ import { type CommandFailed, exec, has, INSTALL, INSTALL_ARGS } from "../exec.ts
 import {
   addonSuggestions,
   alternative,
+  commandLine,
   finish,
   fix,
   type Intent,
+  intentOf,
   nearbyProject,
+  render,
   withFlag,
 } from "../fix.ts"
 import { GenerateError, generate, isComputed, matches, rootScripts } from "../generate.ts"
@@ -182,6 +186,7 @@ export interface AddedAddon {
 
 export type AddError =
   | NotAnEfforgeProject
+  | UpgradeFirst
   | UnknownAddon
   | RemoveNotSupported
   | SlotAlreadySet
@@ -432,6 +437,16 @@ export const addAddons = (
         demosSkipped.push(...files.slice(1).map((f) => f.target))
       }
       return hasRegistry ? files : []
+    }
+
+    // a card written onto an older card boundary would not typecheck: upgrade the boundary first
+    if (hasRegistry) {
+      const withCards = fresh
+        .filter(({ manifest: m }) => (m.card?.files ?? []).some((f) => switchedOn(m.id, f.when)))
+        .map(({ manifest: m }) => m.id)
+      const outcome = yield* read(OUTCOME_FILE)
+      if (withCards.length > 0 && outcome !== undefined && !currentBoundary(outcome))
+        return yield* new UpgradeFirst({ file: OUTCOME_FILE, addons: withCards })
     }
 
     // 2. overlays: write if absent, replace if still what efforge generated, else conflict
@@ -975,6 +990,21 @@ export class AddIncomplete extends Schema.TaggedError<AddIncomplete>()("AddIncom
 }) {}
 
 /** `add` was given no ids: `available` are the add-ons the project doesn't have yet. */
+/**
+ * The project's cards talk to their server functions through an older boundary than the cards
+ * `add` writes (`apps/web/src/server/outcome.ts` from before server functions returned an `Exit`),
+ * so the new cards would not typecheck. `upgrade` brings the boundary up to date.
+ */
+export class UpgradeFirst extends Schema.TaggedError<UpgradeFirst>()("UpgradeFirst", {
+  file: Schema.String,
+  addons: Schema.Array(Schema.String),
+}) {}
+
+/** The server half of the card boundary, and what its current shape has that older ones lack. */
+const OUTCOME_FILE = `${SERVER_DIR}outcome.ts`
+const currentBoundary = (text: string) =>
+  /\bfailureCodec\b/.test(text) && /\.\.\.errors\b/.test(text)
+
 export class NoAddonIds extends Schema.TaggedError<NoAddonIds>()("NoAddonIds", {
   available: Schema.Array(Schema.String),
 }) {}
@@ -1110,6 +1140,12 @@ const needsOf = (ways: ReadonlyArray<ReadonlyArray<string>>) => {
 }
 
 /** What went wrong in `add` (or `list --cwd`), as the contract reports it. */
+/** `upgrade` in the same project, keeping the caller's --cwd and --json. */
+const upgradeInstead = (args: ReadonlyArray<string>): string => {
+  const kept = intentOf(args).flags.filter((f) => f.name === "cwd" || f.name === "json")
+  return commandLine(render({ verb: "upgrade", word: "upgrade", operands: [], flags: kept }))
+}
+
 export const addFailure = (
   e: { readonly _tag: string; readonly message?: string } & Record<string, unknown>,
   args: ReadonlyArray<string>,
@@ -1202,6 +1238,15 @@ export const addFailure = (
           ...(typeof e.reason === "string" ? { reason: e.reason } : {}),
         },
         more: alternatives.map((a) => `  ${a.command}  # ${a.description}`).join("\n"),
+      }
+    }
+    case "UpgradeFirst": {
+      const command = upgradeInstead(args)
+      return {
+        code: "UpgradeFirst",
+        message: `${String(e.file)} is from an older efforge: the dashboard ${(e.addons as string[]).length === 1 ? "card" : "cards"} of ${(e.addons as string[]).join(", ")} would not typecheck against it. Nothing was written. Run ${command} first, then this add again.`,
+        fix: command,
+        details: { file: String(e.file), addons: e.addons, then: commandLine(args) },
       }
     }
     case "OverlayConflict": {
