@@ -315,6 +315,7 @@ const wellFormed = (c: Intent): boolean => {
       if (typeof value !== "boolean") return false
     } else if (typeof value !== "string") return false
     else if (name === "log-level" && !logLevels.has(value)) return false
+    else if (name === "format" && value !== "mermaid" && value !== "text") return false
     else if (stackFlags.includes(name) || name === "preset") {
       const options = choicesOf(name) ?? []
       const values = name === "extras" ? value.split(",").filter((x) => x !== "") : [value]

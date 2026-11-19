@@ -67,6 +67,10 @@ export const errorCodes = {
     "`add` couldn't find where to edit a file you changed. Nothing was written. Apply `snippet` by hand, then re-run.",
   CommandFailed:
     "`add` wrote its files, then a command it runs (pnpm install) failed. `fix` runs it again.",
+  LayersUnreadable:
+    "`graph` couldn't read the layers: apps/web/src/server/layers.ts is missing or has no `export const AppLayer = Layer.mergeAll(...)`. No fix.",
+  ReadmeUnwritable:
+    "`graph --write` found no efforge:readme markers in README.md, broken ones, or no README. Nothing was written. No fix: `problems` says what to repair.",
   InternalError: "A bug in efforge or a broken install. No fix; report it.",
 } as const
 

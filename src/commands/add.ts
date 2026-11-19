@@ -6,7 +6,16 @@ import { type ParseError, parse } from "jsonc-parser"
 import pc from "picocolors"
 import { parseDocument } from "yaml"
 import { type AddonLoadError, type AddonManifest, addonIdsFor, loadAddons } from "../addon.ts"
-import { cardTransforms, presentCardTransforms, REGISTRY_FILE } from "../cards.ts"
+import { CARDS_DIR, cardTransforms, presentCardTransforms, REGISTRY_FILE } from "../cards.ts"
+import {
+  cardSources,
+  GRAPH_REGION,
+  graphRegion,
+  LAYERS_FILE,
+  layerGraph,
+  parseLayers,
+  projectCards,
+} from "../graph.ts"
 import { type Failure, internal, Invocation, printSuccess, report } from "../contract.ts"
 import { unifiedDiff } from "../diff.ts"
 import { type CommandFailed, exec, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
@@ -784,14 +793,36 @@ export const addAddons = (
     if (newIds.length > 0) {
       const readme = out.get(README_FILE) ?? (yield* read(README_FILE))
       if (readme !== undefined) {
-        const filled = fillReadme(
-          readme,
-          readmeRegions({
+        // the layer graph, when the README has its region (`graph --write`), follows the layers
+        const layersText = out.get(LAYERS_FILE) ?? (yield* read(LAYERS_FILE))
+        const layers = layersText === undefined ? undefined : parseLayers(layersText)
+        const withGraph =
+          layers !== undefined && readme.includes(`efforge:readme:${GRAPH_REGION} -->`)
+        const graph = withGraph
+          ? layerGraph({
+              layers,
+              stack,
+              addons,
+              cards: yield* cardSources(
+                stack,
+                addons,
+                new Map([
+                  ...(yield* projectCards(dir, (rel) =>
+                    read(rel).pipe(Effect.orElseSucceed(() => undefined)),
+                  )),
+                  ...[...out].filter(([f]) => f.startsWith(CARDS_DIR) && f.endsWith(".tsx")),
+                ]),
+              ),
+            })
+          : undefined
+        const filled = fillReadme(readme, {
+          ...readmeRegions({
             stack,
             addons,
             scripts: rootScripts(out.get("package.json") ?? (yield* read("package.json"))),
           }),
-        )
+          ...(graph === undefined ? {} : { [GRAPH_REGION]: graphRegion(graph) }),
+        })
         if (filled.kind !== "filled") notes.push(readmeNote(filled))
         else if (filled.text !== readme) {
           out.set(README_FILE, filled.text)

@@ -4,3 +4,20 @@ export const brand = {
   blued: { rgb: [47, 90, 168], ansi256: 25 },
   paper: { rgb: [246, 245, 241], ansi256: 255 },
 } as const
+
+/**
+ * The tempering sequence for diagrams (`efforge graph`), one per layer, always in this order: a
+ * light tint behind Iron text, edged in the colour, so a node reads on light and dark pages.
+ */
+export const temperNodes = [
+  { name: "Straw", fill: "#efe3c6", stroke: "#E2C275", ink: "#1C1D20" },
+  { name: "Bronze", fill: "#dbc4b1", stroke: "#A8683A", ink: "#1C1D20" },
+  { name: "Temper purple", fill: "#c6bbd1", stroke: "#6C4E96", ink: "#1C1D20" },
+  { name: "Blued steel", fill: "#b0bfd7", stroke: "#2F5AA8", ink: "#1C1D20" },
+] as const
+
+/** Diagram colours that are not a layer's: the composition (Iron) and what a layer needs (Steel). */
+export const diagram = {
+  app: { fill: "#1C1D20", stroke: "#C9CDD2", ink: "#F6F5F1" },
+  need: { fill: "#C9CDD2", stroke: "#C9CDD2", ink: "#1C1D20" },
+} as const

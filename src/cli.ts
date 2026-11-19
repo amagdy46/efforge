@@ -3,6 +3,7 @@ import { type CliError, CliOutput, Command, Completions } from "effect/cli"
 import { BIN, type ErrorCode, type Failure, Invocation, printSuccess, report } from "./contract.ts"
 import { addCommand } from "./commands/add.ts"
 import { createCommand, createConfig, createHandler, presetFailure } from "./commands/create.ts"
+import { graphCommand } from "./commands/graph.ts"
 import { infoCommand } from "./commands/info.ts"
 import { listCommand } from "./commands/list.ts"
 import { commands, fix, intentOf, meantFlag, projectAbove, spelledOut } from "./fix.ts"
@@ -14,7 +15,7 @@ export const root = Command.make("create-efforge", createConfig, createHandler).
   Command.withDescription(
     "Scaffold an Effect + TanStack Start app on Cloudflare with database, auth and services already wired together",
   ),
-  Command.withSubcommands([createCommand, addCommand, listCommand, infoCommand]),
+  Command.withSubcommands([createCommand, addCommand, listCommand, infoCommand, graphCommand]),
   Command.withExamples([
     {
       command: "npm create efforge my-app",
@@ -34,6 +35,7 @@ export const root = Command.make("create-efforge", createConfig, createHandler).
       description: "Add add-ons to an existing project",
     },
     { command: "npx create-efforge info email", description: "What one add-on adds and needs" },
+    { command: "npx create-efforge graph", description: "The project's layer graph, as Mermaid" },
   ]),
 )
 
@@ -52,6 +54,7 @@ const probe = Command.make("create-efforge", createConfig).pipe(
     Command.withHandler(addCommand, () => Effect.void),
     Command.withHandler(listCommand, () => Effect.void),
     Command.withHandler(infoCommand, () => Effect.void),
+    Command.withHandler(graphCommand, () => Effect.void),
   ]),
 )
 
@@ -125,7 +128,9 @@ const parseFix = (args: ReadonlyArray<string>, e: CliError.NonShowHelpErrors): s
     case "UnexpectedArgument":
       // `list foo`: list takes no arguments, so dropping them runs the same list. `create my
       // app`: a project name is one word, and which one is the caller's choice
-      return fix(args, (i) => (i.verb === "list" ? { ...i, operands: [] } : undefined))
+      return fix(args, (i) =>
+        i.verb === "list" || i.verb === "graph" ? { ...i, operands: [] } : undefined,
+      )
     default:
       // a value a flag can't take, or none: which value is the caller's choice (`allowed`)
       return null
@@ -174,7 +179,7 @@ const reportParseError = (args: ReadonlyArray<string>, error: CliError.ShowHelp)
 // and `list` are meant. `create <name>` always creates.
 
 /** Flags only `add` or `list` take: with them, the root form was never meant as a create. */
-const notCreateFlags = new Set(["cwd", "overwrite"])
+const notCreateFlags = new Set(["cwd", "overwrite", "format", "write"])
 
 /** Why the arguments aren't a create or a command, as the contract reports it; or undefined. */
 export const notACreate = (args: ReadonlyArray<string>): Failure | undefined => {
