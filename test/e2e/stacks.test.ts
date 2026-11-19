@@ -575,6 +575,10 @@ const upgradeOld = (ref: string, flags: string, edited: boolean): Effect.Effect<
     if (applied.exit !== 0 || applied.doc.ok !== true)
       throw new Error(`upgrade failed:\n${JSON.stringify(applied.doc, null, 2)}`)
     yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
+    // docs/deploy.md works on the upgraded project: the root deploy script a 0.2.0 wrangler
+    // project lacked is there. --dry-run builds and checks the config, and uploads nothing
+    if (!flags.includes("--infra=alchemy"))
+      yield* Effect.try(() => sh(dir, "pnpm run deploy --dry-run"))
     if (mine !== undefined) {
       // the owner's edits, byte for byte; layers.ts may only have gained the card region's markers
       const now = (f: string) => readFileSync(join(dir, f), "utf8")

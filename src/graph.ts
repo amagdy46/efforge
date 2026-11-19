@@ -318,7 +318,7 @@ export const GRAPH_REGION = "graph"
 /** The body of the graph region. */
 export const graphRegion = (g: LayerGraph): string =>
   [
-    "How the server's layers fit together, from `apps/web/src/server/layers.ts`. `npx create-efforge graph --write` redraws it, and `efforge add` keeps it current.",
+    "How the server's layers fit together, from `apps/web/src/server/layers.ts`. `npx -y create-efforge graph --write` redraws it, and `efforge add` keeps it current.",
     "",
     "```mermaid",
     mermaid(g),

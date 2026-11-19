@@ -69,6 +69,7 @@ import {
   nameOf,
   renderGroups,
 } from "../env.ts"
+import { migrateOwed } from "../migrations.ts"
 import { WRANGLER_FILE } from "../transforms/addWranglerBinding.ts"
 import {
   runTransform,
@@ -225,10 +226,6 @@ export const waysOut = (stack: StackConfig, named: ReadonlySet<string>): string[
 const isNewPackageJson = (target: string) => target.endsWith("/package.json")
 
 const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
-
-/** A migration file: `packages/db/migrations/*.sql`, or Drizzle's `packages/db/drizzle/<name>/migration.sql`. */
-export const isMigration = (file: string): boolean =>
-  /^packages\/db\/(?:migrations\/[^/]+|drizzle\/[^/]+\/migration)\.sql$/.test(file)
 
 /** The web app's sources, where a project's own server functions are. */
 const WEB_SRC = "apps/web/src/"
@@ -1143,8 +1140,9 @@ export const addFailure = (
       const available = e.available as string[]
       return {
         code: "NoAddonIds",
-        message: `Name the add-ons to add${available.length > 0 ? `: ${available.join(", ")}` : "; this project already has every add-on"}.`,
-        fix: fix(args, asList, { list: true }),
+        message: `Name the add-ons to add${available.length > 0 ? `: ${available.join(", ")}` : "; this project already has every add-on"}.${available.length > 0 ? seeList().replace("See which ones this project can add:", "What each one adds:") : ""}`,
+        // listing isn't adding: which add-on is the caller's choice (`available`)
+        fix: null,
         details: { available },
       }
     }
@@ -1422,12 +1420,14 @@ export const addHandler = (input: {
     // a new database needs its tables before the app (or sign-up) can use it; when the last
     // install never finished, neither did the steps after it, so count the ids already there too
     const touched = [...result.added.map((a) => a.id), ...(owed ? result.skipped : [])]
-    // the same setup steps `create` and the README's "Run it" give for this stack; also for any
-    // add-on that brings a migration (auth's tables), which the database needs before the app runs
-    const afterInstall: Step[] =
-      touched.some((id) => id.startsWith("database/")) || result.created.some(isMigration)
-        ? setupSteps(result.stack)
-        : []
+    // the same setup steps `create` and the README's "Run it" give for this stack: the database
+    // when one was added, and `pnpm db:migrate` whenever the local database lacks a migration (an
+    // earlier run that never migrated, or one this add brings), read as doctor reads it
+    const migrate = migrateOwed(dir, result.stack, [...result.created, ...result.written])
+    const newDatabase = touched.some((id) => id.startsWith("database/"))
+    const afterInstall: Step[] = setupSteps(result.stack).filter((s) =>
+      s.command === "pnpm db:migrate" ? migrate : newDatabase,
+    )
     const steps: Step[] = [
       ...(!installs && (owed || !installed || (changes && depsChanged))
         ? [{ command: INSTALL }]
@@ -1630,13 +1630,13 @@ const addInterrupted = (
 export const addCommand = Command.make("add", addConfig, addHandler).pipe(
   Command.withDescription("Add an add-on to an existing efforge project"),
   Command.withExamples([
-    { command: "npx create-efforge add email", description: "Add the email add-on" },
+    { command: "npx -y create-efforge add email", description: "Add the email add-on" },
     {
-      command: "npx create-efforge add ai/effect-ai-byok extras/storage --dry-run",
+      command: "npx -y create-efforge add ai/effect-ai-byok extras/storage --dry-run",
       description: "Show what would change; write nothing",
     },
     {
-      command: "npx create-efforge add database/d1 orm/effect-sql auth/better-auth",
+      command: "npx -y create-efforge add database/d1 orm/effect-sql auth/better-auth",
       description: "Add a database, an ORM and auth together",
     },
   ]),

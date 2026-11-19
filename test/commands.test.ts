@@ -7,7 +7,6 @@ import { afterEach, beforeEach, expect, it, vi } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { loadAddons } from "../src/addon.ts"
 import { completionScript, runWith } from "../src/cli.ts"
-import { isMigration } from "../src/commands/add.ts"
 import { TemplatesDir } from "../src/commands/create.ts"
 import {
   GRAPH_REGION,
@@ -110,7 +109,7 @@ it("info resolves ids the way add does, typo rule included", async () => {
   const none = await cli(["info", "--json"])
   expect(json(none.out).error).toMatchObject({
     code: "NoAddonIds",
-    fix: "npx -y create-efforge list --json",
+    fix: null,
   })
   const text = await cli(["info", "storage"])
   // CI=1 turns colours on
@@ -441,6 +440,10 @@ it("add auth says every server function now needs a session, names the owner's o
   const text = await cli(["add", "storage", "--no-install", "--cwd", "app"])
   expect(stripVTControlCharacters(text.out)).not.toContain("Every server function now requires")
 })
+
+/** A migration file: `packages/db/migrations/*.sql`, or Drizzle's `packages/db/drizzle/<name>/migration.sql`. */
+const isMigration = (file: string): boolean =>
+  /^packages\/db\/(?:migrations\/[^/]+|drizzle\/[^/]+\/migration)\.sql$/.test(file)
 
 it("an add-on that brings a migration lists the migrate step: every add-on that ships one", async () => {
   const addons = await Effect.runPromise(

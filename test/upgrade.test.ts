@@ -502,6 +502,54 @@ it("a script an efforge release wrote moves; one you wrote stays yours", async (
   expect(mine.changes.get("package.json") ?? "").not.toContain("effect-tsgo vp check")
 })
 
+it("a script today's templates define that no release wrote for this stack is added; one you removed isn't", async () => {
+  // 0.2.0 wrote a root deploy script only for Alchemy stacks: a wrangler project made by it has none
+  const dir = await project({ infra: "none" })
+  edit(dir, "package.json", (t) => t.replace(/\n\s*"deploy": "[^"]*",?/, ""))
+  edit(dir, "efforge.jsonc", (t) =>
+    t.replace(/"efforgeVersion": "[^"]*"/, '"efforgeVersion": "0.2.0"'),
+  )
+  expect(read(dir, "package.json")).not.toContain('"deploy"')
+  const r = await check(dir)
+  expect(JSON.parse(r.changes.get("package.json") ?? "{}").scripts.deploy).toBe(
+    "pnpm --filter web run deploy",
+  )
+  // the same on an Alchemy project, where 0.2.0 wrote it: the owner removed it, so it stays gone
+  const alchemy = await project({ infra: "alchemy" })
+  edit(alchemy, "package.json", (t) => t.replace(/\n\s*"deploy": "[^"]*",?/, ""))
+  edit(alchemy, "efforge.jsonc", (t) =>
+    t.replace(/"efforgeVersion": "[^"]*"/, '"efforgeVersion": "0.2.0"'),
+  )
+  const kept = await check(alchemy)
+  expect(kept.changes.get("package.json") ?? "").not.toContain('"deploy"')
+})
+
+it("env vars the stack reads that .env.example lacks are appended there and locally; no line of yours changes", async () => {
+  const dir = await project()
+  const drop = (t: string) => t.replace(/^# [^\n]*\nBETTER_AUTH_URL=[^\n]*\n/m, "")
+  edit(dir, ".env.example", (t) => `${drop(t)}MY_OWN=1\n`)
+  edit(dir, ".dev.vars", drop)
+  expect(read(dir, ".env.example")).not.toContain("BETTER_AUTH_URL")
+  const before = read(dir, ".env.example")
+  const r = await check(dir)
+  expect(r.env.map((v) => v.name)).toEqual(["BETTER_AUTH_URL"])
+  expect(r.env[0]).toMatchObject({ file: ".dev.vars", set: true, secret: false })
+  expect(r.status).toBe("behind")
+  expect(r.steps[0]?.covers).toContain("env")
+  const example = r.changes.get(".env.example") ?? ""
+  expect(example.startsWith(before)).toBe(true)
+  expect(example).toMatch(/\nBETTER_AUTH_URL=/)
+  expect(r.changes.get(".dev.vars")).toMatch(/\nBETTER_AUTH_URL=/)
+  apply(dir, r)
+  expect((await check(dir)).env).toEqual([])
+  // without a local settings file (a fresh clone), only .env.example gets them
+  edit(dir, ".env.example", drop)
+  rmSync(join(dir, ".dev.vars"))
+  const clone = await check(dir)
+  expect(clone.env.map((v) => v.name)).toEqual(["BETTER_AUTH_URL"])
+  expect(clone.changes.has(".dev.vars")).toBe(false)
+})
+
 it("the release history has this efforge, with the pins versions.ts has", () => {
   const entry = releases[efforgeVersion]
   expect(entry, `run node scripts/history.ts for ${efforgeVersion}`).toBeDefined()

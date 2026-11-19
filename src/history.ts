@@ -18,6 +18,14 @@ export interface Release {
   readonly dependencies: Readonly<Record<string, ReadonlyArray<string>>>
   /** package.json path -> script -> every command it wrote, for any stack. */
   readonly scripts: Readonly<Record<string, Readonly<Record<string, ReadonlyArray<string>>>>>
+  /**
+   * package.json path -> script -> the stacks that got it, when only some did: for each slot that
+   * narrows it, the values of those stacks; for `extras`, the extras each of them had (a project
+   * with any of them counts). Absent for entries recorded before it existed.
+   */
+  readonly scriptStacks?: Readonly<
+    Record<string, Readonly<Record<string, Readonly<Record<string, ReadonlyArray<string>>>>>>
+  >
   /** File efforge edits in place -> its fingerprint record (src/record.ts), for any stack. */
   readonly records: Readonly<Record<string, string>>
 }
@@ -59,6 +67,28 @@ export const efforgePinned = (version: string, name: string, pin: string): boole
 /** True when a release since `version` wrote `command` for script `name` in `file`. */
 export const efforgeScript = (version: string, file: string, name: string, command: string) =>
   releasesSince(version).some(([, r]) => r.scripts[file]?.[name]?.includes(command) === true)
+
+/**
+ * True when a release since `version` wrote script `name` in `file` for a stack like `stack`: a
+ * script missing now is one the owner removed. Any other is new, and `upgrade` adds it.
+ */
+export const efforgeWroteScript = (
+  version: string,
+  file: string,
+  name: string,
+  stack: { readonly [slot: string]: unknown },
+) =>
+  releasesSince(version).some(([, r]) => {
+    if (r.scripts[file]?.[name] === undefined) return false
+    const only = r.scriptStacks?.[file]?.[name]
+    if (only === undefined) return true
+    return Object.entries(only).every(([slot, values]) => {
+      const mine = stack[slot]
+      return Array.isArray(mine)
+        ? mine.some((x) => values.includes(String(x)))
+        : values.includes(String(mine))
+    })
+  })
 
 /** True when a release since `version` declared `dep` in `file`: missing now means removed. */
 export const efforgeDeclared = (version: string, file: string, dep: string) =>

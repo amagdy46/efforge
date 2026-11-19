@@ -30,7 +30,7 @@ After the name, the first question is "Start from a preset, or choose each part?
 | `ai` | D1, Effect SQL, Better Auth, AI with your own key, and realtime |
 | `minimal` | No database and no auth: the app, its layers and the dashboard |
 
-Every prompt and every line of ordinary output fits 80 columns; a command too long for the line is printed whole on its own line, so it can be copied.
+Every prompt, every line of ordinary output and every error on stderr fits 80 columns, broken only between words of prose: a path or a command is never split, and a command too long for the line is printed whole on its own line, so it can be copied.
 
 Choosing one shows the stack and asks "Create it?" with three answers: Yes, Change parts, No. Change parts walks every part with the preset's as the defaults, so "SaaS, but on D1" is one change; the summary then reads "the SaaS preset, changed" and gives the flags that make the same stack without the prompts (`flags  --preset=saas --database=d1`). "Choose each part" walks the slots from the defaults, and Back from the first slot returns to this question.
 
@@ -40,7 +40,7 @@ A preset's contents can change between versions, so nothing records its name: th
 
 `--dry-run` prints a line per add-on, how many files it writes and in which top-level directories (`base 64 apps/web 45, (root) 13, ...`, then `auth/better-auth +20 ...`); `--verbose` lists every file under its add-on, and `--json` always has the full list. `create` has no `--cwd`: it creates the project under the directory you run it in, and every path it prints is relative to that; run it from there (`cd ~/projects && npx create-efforge my-app`).
 
-Also available: `--help` (with examples), `--version`, `--completions bash|zsh|fish` (prints a completion script that covers both `create-efforge` and `efforge`) and `--log-level debug`.
+Also available: `--help` (with examples), `--version`, `--completions bash|zsh|fish|powershell` (prints a completion script that covers both `create-efforge` and `efforge`) and `--log-level`, which efforge accepts and which changes nothing, since efforge logs nothing. None of them prompts. efforge has no `--wizard`: the prompts above do that job.
 
 The summary before writing, and the `command` field of `efforge.jsonc`, give a non-interactive command that recreates the stack, for example:
 
@@ -48,7 +48,7 @@ The summary before writing, and the `command` field of `efforge.jsonc`, give a n
 npm create efforge my-app -- --yes --database=d1 --orm=effect-sql --auth=better-auth --extras=storage,realtime
 ```
 
-When it finishes, `create` prints the next steps for the stack: `docker compose up -d --wait` for Postgres, `pnpm db:migrate` when there is a database, then `pnpm dev` (with Alchemy, no `db:migrate` on D1). The generated README's "Run it" has the same steps, from the same code, and its other sections (scripts, layout, capabilities, a first deploy for wrangler or Alchemy) are written for the stack too.
+When it finishes, `create` prints the next steps for the stack: `docker compose up -d --wait` for Postgres, `pnpm db:migrate` when there is a database, then `pnpm dev` (with Alchemy, no `db:migrate` on D1). Whether `pnpm db:migrate` is still owed is read from the project, as `doctor`'s `migrations` check reads it: on D1 it is there while the local database lacks a migration file, so `add` says it after an add-on that brings a migration (auth's tables) and after any earlier run that never migrated, and leaves it out when everything is applied. Postgres can't be read without connecting, so there it follows the migration files the run writes. The generated README's "Run it" has the same steps, from the same code, and its other sections (scripts, layout, capabilities, a first deploy for wrangler or Alchemy) are written for the stack too.
 
 Compatibility rules: `orm` is set exactly when `database` is; `auth` needs a database; `d1`, `workflows`, `realtime` and `browser` need the Cloudflare runtime. With `infra=none`, bindings live in `wrangler.jsonc`; with `infra=alchemy`, they live in `infra/alchemy.run.ts` and there is no `wrangler.jsonc`.
 
@@ -56,7 +56,7 @@ Compatibility rules: `orm` is set exactly when `database` is; `auth` needs a dat
 
 efforge only prompts when stdin is a terminal and `CI` isn't set. Without one (CI, a pipe, `</dev/null`, `CI=1`), a prompt it would need fails at once and names the flag to pass, for example `No terminal to ask for "preset": pass --preset=saas|ai|minimal or the stack flags, or --yes to accept the defaults.`, followed by `Try: <the command with --yes>`. Pass `--yes` plus the flags you care about. Every choice the prompts offer has a flag: the stack flags, the name argument (a non-empty directory is an error, not a re-ask) and `--yes` for the confirmation.
 
-In CI or a pipe, each step prints one line instead of a spinner. In a terminal too, a run of steps is one line each, and `create` and `add` end with the total time. `NO_COLOR=1` turns colour off. Errors go to stderr, and end with `Try: <command>` when a command fixes them.
+In CI or a pipe, each step prints one line instead of a spinner. In a terminal too, a run of steps is one line each, and `create` and `add` end with the total time. `NO_COLOR=1` turns colour off. Errors go to stderr, and end with `Try: <command>` when a command fixes them. Every command efforge prints (help examples, errors, next steps, the generated README and landing page) runs as written without a prompt: it starts with `npx -y create-efforge`, because `npx` without `-y` asks "Ok to proceed?" before its first download.
 
 Exit codes: `0` success (and answering No at the confirmation), `1` an error, `2` `upgrade` or `doctor` found something that breaks the project, `3` `upgrade --check --strict` found something to apply, `130` cancelled with Ctrl-C. Cancelling during setup leaves the files written so far and prints the commands that finish the job.
 
@@ -166,7 +166,7 @@ It changes nothing and uses no network unless you pass `--online` (to run `pnpm 
 
 ## Troubleshooting
 
-**`pnpm check` says "Expected at least one target file".** The formatter reads `.gitignore` files in parent directories, even outside a git repository. If a parent directory ignores everything (for example a dotfiles `~/.gitignore` containing `*`), a project created with `--no-git` sees no files. Run `git init` in the project; the default flow already does this.
+**`pnpm check` says "Expected at least one target file", or the app renders without styles.** The formatter and Tailwind both skip files a `.gitignore` ignores, and a project that isn't its own git repository is under the ignore rules of the repository around it. If that one ignores everything (a dotfiles repository in `~` with `*` in its `.gitignore`), a project created with `--no-git` has no files to check and no classes to style. `create` says so when it happens (a warning under `--json`), and `doctor`'s `ignored` check names the rule. Run `git init` in the project: a repository of its own has its own ignore rules. The default flow already does this.
 
 **The app returns 500 at startup.** A layer is missing configuration. Run `npx create-efforge doctor`: its `env` check names each variable `.dev.vars` (`.env` with Alchemy) lacks. `.env.example` lists what each add-on needs, and a value marked "Fill in" is a secret only you have.
 

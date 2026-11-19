@@ -94,7 +94,7 @@ const stackFlags = slots.map((s) => s.id as string)
 const choicesOf = (name: string): ReadonlyArray<string> | undefined =>
   name === "preset" ? presetIds : slots.find((s) => s.id === name)?.options.map((o) => o.id)
 const globalValues = ["log-level", "completions"]
-const globalBooleans = ["help", "version", "wizard"]
+const globalBooleans = ["help", "version"]
 const known: Record<Verb, { readonly values: string[]; readonly booleans: string[] }> = {
   create: {
     values: ["preset", ...stackFlags, ...globalValues],
@@ -409,8 +409,6 @@ export interface May {
   readonly cwd?: boolean
   /** `--overwrite` may be added (`OverlayConflict`: the caller sees what it discards). */
   readonly overwrite?: boolean
-  /** `add` or `info` may become `list` with the same `--json` and `--cwd` (`NoAddonIds`, read-only). */
-  readonly list?: boolean
   /** The same command again, after something else changed (`PnpmMissing`). */
   readonly again?: boolean
 }
@@ -418,8 +416,8 @@ export interface May {
 /** Whether `c` keeps everything `o` asked for. */
 const keeps = (o: Intent, c: Intent, may: May): boolean => {
   if (o.verb === undefined || c.verb === undefined) return false
-  const toList = may.list === true && (o.verb === "add" || o.verb === "info") && c.verb === "list"
-  if (c.verb !== o.verb && !toList) return false
+  // a fix does what the caller was trying to do: the same command, never another one
+  if (c.verb !== o.verb) return false
   if ((o.word === undefined) !== (c.word === undefined)) return false
   const vo = view(o)
   const vc = view(c)
@@ -428,7 +426,7 @@ const keeps = (o: Intent, c: Intent, may: May): boolean => {
   const value = (v: ReturnType<typeof view>, name: string) =>
     known[c.verb as Verb].booleans.includes(name) ? switchOf(v, name) : v.set.get(name)
   // every flag either side sets is the same, except the changes listed here
-  const names = toList ? ["json", "log-level"] : [...new Set([...vo.set.keys(), ...vc.set.keys()])]
+  const names = [...new Set([...vo.set.keys(), ...vc.set.keys()])]
   for (const name of names) {
     if (name === "cwd") continue
     if (stackFlags.includes(name) || name === "preset") {
@@ -468,7 +466,6 @@ export const commandLine = (args: ReadonlyArray<string>): string => {
     i.verb === "create" &&
     switchOf(v, "yes") !== true &&
     switchOf(v, "json") !== true &&
-    switchOf(v, "wizard") !== true &&
     switchOf(v, "help") !== true
   // before `--`, where it is still a flag
   const end = args.indexOf("--")

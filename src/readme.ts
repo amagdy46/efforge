@@ -70,10 +70,16 @@ export const runSteps = (stack: StackConfig): Step[] => {
 export const setupSteps = (stack: StackConfig): Step[] =>
   runSteps(stack).filter((s) => s.longRunning !== true)
 
-/** What to run after `create`: the install when it was skipped, then {@link runSteps}. */
-export const planSteps = (stack: StackConfig, o: { readonly installed: boolean }): Step[] => [
+/**
+ * What to run after `create`: the install when it was skipped, then {@link runSteps}; without
+ * `pnpm db:migrate` when `migrate` is false (src/migrations.ts says whether it is owed).
+ */
+export const planSteps = (
+  stack: StackConfig,
+  o: { readonly installed: boolean; readonly migrate?: boolean },
+): Step[] => [
   ...(o.installed ? [] : [{ command: INSTALL }]),
-  ...runSteps(stack),
+  ...runSteps(stack).filter((s) => o.migrate !== false || s.command !== "pnpm db:migrate"),
 ]
 
 /** `command  # note` lines, the notes aligned. */
@@ -395,7 +401,7 @@ const beforeDeploy = (input: ReadmeInput): string => {
   const ids = addonIdsFor(stack)
   if (stack.orm === "none" && !ids.some((id) => id.startsWith("extras/") || id.startsWith("ai/")))
     return ""
-  return "Before you deploy: this project has no auth, so the dashboard's demos answer anyone who can reach the app, and the ones that write or spend say so on their card. Add auth (`npx create-efforge add auth/better-auth`) or remove those demos first."
+  return "Before you deploy: this project has no auth, so the dashboard's demos answer anyone who can reach the app, and the ones that write or spend say so on their card. Add auth (`npx -y create-efforge add auth/better-auth`) or remove those demos first."
 }
 
 const deployWrangler = (input: ReadmeInput): string => {
@@ -479,8 +485,8 @@ const more = (input: ReadmeInput): string => {
     SUGGESTED.find((e) => !stack.extras.includes(e)) ??
     (stack.infra === "none" ? "infra/alchemy" : undefined)
   return next === undefined
-    ? "Every capability is an add-on, and this project has the ones that add alone. List them all:\n\n```sh\nnpx create-efforge list\n```"
-    : `Every capability is an add-on. List them, then add one:\n\n\`\`\`sh\nnpx create-efforge list\nnpx create-efforge add ${next}\n\`\`\``
+    ? "Every capability is an add-on, and this project has the ones that add alone. List them all:\n\n```sh\nnpx -y create-efforge list\n```"
+    : `Every capability is an add-on. List them, then add one:\n\n\`\`\`sh\nnpx -y create-efforge list\nnpx -y create-efforge add ${next}\n\`\`\``
 }
 
 /** The content of every region for this project. */

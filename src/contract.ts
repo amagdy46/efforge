@@ -1,6 +1,7 @@
 import { Console, Context, Effect } from "effect"
 import pc from "picocolors"
 import { efforgeVersion } from "./versions.ts"
+import { wrapProse } from "./wrap.ts"
 
 // The `--json` contract (docs/json.md, ADR 0007). Every document carries `efforge` (the CLI
 // version) and `contract` (this number). Adding a field is not a change of contract; renaming or
@@ -56,7 +57,7 @@ export const errorCodes = {
   NotAnEfforgeProject:
     "`add`, `upgrade`, `doctor`, `info`, `graph` or `list --cwd` was pointed at a directory without a valid efforge.jsonc (`list` in a directory without one succeeds with `project: false`). `fix` points --cwd at the nearby project when there is one; else null.",
   NoAddonIds:
-    "`add` was called with no add-on ids and no terminal to pick them in (or with --json), or `info` with no id. `available` lists them; `fix` lists them.",
+    "`add` was called with no add-on ids and no terminal to pick them in (or with --json), or `info` with no id. No fix: pick from `available`.",
   UnknownAddon:
     "An add-on id that doesn't exist or is ambiguous. `fix` uses the one id it is a clear typo or fragment of; else null with `suggestions`.",
   SlotAlreadySet:
@@ -109,7 +110,9 @@ export const report = (json: boolean, f: Failure) =>
         ok: false,
         error: { code: f.code, message: f.message, fix: f.fix, ...f.details },
       })
-    const lines = [pc.red(f.message)]
+    // wrapped like prompts and ordinary output: at 80 columns, never inside a command or a path
+    const width = Math.min(80, process.stderr.columns || 80)
+    const lines = [pc.red(wrapProse(f.message, width))]
     if (f.more !== undefined && f.more.trim() !== "") lines.push("", f.more.trimEnd())
     if (f.fix !== null) lines.push(`${pc.dim("Try:")} ${f.fix}`)
     yield* Console.error(lines.join("\n"))

@@ -464,6 +464,10 @@ export const UpgradeCheckOutput = Schema.Struct({
       status: Schema.Literals(["behind", "yours"]),
     }),
   ),
+  env: Schema.Array(EnvVar).annotate({
+    description:
+      "Env vars the stack reads that .env.example lacks: upgrade appends them there, and to the local settings file when there is one, changing no line already there.",
+  }),
   kept: Kept,
   steps: Steps,
   warnings: Strings,
@@ -490,6 +494,10 @@ export const UpgradeApplyOutput = Schema.Struct({
   changed: Strings,
   removed: Strings,
   installed: Schema.Boolean.annotate({ description: "pnpm install ran." }),
+  env: Schema.Array(EnvVar).annotate({
+    description:
+      "Env vars added to .env.example (and to the local settings file when there is one), as create and add report them.",
+  }),
   kept: Kept,
   needsAction: NeedsAction,
   nextSteps: Schema.Array(Schema.Struct({ command: Schema.String, cwd: Schema.String })),
