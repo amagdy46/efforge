@@ -186,14 +186,17 @@ it("auth added later adds the guard to an existing middleware list, and names on
 
 it("auth added to a realtime project from before the socket check goes on, with a note on the room", async () => {
   const route = "apps/web/src/server/realtime-route.ts"
-  const { dir, result } = await addLater(d1("none", ["realtime"]), ["auth/better-auth"], (d) =>
-    // the route as efforge wrote it before upgradeGuards existed
-    writeFileSync(
-      join(d, route),
-      readFileSync(join(d, route), "utf8").replaceAll("upgradeGuards", "checks"),
-    ),
-  )
-  expect(readFileSync(join(dir, route), "utf8")).not.toContain("requireSocketSession")
+  let before = ""
+  const { dir, result } = await addLater(d1("none", ["realtime"]), ["auth/better-auth"], (d) => {
+    // the route as efforge wrote it before upgradeGuards existed: no list, no check
+    before = readFileSync(join(d, route), "utf8")
+      .replace(/\/\*\*\n \* Checks an upgrade[\s\S]*?\n\n/, "")
+      .replace(/  const refused = [\s\S]*?if \(refused !== undefined\) return refused\n/, "")
+    expect(before).not.toMatch(/upgradeGuards|refused|SocketSession/)
+    writeFileSync(join(d, route), before)
+  })
+  // the add goes on and leaves the route as it was; the note says what to change by hand
+  expect(readFileSync(join(dir, route), "utf8")).toBe(before)
   expect(result.notes).toEqual([
     expect.stringMatching(
       /^apps\/web\/src\/server\/realtime-route\.ts has no upgradeGuards list .*requireSocketSession/,
