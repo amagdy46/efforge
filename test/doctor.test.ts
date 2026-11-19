@@ -330,6 +330,13 @@ it("node: engines with a space after the operator", async () => {
   expect(get(await doctor(dir, { nodeVersion: () => "26.13.1" }), "node").status).toBe("ok")
 })
 
+it("env: a secret efforge writes empty for you to fill in warns, and isn't a failure", async () => {
+  const dir = await project({ ai: "effect-ai-byok" })
+  const r = get(await doctor(dir), "env")
+  expect(r.status).toBe("warn")
+  expect(r.message).toContain("LLM_API_KEY (yours to fill in)")
+})
+
 it("env: a production placeholder warns", async () => {
   const dir = await project()
   edit(dir, ".dev.vars", (t) =>

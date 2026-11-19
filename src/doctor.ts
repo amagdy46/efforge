@@ -614,7 +614,8 @@ const PLACEHOLDER =
 export interface EnvFinding {
   readonly name: string
   readonly required: boolean
-  readonly status: "ok" | "missing" | "empty" | "placeholder" | "undocumented"
+  /** `fill-in`: a secret only you have, which efforge wrote empty for you to fill in. */
+  readonly status: "ok" | "missing" | "empty" | "fill-in" | "placeholder" | "undocumented"
 }
 
 const envCheck: Check = {
@@ -660,7 +661,10 @@ const envCheck: Check = {
           value === undefined
             ? "missing"
             : value === ""
-              ? "empty"
+              ? // a real secret efforge writes empty ("Fill in" in .env.example): yours to fill
+                declared.has(name) && !devValues.has(name)
+                ? "fill-in"
+                : "empty"
               : value !== devValues.get(name) && PLACEHOLDER.test(value)
                 ? "placeholder"
                 : !example.has(name)
@@ -671,11 +675,14 @@ const envCheck: Check = {
       const bad = findings.filter(
         (f) => f.required && (f.status === "missing" || f.status === "empty"),
       )
-      const soft = findings.filter((f) => f.status === "placeholder" || f.status === "undocumented")
+      const soft = findings.filter(
+        (f) => f.status === "placeholder" || f.status === "undocumented" || f.status === "fill-in",
+      )
       const describe = (fs: ReadonlyArray<EnvFinding>) =>
         fs
           .map(
-            (f) => `${f.name} (${f.status === "undocumented" ? "not in .env.example" : f.status})`,
+            (f) =>
+              `${f.name} (${f.status === "undocumented" ? "not in .env.example" : f.status === "fill-in" ? "yours to fill in" : f.status})`,
           )
           .join(", ")
       const details = { file, vars: findings }
@@ -707,7 +714,7 @@ const envCheck: Check = {
       if (soft.length > 0)
         return {
           status: "warn" as const,
-          message: `${describe(soft)}. A placeholder works until the feature that reads it is used; set real values before you deploy (${stack.infra === "alchemy" ? "your deploy environment's variables, which Alchemy reads" : "wrangler secret put NAME, or your deploy workflow's secrets"}).`,
+          message: `${describe(soft)}. A placeholder, or a secret left to fill in, works until the feature that reads it is used, which then shows "not configured"; set real values before you use it or deploy (${stack.infra === "alchemy" ? "your deploy environment's variables, which Alchemy reads" : "wrangler secret put NAME, or your deploy workflow's secrets"}).`,
           fix: null,
           details,
         }
