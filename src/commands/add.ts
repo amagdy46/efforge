@@ -7,7 +7,14 @@ import { sameJsonc } from "../structure.ts"
 import pc from "picocolors"
 import { parseDocument } from "yaml"
 import { type AddonLoadError, type AddonManifest, addonIdsFor, loadAddons } from "../addon.ts"
-import { CARDS_DIR, cardTransforms, presentCardTransforms, REGISTRY_FILE } from "../cards.ts"
+import {
+  CARDS_DIR,
+  cardTransforms,
+  PUBLIC_LIST_FILE,
+  presentCardTransforms,
+  REGISTRY_FILE,
+  START_FILE,
+} from "../cards.ts"
 import {
   cardSources,
   GRAPH_REGION,
@@ -218,6 +225,13 @@ export const waysOut = (stack: StackConfig, named: ReadonlySet<string>): string[
 const isNewPackageJson = (target: string) => target.endsWith("/package.json")
 
 const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+
+/** A migration file: `packages/db/migrations/*.sql`, or Drizzle's `packages/db/drizzle/<name>/migration.sql`. */
+export const isMigration = (file: string): boolean =>
+  /^packages\/db\/(?:migrations\/[^/]+|drizzle\/[^/]+\/migration)\.sql$/.test(file)
+
+/** The web app's sources, where a project's own server functions are. */
+const WEB_SRC = "apps/web/src/"
 
 /** `email`, `extras/email`, `ai/effect-ai-byok`, `ai=effect-ai-byok`, `ai` (a slot with one option) -> slot + option. */
 export const parseId = (
@@ -576,6 +590,8 @@ export const addAddons = (
         }
       }
     }
+    // with sessionGate in start.ts, every server function requires a session at runtime
+    const gated = /\bsessionGate\b/.test(current.get(START_FILE) ?? (yield* read(START_FILE)) ?? "")
     // a server function the guard could not reach (its `.middleware(...)` is not a written-out
     // list) is named, with the fix; the project's own lint rule fails on it until then
     for (const t of active) {
@@ -585,8 +601,37 @@ export const addAddons = (
       const middleware = t.args.middleware ?? "requireSession"
       for (const fn of unguardedServerFns(t.args.file, text, middleware))
         notes.push(
-          `${fn} in ${t.args.file} is not guarded: its .middleware(...) is not a list efforge can add to. Put ${middleware} first in it, as .middleware([${middleware}, ...]), and import it from "${t.args.from ?? "./require-session"}". Until then it answers signed-out requests, and pnpm check fails (efforge/server-fn-session).`,
+          `${fn} in ${t.args.file} has no ${middleware}: its .middleware(...) is not a list efforge can add to. Put ${middleware} first in it, as .middleware([${middleware}, ...]), and import it from "${t.args.from ?? "./require-session"}". ${gated ? "sessionGate still refuses a signed-out call at runtime, but" : "Until then it answers signed-out requests, and"} pnpm check fails on it (efforge/server-fn-session).`,
         )
+    }
+    // auth added now: say what changed for the owner's own server functions, and how to open one
+    if (gated && newIds.some((id) => id.startsWith("auth/"))) {
+      const own: string[] = []
+      // efforge's own files: written by a release (hashed) or by an add-on of this stack
+      const efforgeFiles = new Set([
+        ...Object.keys(manifest.files),
+        ...written,
+        ...scope.flatMap(({ manifest: m }) =>
+          [...m.files, ...(m.card?.files ?? [])].map((f) => f.target),
+        ),
+      ])
+      const names = yield* fs
+        .readDirectory(path.join(dir, WEB_SRC), { recursive: true })
+        .pipe(Effect.orElseSucceed(() => [] as string[]))
+      const files = names
+        .map((n) => `${WEB_SRC}${n.split(path.sep).join("/")}`)
+        .filter((f) => /\.tsx?$/.test(f) && !f.endsWith(".d.ts"))
+        .toSorted(byName)
+      for (const file of files) {
+        if (efforgeFiles.has(file)) continue
+        const text = current.get(file) ?? (yield* read(file))
+        if (text === undefined || !text.includes("createServerFn")) continue
+        for (const m of text.matchAll(/export const (\w+)\s*=\s*[\w.]*createServerFn\b/g))
+          own.push(`${m[1]} (${file})`)
+      }
+      notes.push(
+        `Every server function now requires a session: sessionGate runs before each one (${START_FILE}), ${own.length > 0 ? `yours too: ${own.join(", ")}` : "including any you write later"}. A signed-out call gets Unauthorized. To let signed-out visitors call one, add its file and name to ${PUBLIC_LIST_FILE}, as getSession and getStack are.`,
+      )
     }
     const transformed = new Set<string>()
     for (const file of seams) {
@@ -1377,10 +1422,12 @@ export const addHandler = (input: {
     // a new database needs its tables before the app (or sign-up) can use it; when the last
     // install never finished, neither did the steps after it, so count the ids already there too
     const touched = [...result.added.map((a) => a.id), ...(owed ? result.skipped : [])]
-    // the same setup steps `create` and the README's "Run it" give for this stack
-    const afterInstall: Step[] = touched.some((id) => id.startsWith("database/"))
-      ? setupSteps(result.stack)
-      : []
+    // the same setup steps `create` and the README's "Run it" give for this stack; also for any
+    // add-on that brings a migration (auth's tables), which the database needs before the app runs
+    const afterInstall: Step[] =
+      touched.some((id) => id.startsWith("database/")) || result.created.some(isMigration)
+        ? setupSteps(result.stack)
+        : []
     const steps: Step[] = [
       ...(!installs && (owed || !installed || (changes && depsChanged))
         ? [{ command: INSTALL }]

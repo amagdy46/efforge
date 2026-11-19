@@ -19,6 +19,12 @@ const AUTH_OPTIONS = (slots.find((s) => s.id === "auth")?.options ?? [])
 
 type CardTransform = TransformCall & { readonly when?: When }
 
+/** Where `createStart` gets the app's global middleware; `sessionGate` joins it on auth stacks. */
+export const START_FILE = "apps/web/src/start.ts"
+
+/** The server functions signed-out visitors may call, read by `sessionGate` and the lint rule. */
+export const PUBLIC_LIST_FILE = `${SERVER_DIR}public-server-fns.json`
+
 /** Where `requireSession` lives on auth stacks. */
 const GUARD_FILE = `${SERVER_DIR}require-session.ts`
 

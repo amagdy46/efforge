@@ -5,7 +5,9 @@ import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { afterEach, beforeEach, expect, it, vi } from "@effect/vitest"
 import { Effect, Layer } from "effect"
+import { loadAddons } from "../src/addon.ts"
 import { completionScript, runWith } from "../src/cli.ts"
+import { isMigration } from "../src/commands/add.ts"
 import { TemplatesDir } from "../src/commands/create.ts"
 import {
   GRAPH_REGION,
@@ -420,3 +422,65 @@ it("doctor's env check gives each variable the same secret and set as info", asy
   })
   expect(vars.find((v) => v.name === "LLM_API_KEY")).toMatchObject({ secret: true, set: false })
 }, 60_000)
+
+it("add auth says every server function now needs a session, names the owner's own, and how to open one", async () => {
+  await create("app", "--database=d1", "--orm=effect-sql", "--auth=none")
+  writeFileSync(
+    join("app", "apps/web/src/server/export.ts"),
+    'import { createServerFn } from "@tanstack/react-start"\n\nexport const exportAll = createServerFn({ method: "GET" }).handler(() => "rows")\n',
+  )
+  const r = await cli(["add", "auth/better-auth", "--json", "--no-install", "--cwd", "app"])
+  expect(r.exitCode).toBe(0)
+  const notes = json(r.out).notes as string[]
+  const note = notes.filter((n) => n.startsWith("Every server function now requires a session"))
+  expect(note).toHaveLength(1)
+  expect(note[0]).toContain("exportAll (apps/web/src/server/export.ts)")
+  expect(note[0]).toContain("apps/web/src/server/public-server-fns.json")
+  // efforge's own server functions are not the owner's
+  expect(note[0]).not.toContain("greet")
+  const text = await cli(["add", "storage", "--no-install", "--cwd", "app"])
+  expect(stripVTControlCharacters(text.out)).not.toContain("Every server function now requires")
+})
+
+it("an add-on that brings a migration lists the migrate step: every add-on that ships one", async () => {
+  const addons = await Effect.runPromise(
+    loadAddons(templates).pipe(Effect.provide(NodeServices.layer)),
+  )
+  let checked = 0
+  const seen: string[] = []
+  for (const [id, { manifest }] of addons) {
+    const migration = manifest.files.find((f) => isMigration(f.target))
+    if (migration === undefined || id.startsWith("database/") || id.startsWith("orm/")) continue
+    // a stack the migration is for, without the add-on: then add it
+    const when = (migration.when ?? {}) as Record<string, string[]>
+    const slot = id.split("/")[0] as string
+    const base: Record<string, string> = {
+      database: when.database?.[0] ?? "d1",
+      orm: when.orm?.[0] ?? "effect-sql",
+      auth: when.auth?.[0] ?? "none",
+      ai: when.ai?.[0] ?? "none",
+    }
+    base[slot] = "none"
+    // an add-on that needs another one's tables (the AI key needs auth's) gets it first
+    if (
+      slot !== "auth" &&
+      base.auth === "none" &&
+      manifest.requires.some((r) => r.startsWith("auth/"))
+    )
+      base.auth =
+        manifest.requires.find((r) => r.startsWith("auth/"))?.split("/")[1] ?? "better-auth"
+    const name = `m${checked}`
+    await create(name, ...Object.entries(base).map(([k, v]) => `--${k}=${v}`))
+    const r = await cli(["add", id, "--json", "--no-install", "--cwd", name])
+    expect(r.exitCode, `${id}: ${r.out.slice(0, 300)}`).toBe(0)
+    const doc = json(r.out) as { created: string[]; nextSteps: Array<{ command: string }> }
+    expect(doc.created.some(isMigration), id).toBe(true)
+    expect(
+      doc.nextSteps.map((s) => s.command),
+      `${id} on ${JSON.stringify(base)}`,
+    ).toContain("pnpm db:migrate")
+    seen.push(id)
+    checked++
+  }
+  expect(seen).toEqual(["ai/effect-ai-byok", "auth/better-auth", "auth/better-auth-orgs"])
+}, 120_000)
