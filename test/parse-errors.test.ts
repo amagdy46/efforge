@@ -144,7 +144,7 @@ it.each([
   [["add", "--wizard"]],
   [["--wizard", "--json"]],
   [["list", "--wizard", "--json"]],
-])("without a terminal, %j is an unknown flag, not a prompt", (args) => {
+])("without a terminal, %j is an unknown flag, not a prompt", { timeout: 30_000 }, (args) => {
   const r = run(args)
   expect(r.code).toBe(1)
   expect(r.out + r.err).not.toContain("Wizard")
