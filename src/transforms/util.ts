@@ -1,5 +1,5 @@
 import type { Effect } from "effect"
-import { Project, type SourceFile } from "ts-morph"
+import { type CallExpression, Node, Project, type SourceFile, SyntaxKind } from "ts-morph"
 import type { Tree } from "../tree.ts"
 import { TransformAnchorMissing } from "./errors.ts"
 
@@ -28,6 +28,23 @@ export const parseTs = (file: string, text: string): SourceFile => {
     skipFileDependencyResolution: true,
   })
   return project.createSourceFile(`/${file}`, text, { overwrite: true })
+}
+
+/**
+ * The `Layer.mergeAll(...)` call that the const `name` is built from: `name = Layer.mergeAll(...)`,
+ * or `name = Layer.mergeAll(...).pipe(...)` (AppLayer, with the telemetry slot underneath);
+ * undefined when it has another shape.
+ */
+export const mergeAllOf = (sf: SourceFile, name: string): CallExpression | undefined => {
+  let call = sf.getVariableDeclaration(name)?.getInitializer()?.asKind(SyntaxKind.CallExpression)
+  const callee = call?.getExpression()
+  if (
+    callee !== undefined &&
+    Node.isPropertyAccessExpression(callee) &&
+    callee.getName() === "pipe"
+  )
+    call = callee.getExpression().asKind(SyntaxKind.CallExpression)
+  return call?.getExpression().getText() === "Layer.mergeAll" ? call : undefined
 }
 
 /**

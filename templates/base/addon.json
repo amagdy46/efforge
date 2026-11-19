@@ -168,6 +168,10 @@
       "target": "packages/core/src/greeting.ts"
     },
     {
+      "path": "files/core/src/server-only.ts",
+      "target": "packages/core/src/server-only.ts"
+    },
+    {
       "path": "files/core/test/greeting.test.ts",
       "target": "packages/core/test/greeting.test.ts"
     },
@@ -220,6 +224,10 @@
       "target": "apps/web/src/server/outcome.ts"
     },
     {
+      "path": "files/web/src/server/name-call.ts",
+      "target": "apps/web/src/server/name-call.ts"
+    },
+    {
       "path": "files/web/src/server/owner.ts",
       "target": "apps/web/src/server/owner.ts"
     },
@@ -254,6 +262,10 @@
     {
       "path": "files/web/src/lib/failure.ts",
       "target": "apps/web/src/lib/failure.ts"
+    },
+    {
+      "path": "files/web/src/lib/outcome.ts",
+      "target": "apps/web/src/lib/outcome.ts"
     },
     {
       "path": "files/web/regions.ts",

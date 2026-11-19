@@ -1,5 +1,6 @@
 import { createSerializationAdapter } from "@tanstack/react-router"
 import { type AnyFunctionMiddleware, createStart } from "@tanstack/react-start"
+import { nameCall } from "./server/name-call"
 
 type Tagged = Error & { readonly _tag: string }
 
@@ -26,11 +27,12 @@ const taggedError = createSerializationAdapter({
 })
 
 /**
- * Runs before every server function, ahead of the function's own `.middleware([...])`. On a
- * project with auth, efforge adds `sessionGate` here, so every server function requires a
- * session unless it is on the public list (apps/web/src/server/public-server-fns.json).
+ * Runs before every server function, ahead of the function's own `.middleware([...])`.
+ * `nameCall` names the span `runOutcome` opens after the function. On a project with auth,
+ * efforge adds `sessionGate` here, so every server function requires a session unless it is on
+ * the public list (apps/web/src/server/public-server-fns.json).
  */
-const functionMiddleware: Array<AnyFunctionMiddleware> = []
+const functionMiddleware: Array<AnyFunctionMiddleware> = [nameCall]
 
 export const startInstance = createStart(() => ({
   serializationAdapters: [taggedError],

@@ -1,11 +1,11 @@
-import { Context, Data, Effect, type Option } from "effect"
+import { Context, Effect, type Option, Schema } from "effect"
+import { ServerOnly } from "./server-only"
 
-/** The bucket could not be reached; `message` says what failed, `cause` is the underlying error. */
-export class StorageError extends Data.TaggedError("StorageError")<{
-  readonly operation: string
-  readonly message: string
-  readonly cause: unknown
-}> {}
+/** The bucket could not be reached; `message` says what failed, `cause` (server only) why. */
+export class StorageError extends Schema.TaggedError<
+  StorageError,
+  { readonly brand: unique symbol }
+>()("StorageError", { operation: Schema.String, message: Schema.String, cause: ServerOnly }) {}
 
 export interface StoredObject {
   readonly key: string
@@ -20,10 +20,10 @@ export interface StoredFile extends StoredObject {
 }
 
 /** The Storage layer could not be built: `setting` is missing or too weak. */
-export class StorageConfigError extends Data.TaggedError("StorageConfigError")<{
-  readonly setting: string
-  readonly message: string
-}> {}
+export class StorageConfigError extends Schema.TaggedError<
+  StorageConfigError,
+  { readonly brand: unique symbol }
+>()("StorageConfigError", { setting: Schema.String, message: Schema.String }) {}
 
 export interface PutOptions {
   readonly contentType?: string
@@ -81,19 +81,25 @@ export const uploadsOf = (owner: string): string => `${UPLOADS}${encodeURICompon
 /** The largest file `upload` stores, in bytes. */
 export const MAX_UPLOAD_BYTES = 1_000_000
 
-/** A file is larger than `MAX_UPLOAD_BYTES`. */
-export class FileTooLarge extends Data.TaggedError("FileTooLarge")<{
-  readonly message: string
-}> {}
-
 /** A key that `upload` did not make, so the uploads list may not delete it. */
-export class NotAnUpload extends Data.TaggedError("NotAnUpload")<{
-  readonly message: string
-}> {}
+export class NotAnUpload extends Schema.TaggedError<
+  NotAnUpload,
+  { readonly brand: unique symbol }
+>()("NotAnUpload", { message: Schema.String }) {}
 
 /** The last part of a key, with anything but letters, digits, `.`, `_` and `-` replaced. */
 export const fileName = (key: string): string =>
   (key.split("/").at(-1) ?? "").replaceAll(/[^\w.-]/g, "_").slice(0, 100) || "file"
+
+/** A file is larger than `limit` bytes (`MAX_UPLOAD_BYTES`). */
+export class FileTooLarge extends Schema.TaggedError<
+  FileTooLarge,
+  { readonly brand: unique symbol }
+>()("FileTooLarge", {
+  message: Schema.String,
+  size: Schema.Number,
+  limit: Schema.Number,
+}) {}
 
 // #region card
 /** Stores `owner`'s file under a key made here: never one the client picks. */
@@ -107,6 +113,8 @@ export const upload = (
     if (bytes.byteLength > MAX_UPLOAD_BYTES)
       return yield* new FileTooLarge({
         message: `Files are at most ${MAX_UPLOAD_BYTES / 1_000_000} MB here.`,
+        size: bytes.byteLength,
+        limit: MAX_UPLOAD_BYTES,
       })
     const storage = yield* Storage
     const key = `${uploadsOf(owner)}${crypto.randomUUID()}/${fileName(name)}`

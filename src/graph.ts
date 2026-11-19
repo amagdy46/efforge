@@ -7,7 +7,7 @@ import { matches } from "./generate.ts"
 import { closeMarker, type Filled, fillRegions, openMarker, parseRegions } from "./regions.ts"
 import { README_PREFIX } from "./readme.ts"
 import type { StackConfig } from "./stack.ts"
-import { parseTs } from "./transforms/util.ts"
+import { mergeAllOf, parseTs } from "./transforms/util.ts"
 
 // The project's layer graph (`efforge graph`): the layers `AppLayer` merges in
 // apps/web/src/server/layers.ts, read from the file as it is, joined with what the add-ons say
@@ -35,12 +35,8 @@ export interface LayerEntry {
  * file has no such call (the user changed its shape).
  */
 export const parseLayers = (source: string): LayerEntry[] | undefined => {
-  const sf = parseTs(LAYERS_FILE, source)
-  const call = sf
-    .getVariableDeclaration("AppLayer")
-    ?.getInitializer()
-    ?.asKind(SyntaxKind.CallExpression)
-  if (call === undefined || call.getExpression().getText() !== "Layer.mergeAll") return undefined
+  const call = mergeAllOf(parseTs(LAYERS_FILE, source), "AppLayer")
+  if (call === undefined) return undefined
   return call.getArguments().map((arg) => {
     // `X.pipe(...)` is X; `Logger.layer([...])` is `Logger.layer`; anything else as written
     let head: Node = arg

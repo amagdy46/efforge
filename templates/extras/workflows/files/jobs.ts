@@ -52,6 +52,7 @@ const make = Effect.gen(function* () {
         .pipe(
           Effect.map((instance) => ({ id: instance.id })),
           Effect.mapError(fail("start")),
+          Effect.withSpan("Jobs.start"),
         ),
     status: (job, id) =>
       workflows[job].get(id).pipe(
@@ -62,11 +63,13 @@ const make = Effect.gen(function* () {
           error: Option.getOrUndefined(Option.map(s.error, (e) => e.message)),
         })),
         Effect.mapError(fail("status")),
+        Effect.withSpan("Jobs.status"),
       ),
     events: (job, id, after) =>
       workflows[job].get(id).pipe(
         Effect.flatMap((instance) => readEvents(instance.raw, after)),
         Effect.mapError(fail("events")),
+        Effect.withSpan("Jobs.events"),
       ),
   })
 })

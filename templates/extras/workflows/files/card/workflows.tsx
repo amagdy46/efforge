@@ -1,13 +1,12 @@
-import type { JobEvent } from "@repo/core/jobs"
+import { JobError, type JobEvent, MissingName, UnknownRun } from "@repo/core/jobs"
 import { CircleCheck, CircleDashed, CircleX, LoaderCircle, RotateCw } from "lucide-react"
 import { type SubmitEvent, useCallback, useEffect, useRef, useState } from "react"
 import { FailureNote, Pending } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { asFailure } from "@/lib/failure"
-import { useServerCall } from "@/lib/use-server-call"
-import type { Failure } from "@/server/outcome"
+import type { Failure } from "@/lib/outcome"
+import { settleCall, useServerCall } from "@/lib/use-server-call"
 import { startWorkflow, watchWorkflow } from "@/server/workflows-demo"
 import workflow from "../workflows/Example.ts?region=card"
 import program from "../../../../packages/core/src/jobs.ts?region=card"
@@ -70,7 +69,9 @@ const messageOf = (outputJson: string): string | undefined => {
 /** Follows a run until it finishes: each call waits on the server for the next events. */
 function useRun() {
   const [run, setRun] = useState<Run | undefined>(undefined)
-  const [failure, setFailure] = useState<Failure | undefined>(undefined)
+  const [failure, setFailure] = useState<
+    { readonly error: Failure; readonly rejected: boolean } | undefined
+  >(undefined)
   // bumped to stop following: a new run, a reset, or the card unmounting
   const current = useRef(0)
   useEffect(
@@ -92,13 +93,10 @@ function useRun() {
     setRun({ id, events: [], status: "queued", done: false, message: undefined, error: undefined })
     setFailure(undefined)
     const next = async (after: number, seen: ReadonlyArray<JobEvent>): Promise<void> => {
-      const outcome = await watchWorkflow({ data: { id, after } }).catch((error: unknown) => ({
-        ok: false as const,
-        error: asFailure(error),
-      }))
+      const outcome = await settleCall(watchWorkflow({ data: { id, after } }), UnknownRun, JobError)
       if (generation !== current.current) return
       if (!outcome.ok) {
-        setFailure(outcome.error)
+        setFailure(outcome)
         return
       }
       const value = outcome.value
@@ -122,7 +120,7 @@ function useRun() {
 function WorkflowsDemo() {
   const [name, setName] = useState("Ada")
   const [failFirst, setFailFirst] = useState(true)
-  const start = useServerCall(startWorkflow)
+  const start = useServerCall(startWorkflow, MissingName, JobError)
   const { run, failure, follow, reset } = useRun()
   const running =
     start.state.status === "running" || (run !== undefined && !run.done && failure === undefined)
@@ -168,7 +166,7 @@ function WorkflowsDemo() {
       </form>
       <div aria-live="polite" className="space-y-3">
         {start.state.status === "running" ? <Pending>Starting the workflow…</Pending> : null}
-        {start.state.status === "failed" ? <FailureNote error={start.state.error} /> : null}
+        {start.state.status === "failed" ? <FailureNote {...start.state} /> : null}
         {start.state.status === "idle" ? (
           <p className="text-sm text-muted-foreground">
             No run yet. Start one: the server function returns at once, and the run carries on in
@@ -228,7 +226,7 @@ function WorkflowsDemo() {
             ) : null}
           </div>
         )}
-        {failure === undefined ? null : <FailureNote error={failure} />}
+        {failure === undefined ? null : <FailureNote {...failure} />}
       </div>
     </div>
   )

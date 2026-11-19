@@ -50,7 +50,7 @@ function AuthDemo() {
       </div>
       <div aria-live="polite">
         {state.status === "running" ? <Pending>Calling whoAmI…</Pending> : null}
-        {state.status === "failed" ? <FailureNote error={state.error} /> : null}
+        {state.status === "failed" ? <FailureNote {...state} /> : null}
         {state.status === "done" ? (
           <p className="rounded-md border bg-background p-3 text-sm">
             <code className="font-mono">requireSession</code> let the call through for{" "}

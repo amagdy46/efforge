@@ -1,4 +1,4 @@
-import type { Failure } from "../server/outcome"
+import type { Failure } from "./outcome"
 
 /** One issue from a Standard Schema validator, as the server function rejects with it. */
 interface Issue {

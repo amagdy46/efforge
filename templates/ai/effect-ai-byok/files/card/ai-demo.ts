@@ -1,11 +1,16 @@
-import { ask, type LlmError, type LlmNotConfigured } from "@repo/core/llm"
+import { ask, EmptyPrompt, LlmError, LlmNotConfigured } from "@repo/core/llm"
 import { createServerFn } from "@tanstack/react-start"
 import { Effect, Schema, Stream } from "effect"
-import { type Failure, runOutcome } from "./outcome"
+import { runOutcome } from "./outcome"
 import { asNotConfigured } from "./settings"
 
-/** A piece of the answer, or how the answer failed part way through. */
-export type AnswerPart = { readonly text: string } | { readonly failure: Failure }
+/** How an `LlmError` part way through the answer travels: its fields, as JSON. */
+export const LlmFailure = Schema.toCodecJson(LlmError)
+
+/** A piece of the answer, or the `LlmError` that ended it part way through. */
+export type AnswerPart =
+  | { readonly text: string }
+  | { readonly failure: Schema.Codec.Encoded<typeof LlmFailure> }
 
 const AskInput = Schema.Struct({
   prompt: Schema.String.check(Schema.isMaxLength(4000)),
@@ -24,7 +29,7 @@ const parts = (answer: Stream.Stream<string, LlmError>) =>
     Stream.map((text): AnswerPart => ({ text })),
     Stream.tapError((error) => Effect.logWarning(error._tag, error)),
     Stream.catch((error) =>
-      Stream.succeed<AnswerPart>({ failure: { _tag: error._tag, message: error.message } }),
+      Stream.succeed<AnswerPart>({ failure: Schema.encodeSync(LlmFailure)(error) }),
     ),
     Stream.toReadableStream(),
   )
@@ -35,6 +40,10 @@ export const askModel = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(AskInput))
   .handler(({ data }) => {
     const answer = ask(data.prompt).pipe(Effect.map(parts))
-    return runOutcome(answer.pipe(Effect.catchTag("LlmNotConfigured", named)))
+    return runOutcome(
+      answer.pipe(Effect.catchTag("LlmNotConfigured", named)),
+      EmptyPrompt,
+      LlmNotConfigured,
+    )
   })
 // #endregion

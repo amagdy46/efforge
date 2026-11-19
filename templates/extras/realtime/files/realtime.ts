@@ -34,14 +34,17 @@ const make = Effect.gen(function* () {
     connect: (roomId, request) =>
       room("connect", roomId).pipe(
         Effect.flatMap((stub) => stub.fetch(request).pipe(Effect.mapError(fail("connect")))),
+        Effect.withSpan("Realtime.connect"),
       ),
     broadcast: (roomId, message) =>
       room("broadcast", roomId).pipe(
         Effect.flatMap((stub) => stub.broadcast(message).pipe(Effect.mapError(fail("broadcast")))),
+        Effect.withSpan("Realtime.broadcast"),
       ),
     connections: (roomId) =>
       room("connections", roomId).pipe(
         Effect.flatMap((stub) => stub.connections().pipe(Effect.mapError(fail("connections")))),
+        Effect.withSpan("Realtime.connections"),
       ),
   })
 })

@@ -47,8 +47,9 @@ Your code asks for `Realtime`, declared in `packages/core/src/realtime.ts`. Its 
 
 ## Files it writes
 
-`efforge add` writes these files.
+`efforge add` writes these files. A file marked *only if missing* is written only where the project lacks it.
 
+- `packages/core/src/server-only.ts` (*only if missing*)
 - `packages/core/src/realtime.ts`
 - `apps/web/src/realtime/Room.ts`
 - `apps/web/src/server/realtime.ts`

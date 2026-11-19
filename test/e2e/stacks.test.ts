@@ -1,5 +1,13 @@
 import { spawn, spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { dirname, join, resolve as resolvePath } from "node:path"
 import { NodeFileSystem, NodeServices } from "@effect/platform-node"
 import { describe, it } from "@effect/vitest"
@@ -511,6 +519,53 @@ const releaseSource = (ref: string): string => {
 const LAYERS = "apps/web/src/server/layers.ts"
 const DASHBOARD = "apps/web/src/routes/app/index.tsx"
 
+/**
+ * The owner's own service, on a project that already has the card-era boundary (outcome.ts):
+ * a `Data.TaggedError`, a server function that runs it with `runOutcome`, and a component that
+ * calls it with `useServerCall`. The new boundary has to accept all three unchanged.
+ */
+const OWNER_SERVICE: Record<string, string> = {
+  "packages/core/src/billing.ts": `import { Data, Effect } from "effect"
+
+/** Ours: the account has no plan yet. */
+export class PlanMissing extends Data.TaggedError("PlanMissing")<{ readonly message: string }> {}
+
+/** Ours: the account's plan. */
+export const currentPlan: Effect.Effect<string, PlanMissing> = Effect.fail(
+  new PlanMissing({ message: "Pick a plan first." }),
+)
+`,
+  "apps/web/src/server/plan.ts": `import { currentPlan } from "@repo/core/billing"
+import { createServerFn } from "@tanstack/react-start"
+import { runOutcome } from "./outcome"
+import { requireSession } from "./require-session"
+
+/** Ours: the plan, or PlanMissing as data. */
+export const getPlan = createServerFn({ method: "GET" })
+  .middleware([requireSession])
+  .handler(() => runOutcome(currentPlan))
+`,
+  "apps/web/src/components/plan.tsx": `import { useServerCall } from "@/lib/use-server-call"
+import { getPlan } from "@/server/plan"
+
+/** Ours: shows the plan, or why there is none. */
+export function Plan() {
+  const { state, run } = useServerCall(getPlan)
+  return (
+    <button type="button" onClick={() => void run()}>
+      {state.status === "failed" ? \`\${state.error._tag}: \${state.error.message}\` : "Plan"}
+    </button>
+  )
+}
+`,
+}
+
+const ownedFiles = (dir: string) =>
+  existsSync(join(dir, "apps/web/src/server/outcome.ts")) &&
+  existsSync(join(dir, "apps/web/src/server/require-session.ts"))
+    ? Object.keys(OWNER_SERVICE)
+    : []
+
 /** The owner's own work: a layer of theirs in AppLayer, and a heading of theirs on the dashboard. */
 const ownerEdits = (dir: string) => {
   const write = (file: string, f: (t: string) => string) =>
@@ -528,6 +583,7 @@ const ownerEdits = (dir: string) => {
       .replace("  AuthLive,\n", "  AuthLive,\n  BillingLive,\n"),
   )
   write(DASHBOARD, (t) => t.replace(">Dashboard<", ">Acme dashboard<"))
+  for (const file of ownedFiles(dir)) writeFileSync(join(dir, file), OWNER_SERVICE[file] ?? "")
   sh(dir, "pnpm format")
   sh(
     dir,
@@ -569,6 +625,7 @@ const upgradeOld = (ref: string, flags: string, edited: boolean): Effect.Effect<
           layers: readFileSync(join(dir, LAYERS), "utf8"),
           dashboard: readFileSync(join(dir, DASHBOARD), "utf8"),
           billing: readFileSync(join(dir, "apps/web/src/server/billing.ts"), "utf8"),
+          own: new Map(ownedFiles(dir).map((f) => [f, readFileSync(join(dir, f), "utf8")])),
         }
       : undefined
     const applied = yield* cliJson(["upgrade", "--json", "--cwd", dir])
@@ -586,7 +643,10 @@ const upgradeOld = (ref: string, flags: string, edited: boolean): Effect.Effect<
         throw new Error("upgrade changed the owner's dashboard")
       if (now("apps/web/src/server/billing.ts") !== mine.billing)
         throw new Error("upgrade changed billing.ts")
-      if (now(LAYERS).replace(/^\/\/ #(region card|endregion)\n/gm, "") !== mine.layers)
+      for (const [file, text] of mine.own)
+        if (now(file) !== text) throw new Error(`upgrade changed the owner's ${file}`)
+      const markers = (t: string) => t.replace(/^\/\/ #(region card|endregion)\n/gm, "")
+      if (markers(now(LAYERS)) !== markers(mine.layers))
         throw new Error(
           `upgrade changed the owner's layers.ts beyond the region markers:\n${now(LAYERS)}`,
         )
@@ -622,6 +682,13 @@ describe("upgrade an old project", () => {
       "0.2.1",
       "release-0.2.1",
       "--database=d1 --orm=effect-sql --auth=better-auth --infra=alchemy --extras=storage,email",
+    ],
+    // a project made by next before the errors-over-the-wire change: it has the cards, outcome.ts
+    // and the session gate, and its owner wrote a service of their own on them
+    [
+      "next (896be2a)",
+      "896be2a83df3b1e9bcf1156b4204c2f661eeb40c",
+      "--database=d1 --orm=drizzle --auth=better-auth --extras=storage,email,realtime",
     ],
   ]
   for (const [version, ref, flags] of releases)

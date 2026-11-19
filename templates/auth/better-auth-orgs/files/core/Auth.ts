@@ -1,9 +1,10 @@
-import { Context, Data, Effect } from "effect"
+import { Context, Effect, Schema } from "effect"
 
 /** The current request has no signed-in user. */
-export class Unauthorized extends Data.TaggedError("Unauthorized")<{
-  readonly message: string
-}> {}
+export class Unauthorized extends Schema.TaggedError<
+  Unauthorized,
+  { readonly brand: unique symbol }
+>()("Unauthorized", { message: Schema.String }) {}
 
 export interface Session {
   readonly userId: string
@@ -27,9 +28,10 @@ export const sessionOrNull = Auth.use((auth) => auth.currentSession).pipe(
 // #endregion
 
 /** The signed-in user has not picked an organization yet. */
-export class NoActiveOrganization extends Data.TaggedError("NoActiveOrganization")<{
-  readonly message: string
-}> {}
+export class NoActiveOrganization extends Schema.TaggedError<
+  NoActiveOrganization,
+  { readonly brand: unique symbol }
+>()("NoActiveOrganization", { message: Schema.String }) {}
 
 /** The organization the signed-in user works in. Organization-scoped server code starts here. */
 export const activeOrganizationId: Effect.Effect<

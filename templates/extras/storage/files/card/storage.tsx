@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useServerCall } from "@/lib/use-server-call"
+import { FileTooLarge, NotAnUpload, StorageError } from "@repo/core/storage"
 import { deleteFile, listFiles, uploadFile } from "@/server/storage-demo"
 import program from "../../../../packages/core/src/storage.ts?region=card"
 import serverFn from "../server/storage-demo.ts?region=card"
@@ -23,9 +24,9 @@ const formatSize = (bytes: number) =>
 
 /** Upload a file to R2, list the bucket, open a file through a signed link, delete it. */
 function StorageDemo() {
-  const files = useServerCall(listFiles)
-  const adding = useServerCall(uploadFile)
-  const removing = useServerCall(deleteFile)
+  const files = useServerCall(listFiles, StorageError)
+  const adding = useServerCall(uploadFile, FileTooLarge, StorageError)
+  const removing = useServerCall(deleteFile, NotAnUpload, StorageError)
   const [file, setFile] = useState<File | undefined>()
   const input = useRef<HTMLInputElement>(null)
   const load = files.run
@@ -78,14 +79,14 @@ function StorageDemo() {
       </form>
       <div aria-live="polite" className="space-y-2">
         {adding.state.status === "running" ? <Pending>Uploading to R2…</Pending> : null}
-        {adding.state.status === "failed" ? <FailureNote error={adding.state.error} /> : null}
+        {adding.state.status === "failed" ? <FailureNote {...adding.state} /> : null}
         {adding.state.status === "done" ? (
           <p className="text-sm text-muted-foreground">
             Stored {formatSize(adding.state.value.size)} under a key the server made, through the{" "}
             <code className="font-mono">Storage</code> service.
           </p>
         ) : null}
-        {removing.state.status === "failed" ? <FailureNote error={removing.state.error} /> : null}
+        {removing.state.status === "failed" ? <FailureNote {...removing.state} /> : null}
       </div>
       <div aria-live="polite" className="space-y-2">
         <h4 className="text-sm font-medium">
@@ -94,7 +95,7 @@ function StorageDemo() {
         {files.state.status === "idle" || files.state.status === "running" ? (
           <Pending>Listing the bucket…</Pending>
         ) : null}
-        {files.state.status === "failed" ? <FailureNote error={files.state.error} /> : null}
+        {files.state.status === "failed" ? <FailureNote {...files.state} /> : null}
         {files.state.status === "done" && files.state.value.length === 0 ? (
           <p className="text-sm text-muted-foreground">No files yet. Upload the first one.</p>
         ) : null}

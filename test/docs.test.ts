@@ -77,7 +77,10 @@ it("each guide's service is declared, with those tagged errors, in the file it n
         0,
       )
       for (const error of service.errors)
-        expect(text, `${manifest.id}: ${f.path}`).toContain(`TaggedError("${error}")`)
+        // Data.TaggedError("X") or Schema.TaggedError<X, ...>()("X", ...)
+        expect(text, `${manifest.id}: ${f.path}`).toMatch(
+          new RegExp(`TaggedError(?:<[^>]*>\\(\\))?\\(\\s*"${error}"`),
+        )
     }
     expect(
       manifest.transforms.some((t) => t.name === "addLayer"),

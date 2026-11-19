@@ -5,14 +5,21 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useServerCall } from "@/lib/use-server-call"
 import { greet } from "@/server/greeting"
+import { InvalidName } from "@repo/core/greeting"
 import program from "../../../../packages/core/src/greeting.ts?region=card"
 import serverFn from "../server/greeting.ts?region=card"
 import layers from "../server/layers.ts?region=card"
+import client from "./runtime.tsx?region=card"
 import type { Capability } from "./types"
 
 function RuntimeDemo() {
   const [name, setName] = useState("Ada")
-  const { state, run } = useServerCall(greet)
+  // #region card
+  // a failure arrives as an InvalidName again, with its fields
+  const { state, run } = useServerCall(greet, InvalidName)
+  const failed = state.status === "failed" ? state.error : undefined
+  const invalid = failed instanceof InvalidName ? failed : undefined
+  // #endregion
 
   const submit = (event: SubmitEvent) => {
     event.preventDefault()
@@ -40,7 +47,14 @@ function RuntimeDemo() {
       </form>
       <div aria-live="polite">
         {state.status === "running" ? <Pending>Calling greet…</Pending> : null}
-        {state.status === "failed" ? <FailureNote error={state.error} /> : null}
+        {state.status === "failed" ? <FailureNote {...state} /> : null}
+        {invalid === undefined ? null : (
+          <p className="mt-2 text-xs text-muted-foreground">
+            <code className="font-mono">failed instanceof InvalidName</code> is true here, and its{" "}
+            <code className="font-mono">length</code> field says the server counted {invalid.length}{" "}
+            characters.
+          </p>
+        )}
         {state.status === "done" ? (
           <div className="rounded-md border bg-background p-3">
             <p className="text-lg font-semibold tracking-tight">{state.value.message}</p>
@@ -73,6 +87,7 @@ export const runtime: Capability = {
     { path: "packages/core/src/greeting.ts", source: program },
     { path: "apps/web/src/server/greeting.ts", source: serverFn },
     { path: "apps/web/src/server/layers.ts", source: layers },
+    { path: "apps/web/src/capabilities/runtime.tsx", source: client },
   ],
   files: [
     ["Program", "packages/core/src/greeting.ts"],

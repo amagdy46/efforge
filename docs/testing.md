@@ -95,7 +95,7 @@ A server function runs its Effect through `apps/web/src/server/runtime.ts`, with
 Keep server functions thin instead, as the generated ones are:
 
 1. Put the logic in an Effect in `packages/core/src` that asks for the services it needs, like `createNote`.
-2. Make the server function only check its input and run that Effect. `addNote` in `apps/web/src/server/notes.ts` does only `runOutcome(createNote(data.title))`.
+2. Make the server function only check its input and run that Effect. `addNote` in `apps/web/src/server/notes.ts` does only `runOutcome(createNote(data.title), ...AddNoteErrors)`, the program and the errors it hands the browser as their classes.
 3. Test the Effect with test layers, as above.
 4. Check the server function itself under `pnpm dev`, which runs the Worker in workerd with local bindings.
 

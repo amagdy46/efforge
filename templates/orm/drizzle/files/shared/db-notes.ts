@@ -15,7 +15,7 @@ export const NotesLive = Layer.effect(
         .select({ id: note.id, title: note.title, createdAt: note.createdAt })
         .from(note)
         .orderBy(desc(note.createdAt))
-        .pipe(Effect.mapError(notesUnavailable)),
+        .pipe(Effect.mapError(notesUnavailable), Effect.withSpan("Notes.list")),
       insert: (title) =>
         db
           .insert(note)
@@ -32,6 +32,7 @@ export const NotesLive = Layer.effect(
                 ? Effect.fail(notesUnavailable("the insert returned no row"))
                 : Effect.succeed(row),
             ),
+            Effect.withSpan("Notes.insert"),
           ),
     })
   }),

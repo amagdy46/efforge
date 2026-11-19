@@ -148,3 +148,19 @@ it("no template mentions Biome, and add-on sections reach AGENTS.md exactly once
     expect(agents.split(`<!-- efforge:section:${id} -->`).length - 1, id).toBe(1)
   expect(agents.trimEnd().endsWith("<!-- efforge:agents -->")).toBe(true)
 })
+
+it("turns off Effect's unstable and experimental API warnings in both tsc and lint", async () => {
+  // exact pins make both safe (ADR 0001); stock tsc exits 1 on either warning, and an add-on that
+  // uses an experimental API (effect/unstable/cluster, Schema.DomainName) would fail `pnpm check`
+  const tree = await gen()
+  const tsconfig = JSON.parse(tree.get("tsconfig.base.json") as string) as {
+    compilerOptions: { plugins: Array<{ diagnosticSeverity: Record<string, string> }> }
+  }
+  expect(tsconfig.compilerOptions.plugins[0]?.diagnosticSeverity).toMatchObject({
+    unstableApiUsage: "off",
+    experimentalApiUsage: "off",
+  })
+  const lint = tree.get("vite.config.ts") as string
+  expect(lint).toContain('"effecttsgo/unstable-api-usage": "off"')
+  expect(lint).toContain('"effecttsgo/experimental-api-usage": "off"')
+})

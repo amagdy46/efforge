@@ -78,7 +78,7 @@ const LlmCredentialsLive = Layer.effect(
             baseUrl: found.value.baseUrl,
             last4: apiKey.slice(-4),
           })
-        }),
+        }).pipe(Effect.withSpan("LlmCredentials.summary")),
       save: (orgId, input) =>
         Effect.gen(function* () {
           const existing = yield* store.find(orgId)
@@ -99,8 +99,8 @@ const LlmCredentialsLive = Layer.effect(
             encryptedKey,
             baseUrl: input.baseUrl,
           })
-        }),
-      clear: (orgId) => store.remove(orgId),
+        }).pipe(Effect.withSpan("LlmCredentials.save")),
+      clear: (orgId) => store.remove(orgId).pipe(Effect.withSpan("LlmCredentials.clear")),
       resolve: (orgId) =>
         Effect.gen(function* () {
           const found = yield* store.find(orgId)
@@ -112,7 +112,7 @@ const LlmCredentialsLive = Layer.effect(
             apiKey: apiKey === "" ? undefined : Redacted.make(apiKey),
             baseUrl: found.value.baseUrl ?? undefined,
           }
-        }),
+        }).pipe(Effect.withSpan("LlmCredentials.resolve")),
     })
   }),
 ).pipe(
@@ -141,12 +141,16 @@ export const LlmLive = Layer.effect(
     })
     return Llm.of({
       generateText: (prompt) =>
-        settings.pipe(Effect.flatMap((resolved) => generateWith(resolved, prompt))),
+        settings.pipe(
+          Effect.flatMap((resolved) => generateWith(resolved, prompt)),
+          Effect.withSpan("Llm.generateText"),
+        ),
       streamText: (prompt) =>
         settings.pipe(
           // a stored key that cannot be read is a failure of the stream, not a missing setting
           Effect.map((resolved) => streamWith(resolved, prompt)),
           Effect.catchTag("LlmError", (error) => Effect.succeed(Stream.fail(error))),
+          Effect.withSpan("Llm.streamText"),
         ),
     })
   }),

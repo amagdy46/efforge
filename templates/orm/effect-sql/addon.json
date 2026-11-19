@@ -5,6 +5,11 @@
   "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/orm-effect-sql.md",
   "files": [
     {
+      "path": "../../base/files/core/src/server-only.ts",
+      "target": "packages/core/src/server-only.ts",
+      "ifAbsent": true
+    },
+    {
       "path": "files/shared/index.ts",
       "target": "packages/db/src/index.ts"
     },

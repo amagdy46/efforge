@@ -1,9 +1,10 @@
-import { Context, Data, Effect } from "effect"
+import { Context, Effect, Schema } from "effect"
 
 /** The current request has no signed-in user. */
-export class Unauthorized extends Data.TaggedError("Unauthorized")<{
-  readonly message: string
-}> {}
+export class Unauthorized extends Schema.TaggedError<
+  Unauthorized,
+  { readonly brand: unique symbol }
+>()("Unauthorized", { message: Schema.String }) {}
 
 export interface Session {
   readonly userId: string

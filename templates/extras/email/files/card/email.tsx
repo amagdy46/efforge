@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useServerCall } from "@/lib/use-server-call"
 import { useStack } from "@/lib/use-stack"
+import { InvalidAddress, MailerError } from "@repo/core/mailer"
 import { mailSettings, sendTestEmail } from "@/server/email-demo"
 import program from "../../../../packages/core/src/mailer.ts?region=card"
 import serverFn from "../server/email-demo.ts?region=card"
@@ -22,7 +23,7 @@ const cloudflareNote = import.meta.env.DEV
 /** Send a test email; with the console transport, the card shows what would have gone out. */
 function EmailDemo() {
   const settings = useServerCall(mailSettings)
-  const sending = useServerCall(sendTestEmail)
+  const sending = useServerCall(sendTestEmail, InvalidAddress, MailerError)
   const [to, setTo] = useState("")
   const stack = useStack()
   const load = settings.run
@@ -44,7 +45,7 @@ function EmailDemo() {
         {settings.state.status === "idle" || settings.state.status === "running" ? (
           <Pending>Reading the mail settings…</Pending>
         ) : null}
-        {settings.state.status === "failed" ? <FailureNote error={settings.state.error} /> : null}
+        {settings.state.status === "failed" ? <FailureNote {...settings.state} /> : null}
         {settings.state.status === "done" ? (
           <p className="text-sm text-muted-foreground">
             Transport{" "}
@@ -87,7 +88,7 @@ function EmailDemo() {
       </form>
       <div aria-live="polite">
         {sending.state.status === "running" ? <Pending>Sending…</Pending> : null}
-        {sending.state.status === "failed" ? <FailureNote error={sending.state.error} /> : null}
+        {sending.state.status === "failed" ? <FailureNote {...sending.state} /> : null}
         {sending.state.status === "done" ? (
           <div className="space-y-2">
             <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-md border bg-background p-3 text-sm">

@@ -13,7 +13,10 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "plugins": [
-      { "name": "@effect/language-service", "diagnosticSeverity": { "unstableApiUsage": "off" } }
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": { "unstableApiUsage": "off", "experimentalApiUsage": "off" }
+      }
     ]
   }
 }

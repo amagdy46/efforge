@@ -20,6 +20,7 @@ export const NotesLive = Layer.effect(
       `.pipe(
         Effect.map((rows) => rows.map(toNote)),
         Effect.mapError(notesUnavailable),
+        Effect.withSpan("Notes.list"),
       ),
       insert: (title) =>
         sql<Row>`
@@ -32,6 +33,7 @@ export const NotesLive = Layer.effect(
               ? Effect.fail(notesUnavailable("the insert returned no row"))
               : Effect.succeed(toNote(row)),
           ),
+          Effect.withSpan("Notes.insert"),
         ),
     })
   }),

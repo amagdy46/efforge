@@ -78,7 +78,7 @@ export const AuthLive = Layer.effect(
         })
         if (found === null) return yield* unauthorized()
         return { userId: found.user.id, email: found.user.email, name: found.user.name }
-      }),
+      }).pipe(Effect.withSpan("Auth.currentSession")),
     })
   }),
 ).pipe(Layer.provideMerge(BetterAuthLive))

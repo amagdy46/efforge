@@ -45,10 +45,11 @@ Your code asks for `Database`, declared in `packages/core/src/Database.ts`. It h
 
 ## Files it writes
 
-`efforge add` writes these files.
+`efforge add` writes these files. A file marked *only if missing* is written only where the project lacks it.
 
 | File | Only with |
 | --- | --- |
+| `packages/core/src/server-only.ts` (*only if missing*) | Always |
 | `packages/db/src/index.ts` | Always |
 | `packages/core/src/notes.ts` | Always |
 | `packages/core/test/notes.test.ts` | Always |

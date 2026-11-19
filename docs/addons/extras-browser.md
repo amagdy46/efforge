@@ -45,8 +45,9 @@ Your code asks for `Browser`, declared in `packages/core/src/browser.ts`. It has
 
 ## Files it writes
 
-`efforge add` writes these files.
+`efforge add` writes these files. A file marked *only if missing* is written only where the project lacks it.
 
+- `packages/core/src/server-only.ts` (*only if missing*)
 - `packages/core/src/browser.ts`
 - `apps/web/src/browser/BrowserContainer.ts`
 - `apps/web/src/server/browser.ts`

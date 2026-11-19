@@ -392,6 +392,8 @@ const describe = (t: TransformCall): string => {
       return `section ${a.id}`
     case "addLayer":
       return `layer ${a.layer}`
+    case "addTelemetry":
+      return `telemetry ${a.layer}`
     case "addWranglerBinding":
       return `binding in ${a.key}`
     case "addAlchemyResource":
