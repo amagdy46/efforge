@@ -15,9 +15,7 @@ Rules for AI agents (and humans) working in this repo. Read this before changing
   `// #region card` block (`?region=card`, cut by `apps/web/regions.ts`), which ships to the
   browser: never mark a secret, and keep the markers. Lint rejects `?raw` and other whole-file
   imports; `pnpm build` fails if a server file or a secret would ship.
-- The dashboard is a starter surface. To remove it, replace `routes/app/index.tsx`, delete `capabilities/`, `components/{capability-card,code-block,layer-graph}.tsx`, `lib/{highlight,layer-graph}.ts`
-  and the `@/server/...` files the cards import (`greeting.ts`, `notes.ts`, ..., not `stack.ts`),
-  and in `server/stack.ts` drop the registry import and return `cards: []`. Run `pnpm typecheck`.
+- The dashboard is a starter surface. To remove it, replace `routes/app/index.tsx`, delete `capabilities/`, `components/{capability-card,code-block,layer-graph}.tsx`, `lib/{highlight,layer-graph}.ts` and the `@/server/...` files the cards import (`greeting.ts`, `notes.ts`, ..., not `stack.ts`), and in `server/stack.ts` drop the registry import and return `cards: []`. Run `pnpm typecheck`.
 - `apps/web/src/server/outcome.ts`: `runOutcome` runs an Effect for a server function and returns
   its tagged error as data (`{ ok: false, error: { _tag, message } }`), so the UI can match on it.
 - `efforge.jsonc`: the stack choices. `efforge add` reads it; leave it alone. To add a capability (email, storage, a database, auth, AI), run `npx -y create-efforge@latest add <id> --json` from the project root instead of wiring it by hand; `npx -y create-efforge@latest list --json` lists the ids.
@@ -67,8 +65,7 @@ Rules for AI agents (and humans) working in this repo. Read this before changing
   })
   ```
 
-  With a database, `packages/core/test/notes.test.ts` is this test in full. A service with one
-  fixed answer can use `Layer.succeed(Auth, Auth.of({ ... }))`. `it.effect` already gives each test a `TestClock`.
+  With a database, `packages/core/test/notes.test.ts` is this test in full. A service with one fixed answer can use `Layer.succeed(Auth, Auth.of({ ... }))`. `it.effect` already gives each test a `TestClock`.
 
 - Where a fake would behave differently from the platform (D1, R2, Durable Objects, Workflows),
   check the behaviour under `pnpm dev` too: it runs your Worker in workerd with local bindings.
