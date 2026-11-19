@@ -57,7 +57,7 @@ npx -y create-efforge@latest create my-app --json --dry-run --database=d1 --auth
 - `nextSteps`: commands still to run, in order, each with its `cwd`. Run them. A step with `longRunning: true` is the dev server (`pnpm dev`): start it in the background or leave it to the user.
 - `env`: env vars the project reads. `set: false` means efforge wrote it empty: fill it in (in `file`, `.dev.vars` or `.env` with Alchemy) before using the feature; `description` says what it is. `secret: true` means the value is a secret: never print it or commit the deployed one. `info` uses the same two fields.
 - `command`: a command that creates the same stack again without prompts.
-- `warnings`: things that didn't stop the run but the user should know (git commit skipped, unsupported Node, an install a previous run left undone). Read them and tell the user.
+- `warnings`: things that didn't stop the run but the user should know (git commit skipped, unsupported Node, an install a previous run left undone, git ignoring a project made with `--no-git`, which leaves `pnpm check` no files and the app unstyled until `git init` in the project). Read them and tell the user.
 
 ## Add a capability
 
@@ -113,7 +113,7 @@ It changes nothing. `status` is `needs-action` (something breaks the project; ex
 npx -y create-efforge@latest upgrade --json --cwd my-app
 ```
 
-It applies only what is still efforge's (pins, guards, scripts, files the user never changed, new files, and what new files need in files efforge edits in place), never a file the user changed, and runs `pnpm install`. With uncommitted changes it stops with `UncommittedChanges`. Then run `nextSteps` (the gate). `kept` lists files it left: `review` (the user changed it and so did efforge's template) and `held` (efforge's, held back because something of the user's depends on the old version). Tell the user about each, with `reason`; show efforge's version with `upgrade --check --diff --file <path>` and change a user's file only if they ask. A `needsAction` entry with `fix: null` (a set of pins half moved by the user) goes to the user with its `lines`.
+It applies only what is still efforge's (pins, guards, scripts, files the user never changed, new files, and what new files need in files efforge edits in place), never a file the user changed, and runs `pnpm install`. With uncommitted changes it stops with `UncommittedChanges`. New env vars the stack reads are appended to `.env.example` and listed in `env`; tell the user about any with `set: false`. Then run `nextSteps` (the gate, and `pnpm db:migrate` when the local database lacks a migration). `kept` lists files it left: `review` (the user changed it and so did efforge's template) and `held` (efforge's, held back because something of the user's depends on the old version). Tell the user about each, with `reason`; show efforge's version with `upgrade --check --diff --file <path>` and change a user's file only if they ask. A `needsAction` entry with `fix: null` (a set of pins half moved by the user) goes to the user with its `lines`.
 
 ## Errors
 
