@@ -106,7 +106,7 @@ jobs:
       - run: pnpm test:e2e -t "^add on a real project > " --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/e2e.json"
       - run: node scripts/expect-tests-ran.ts "$RUNNER_TEMP/e2e.json" 1
 
-  # `efforge upgrade` on real projects made by efforge 0.2.0 and 0.2.1, with and without the
+  # `efforge upgrade` on real projects made by efforge 0.2.0, 0.2.1 and a pinned commit of next, with and without the
   # owner's own edits, then each project's full gate. Needs the release refs, so a full fetch.
   e2e-upgrade:
     name: e2e (upgrade an old project)
