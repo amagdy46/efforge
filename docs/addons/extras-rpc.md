@@ -8,7 +8,7 @@ Id `extras/rpc`. It is one of the Extras: a project can have any number of them.
 
 ## What it is for
 
-Call Effect from TanStack Start with a typed client. `AppRpcs` in `packages/core/src/rpc.ts` is an Effect RPC group: each call's payload, success and tagged error as `Schema`, shared by the server and the browser. The server serves it at `POST /api/rpc` from `RpcLive`, a layer in `AppLayer`, so the handlers run the same programs and services as the server functions, under the telemetry slot. In React, `AppClient` (`AtomRpc`) turns each call into an atom; a failure arrives as its error's class with its fields, and a stream call streams. With auth, `/api/rpc` needs a session like every other route under `/api/`, and a call without one fails with `Unauthorized`. [Three ways to call Effect from TanStack Start](../rpc.md) compares it with a server function and `HttpApi`.
+Call Effect from TanStack Start with a typed client. `AppRpcs` in `packages/core/src/rpc.ts` is an Effect RPC group: each call's payload, success and tagged error as `Schema`, shared by the server and the browser. The server serves it at `POST /api/rpc` from `RpcLive`, a layer in `AppLayer`, so the handlers run the same programs and services as the server functions, under the telemetry slot. In React, `AppClient` (`AtomRpc`) turns each call into an atom; a failure arrives as its error's class with its fields, and a stream call streams. With auth, `/api/rpc` needs a session like every other route under `/api/`, and a call without one fails with `Unauthorized`. [Three ways to call Effect from TanStack Start](https://github.com/amagdy46/efforge/blob/main/docs/rpc.md) compares it with a server function and `HttpApi`.
 
 ## Add it
 
