@@ -1,5 +1,5 @@
 import { posix } from "node:path"
-import type { AddonFile, AddonManifest, When } from "./addon.ts"
+import type { AddonCard, AddonFile, AddonManifest, When } from "./addon.ts"
 import { slots } from "./slots.ts"
 import { type TransformCall, transformTargets } from "./transforms/index.ts"
 
@@ -87,24 +87,39 @@ const withAuth = (when: When | undefined): When => {
  */
 export const cardTransforms = (manifest: AddonManifest): CardTransform[] => {
   const card = manifest.card
-  const module = card?.files[0]
+  const modules = card === undefined ? [] : cardModules(card)
+  const module = modules[0]
   if (card === undefined || module === undefined) return []
   const guards = card.files
-    .filter((f) => f !== module && f.target.startsWith(SERVER_DIR))
+    .filter((f) => f.target !== module.target && f.target.startsWith(SERVER_DIR))
     .map(sessionGuard)
-  const registration: CardTransform = {
-    name: "addArrayItem",
-    args: {
-      file: REGISTRY_FILE,
-      name: "capabilities",
-      item: card.export,
-      import: card.export,
-      from: specifier(module.target),
-    },
-    ...(module.when === undefined ? {} : { when: module.when }),
+  // one registration per variant of the module, each for its stacks; the edit is the same
+  const args = {
+    file: REGISTRY_FILE,
+    name: "capabilities",
+    item: card.export,
+    import: card.export,
+    from: specifier(module.target),
   }
-  return [...(card.transforms ?? []), ...guards, registration]
+  const registrations = modules.map(({ when }): CardTransform =>
+    when === undefined ? { name: "addArrayItem", args } : { name: "addArrayItem", args, when },
+  )
+  return [...(card.transforms ?? []), ...guards, ...registrations]
 }
+
+/**
+ * The card module: `files[0]`, and any later card file with the same target, a variant of the
+ * module for the stacks its `when` names (the rpc card has one with a database and one without).
+ */
+export const cardModules = (card: AddonCard): AddonFile[] =>
+  card.files.filter((f) => f.target === card.files[0]?.target)
+
+/** The variant of the card module `stack` gets, if any. */
+export const cardModuleFor = (
+  card: AddonCard | undefined,
+  on: (when: When | undefined) => boolean,
+): AddonFile | undefined =>
+  card === undefined ? undefined : cardModules(card).find((f) => on(f.when))
 
 /**
  * The add-on's card transforms that apply to a project, given which files it has (`has`): none

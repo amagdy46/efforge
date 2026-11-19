@@ -3,7 +3,7 @@ import { Console, Effect, Exit, Path, Schema } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import pc from "picocolors"
 import { type AddonManifest, loadAddons, type When } from "../addon.ts"
-import { cardTransforms } from "../cards.ts"
+import { cardModules, cardTransforms } from "../cards.ts"
 import { BIN, type Failure, Invocation, printSuccess, report } from "../contract.ts"
 import { alternative } from "../fix.ts"
 import { introLine } from "../intro.ts"
@@ -102,6 +102,25 @@ const requirements = (slot: SlotId, option: string, m: AddonManifest): Requireme
   return out
 }
 
+/**
+ * The stacks any of `whens` names, as one `When` where it can be: variants that differ in one slot
+ * merge on it, and a slot every option of which is listed drops out. Otherwise the first.
+ */
+const anyOf = (whens: ReadonlyArray<When | undefined>): When | undefined => {
+  if (whens.length <= 1 || whens.some((w) => w === undefined)) return whens[0]
+  const all = whens as ReadonlyArray<When>
+  const keys = Object.keys(all[0] as When) as SlotId[]
+  const differ = keys.filter((k) => new Set(all.map((w) => JSON.stringify(w[k]))).size > 1)
+  const same = all.every((w) => Object.keys(w).length === keys.length)
+  const slot = differ[0]
+  if (!same || differ.length !== 1 || slot === undefined) return all[0]
+  const merged = [...new Set(all.flatMap((w) => w[slot] ?? []))]
+  const options = slots.find((s) => s.id === slot)?.options.map((o) => o.id) ?? []
+  const { [slot]: _, ...rest } = all[0] as When
+  const out: When = options.every((o) => merged.includes(o)) ? rest : { ...rest, [slot]: merged }
+  return Object.keys(out).length === 0 ? undefined : out
+}
+
 const withWhen = <A extends object>(a: A, when: When | undefined): A & { when?: When } =>
   when === undefined ? a : { ...a, when }
 
@@ -174,11 +193,11 @@ export const describeAddon = (m: AddonManifest, stack?: StackConfig): AddonInfo 
       ...m.conflicts,
     ],
     card:
-      m.card === undefined || on(m.card.files.slice(0, 1)).length === 0
+      m.card === undefined || on(cardModules(m.card)).length === 0
         ? null
         : withWhen(
             { module: (m.card.files[0] as { target: string }).target, export: m.card.export },
-            cond(m.card.files[0]?.when),
+            cond(anyOf(cardModules(m.card).map((f) => f.when))),
           ),
     agents: on(m.transforms)
       .filter((t) => t.name === "appendAgentsSection")

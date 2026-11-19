@@ -9,6 +9,7 @@ import { parseDocument } from "yaml"
 import { type AddonLoadError, type AddonManifest, addonIdsFor, loadAddons } from "../addon.ts"
 import {
   CARDS_DIR,
+  cardModuleFor,
   cardTransforms,
   PUBLIC_LIST_FILE,
   presentCardTransforms,
@@ -911,12 +912,8 @@ export const addAddons = (
         title: m.title,
       }
       if (m.docs !== undefined) entry.docs = m.docs
-      const card = m.card?.files[0]
-      if (
-        card !== undefined &&
-        switchedOn(m.id, card.when) &&
-        (out.has(card.target) || disk.get(card.target) !== undefined)
-      )
+      const card = cardModuleFor(m.card, (when) => switchedOn(m.id, when))
+      if (card !== undefined && (out.has(card.target) || disk.get(card.target) !== undefined))
         entry.card = card.target
       const agentsBefore = disk.get(AGENTS_FILE) ?? ""
       const agentsAfter = out.get(AGENTS_FILE) ?? agentsBefore

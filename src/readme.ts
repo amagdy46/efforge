@@ -1,5 +1,6 @@
 import type { LoadedAddon } from "./addon.ts"
 import { addonIdsFor } from "./addon.ts"
+import { cardModuleFor } from "./cards.ts"
 import { envGroups, localEnvFile, toFill } from "./env.ts"
 import { INSTALL } from "./exec.ts"
 import { matches } from "./generate.ts"
@@ -316,7 +317,7 @@ export const capabilities = (
     const database = m.id.startsWith("orm/")
       ? list.find((d) => d.manifest.id === `database/${stack.database}`)
       : undefined
-    const module = m.card?.files[0]
+    const module = cardModuleFor(m.card, (when) => matches(when, stack))
     out.push({
       title:
         database === undefined ? m.title : `Database: ${database.manifest.title} with ${m.title}`,
@@ -325,7 +326,7 @@ export const capabilities = (
         : { service: { name: serviceName, file: serviceFile } }),
       ...(layer === undefined ? {} : { layer }),
       env: [...(database === undefined ? [] : envOf(database, stack)), ...envOf(a, stack)],
-      ...(module !== undefined && matches(module.when, stack) ? { card: module.target } : {}),
+      ...(module === undefined ? {} : { card: module.target }),
     })
   }
   return out

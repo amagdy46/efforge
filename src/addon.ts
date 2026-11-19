@@ -40,7 +40,8 @@ export type AddonTransform = typeof AddonTransform.Type
 
 /**
  * The add-on's capability card on the dashboard (docs/capability-cards.md). `files[0]` is the card
- * module, under apps/web/src/capabilities/, and exports `export` (a `Capability`); the other files
+ * module, under apps/web/src/capabilities/, and exports `export` (a `Capability`); a later file with
+ * the same target and its own `when` is a variant of it for other stacks; the other files
  * are what only the card uses (its server functions, under apps/web/src/server/). `transforms`
  * edit only those files. The files, the transforms, the session guard efforge adds to the server
  * functions on auth stacks and the registration in apps/web/src/capabilities/registry.ts are one
@@ -242,7 +243,7 @@ const cardProblem = <E>(
       return `the card module (card.files[0]) must be under ${CARDS_DIR}`
     for (const f of card.files) {
       const serverFns = /\bcreateServerFn\s*\(/.test(yield* read(f))
-      const inServer = f !== module && f.target.startsWith(SERVER_DIR)
+      const inServer = f.target !== module.target && f.target.startsWith(SERVER_DIR)
       if (serverFns && !inServer)
         return `${f.target} calls createServerFn: a card's server functions go in its own files under ${SERVER_DIR}, so efforge can guard them on auth stacks`
       if (inServer && !serverFns)
