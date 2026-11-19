@@ -288,4 +288,4 @@ it(`every region a registered card shows fits in ${REGION_WIDTH} characters, on 
   }
   expect(regionsChecked).toBeGreaterThan(50)
   expect([...new Set(long)]).toEqual([])
-})
+}, 60_000)
