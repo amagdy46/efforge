@@ -96,6 +96,10 @@ export const wholeServerFile = (id: string): string | undefined => {
   return kind === undefined ? undefined : `${file} is imported whole (?${kind})`
 }
 
+/** An asset's content as text. */
+const assetText = (source: string | Uint8Array): string =>
+  typeof source === "string" ? source : new TextDecoder().decode(source)
+
 /**
  * Fails the browser build when it would ship a secret: a module that is a whole server file or a
  * settings file (see `wholeServerFile`), or the value of a secret from `.dev.vars` or `.env*`
@@ -118,12 +122,7 @@ export const clientGuard = (root = "../.."): Plugin => ({
           )
         }
       }
-      const text =
-        output.type === "chunk"
-          ? output.code
-          : typeof output.source === "string"
-            ? output.source
-            : new TextDecoder().decode(output.source)
+      const text = output.type === "chunk" ? output.code : assetText(output.source)
       for (const [name, value] of secrets)
         if (text.includes(value))
           this.error(
