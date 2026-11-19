@@ -64,7 +64,14 @@ it("every add-on file that replaces the dashboard renders the card registry", as
 const combos: StackConfig[] = (["none", "postgres", "d1"] as const).flatMap((database) =>
   (["none", "drizzle", "effect-sql"] as const).flatMap((orm) =>
     (["none", "better-auth", "better-auth-orgs"] as const).map((auth) =>
-      withDefaults({ name: "app", database, orm, auth, extras: ["realtime"] }),
+      withDefaults({
+        name: "app",
+        database,
+        orm,
+        auth,
+        ai: "effect-ai-byok",
+        extras: ["realtime", "workflows", "browser"],
+      }),
     ),
   ),
 )
@@ -81,7 +88,10 @@ it("every database, ORM and auth registers its cards, and the dashboard renders 
       "runtime",
       ...(config.orm === "none" ? [] : ["database"]),
       ...(config.auth === "none" ? [] : ["auth"]),
+      "ai",
+      "workflows",
       "realtime",
+      "browser",
     ])
     expectModules(tree, where)
     expect(rendersRegistry(tree.get(DASHBOARD) ?? ""), where).toBe(true)
@@ -135,6 +145,32 @@ it("adding realtime later adds its card to the dashboard", async () => {
     rmSync(tmp, { recursive: true, force: true })
   }
 })
+
+// add-on, its card's export, and the server file only the card uses
+const laterCards: ReadonlyArray<readonly [string, string, string]> = [
+  ["workflows", "workflows", "apps/web/src/server/workflows-demo.ts"],
+  ["ai/effect-ai-byok", "ai", "apps/web/src/server/ai-demo.ts"],
+  ["browser", "browser", "apps/web/src/server/browser-demo.ts"],
+]
+
+for (const [addon, card, server] of laterCards)
+  it(`adding ${addon} later adds its card to the dashboard`, async () => {
+    const { tmp, dir, result } = await addLater(d1Auth, [addon])
+    try {
+      const read = (file: string) => readFileSync(join(dir, file), "utf8")
+      const tree: Tree = new Map(
+        ["registry.ts", "runtime.tsx", "database.tsx", "auth.tsx", `${card}.tsx`]
+          .map((f) => `${CARDS_DIR}${f}`)
+          .map((f) => [f, read(f)]),
+      )
+      expect(registered(tree)).toEqual(["runtime", "database", "auth", card])
+      expectModules(tree, `after add ${addon}`)
+      expect(read(server)).toContain(".middleware([requireSession])")
+      expect(result.notes).toEqual([])
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  })
 
 it("a project without a card registry (before efforge 0.3) gets the add-on without its card", async () => {
   const { tmp, dir, result } = await addLater(d1Auth, ["realtime"], (d) =>

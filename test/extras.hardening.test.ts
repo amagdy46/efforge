@@ -78,7 +78,7 @@ it("the template lockfile is plain JSON from the public registry", () => {
 
 it("server fns validate input with Schema, not a pass-through", async () => {
   const t = await tree()
-  for (const file of ["run-browser", "example-job"]) {
+  for (const file of ["browser-demo", "workflows-demo"]) {
     const src = t.get(`apps/web/src/server/${file}.ts`) as string
     expect(src).not.toMatch(/\.validator\(\(input/)
     expect(src).toContain("Schema.toStandardSchemaV1")
