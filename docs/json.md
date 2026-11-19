@@ -206,7 +206,7 @@ npx -y create-efforge create my-app --json --dry-run
 
 ## `add`
 
-`stack` is the project's stack afterwards. `added` has one entry per add-on this run added: its `id`, `title`, `docs` (its page in efforge's docs), `card` (its dashboard card module, when the project has one) and `agents` (the headings of the `AGENTS.md` sections this run added for it). `created` and `changed` are the files this run created and changed, `removed` the generated files it deleted (`wrangler.jsonc` when you add Alchemy), `skipped` the ids the project already had and files already as efforge would write them. `replacedScripts` names package scripts an add-on replaced. `packageManager` is `{from, to}` when `add` raised the root `packageManager` (projects made by efforge 0.2.0, whose pnpm ignored the Effect overrides), else `null`. `notes` are things left to do by hand, one line each (for example, a card left out of a project with no dashboard registry, a server function `add` could not put `requireSession` on, with the fix, or, when auth is added, that every server function now requires a session and how to make one public). `installed` says whether `pnpm install` ran in this run; when it didn't and should, `nextSteps` starts with it. `env` lists only the env vars this run added.
+`stack` is the project's stack afterwards. `added` has one entry per add-on this run added: its `id`, `title`, `docs` (its page in efforge's docs), `card` (its dashboard card module, when the project has one) and `agents` (the headings of the `AGENTS.md` sections this run added for it). `created` and `changed` are the files this run created and changed, `removed` the generated files it deleted (`wrangler.jsonc` when you add Alchemy), `skipped` the ids the project already had and files already as efforge would write them. `replacedScripts` names package scripts an add-on replaced. `packageManager` is `{from, to}` when `add` raised the root `packageManager` (projects made by efforge 0.2.0, whose pnpm ignored the Effect overrides), else `null`. `notes` are things left to do by hand, one line each (for example, a card left out of a project with no dashboard registry, a server function `add` could not put `requireSession` on, with the fix, or, when auth is added, that every server function now requires a session, which of the project's own `pnpm check` now fails on, how to make one public, and what changed for routes under `/api/` and outside it). `installed` says whether `pnpm install` ran in this run; when it didn't and should, `nextSteps` starts with it. `env` lists only the env vars this run added.
 
 <!-- example: add -->
 
@@ -999,7 +999,8 @@ npx -y create-efforge upgrade --check --json --cwd my-app
   "env": [],
   "kept": [],
   "steps": [],
-  "warnings": []
+  "warnings": [],
+  "notes": []
 }
 ```
 
@@ -1144,7 +1145,8 @@ npx -y create-efforge upgrade --check --json --cwd my-app
       "cwd": "/home/me/projects/my-app"
     }
   ],
-  "warnings": []
+  "warnings": [],
+  "notes": []
 }
 ```
 
@@ -1156,6 +1158,7 @@ npx -y create-efforge upgrade --check --json --cwd my-app
 - `created`, `changed`, `removed`: the files, relative to the project. `installed`: whether `pnpm install` ran.
 - `env`: the env vars it added, as in `--check`.
 - `kept`: as above. `nextSteps`: the commands left to run, each with its `cwd`, ending with the project's gate.
+- `notes`: things to know after the upgrade, one line each, as `add` gives them. When it brings the session gates to an auth project made before them, the note `add auth` prints: what they change for server functions and routes, and the server functions `pnpm check` now fails on. `--check` has the same `notes`.
 - With `--diff`, `diff` is what it changed, as one git diff.
 
 The same project as above, upgraded:
@@ -1210,7 +1213,8 @@ npx -y create-efforge upgrade --json --cwd my-app
       "cwd": "/home/me/projects/my-app"
     }
   ],
-  "warnings": []
+  "warnings": [],
+  "notes": []
 }
 ```
 

@@ -4,7 +4,13 @@ import { Effect, type FileSystem, type Path } from "effect"
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser"
 import { parseDocument } from "yaml"
 import { type AddonManifest, addonIdsFor, type LoadedAddon } from "./addon.ts"
-import { needsGuard, presentCardTransforms, sessionGuard } from "./cards.ts"
+import {
+  needsGuard,
+  PUBLIC_LIST_FILE,
+  presentCardTransforms,
+  START_FILE,
+  sessionGuard,
+} from "./cards.ts"
 import { checkConsistency, sourceFiles } from "./consistency.ts"
 import { BIN } from "./contract.ts"
 import { unifiedDiff } from "./diff.ts"
@@ -33,6 +39,7 @@ import { type EfforgeManifest, hash } from "./manifest.ts"
 import { compareWithRecord, onlyEfforgeOwn, shingles } from "./record.ts"
 import { compareVersions, exactVersion } from "./semver.ts"
 import type { StackConfig } from "./stack.ts"
+import { publicList, sessionNote, unguardedIn } from "./session-note.ts"
 import { sameStructure } from "./structure.ts"
 import { typeProbe } from "./types.ts"
 import {
@@ -215,6 +222,11 @@ export interface UpgradeReport {
   readonly covers: ReadonlyArray<string>
   readonly steps: ReadonlyArray<UpgradeStep>
   readonly warnings: ReadonlyArray<string>
+  /**
+   * Things to know after the upgrade, one line each, as `add` gives them: when it brings the
+   * session gates to a project made before them, what they change and what `pnpm check` fails on.
+   */
+  readonly notes: ReadonlyArray<string>
   /** The plan: file -> content after. Not in the JSON document. */
   readonly changes: ReadonlyMap<string, string>
   /** Files the plan removes. */
@@ -1087,6 +1099,38 @@ export const planUpgrade = (
     const behind = changes.size > 0 || removes.size > 0
     const status = needsAction.length > 0 ? "needs-action" : behind ? "behind" : "current"
 
+    // the session gates arrive (a project made before them): the note `add auth` gives
+    const notes: string[] = []
+    const gate = /\bsessionGate\b/
+    if (
+      stack.auth !== "none" &&
+      !gate.test(at(START_FILE) ?? "") &&
+      gate.test(changes.get(START_FILE) ?? "")
+    ) {
+      const web = "apps/web/src/"
+      const onDisk = (() => {
+        try {
+          return readdirSync(join(dir, web), { recursive: true, encoding: "utf8" }).map(
+            (n) => `${web}${n.split("\\").join("/")}`,
+          )
+        } catch {
+          return []
+        }
+      })()
+      const texts: Array<[string, string]> = []
+      for (const file of new Set([
+        ...onDisk,
+        ...[...changes.keys()].filter((f) => f.startsWith(web)),
+      ]))
+        if (!removes.has(file) && /\.tsx?$/.test(file)) {
+          const text = changes.get(file) ?? at(file)
+          if (text !== undefined) texts.push([file, text])
+        }
+      texts.sort(([a], [b]) => byName(a, b))
+      const list = publicList(changes.get(PUBLIC_LIST_FILE) ?? at(PUBLIC_LIST_FILE))
+      notes.push(sessionNote(unguardedIn(texts, list)))
+    }
+
     // what to do, in order
     const steps: UpgradeStep[] = []
     if (behind)
@@ -1143,6 +1187,7 @@ export const planUpgrade = (
       covers,
       steps,
       warnings,
+      notes,
       changes,
       removes,
       installOwed: installAfter,

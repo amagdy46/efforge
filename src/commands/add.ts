@@ -70,6 +70,7 @@ import {
   renderGroups,
 } from "../env.ts"
 import { migrateOwed } from "../migrations.ts"
+import { publicList, sessionNote, unguardedIn } from "../session-note.ts"
 import { WRANGLER_FILE } from "../transforms/addWranglerBinding.ts"
 import {
   runTransform,
@@ -591,43 +592,40 @@ export const addAddons = (
     const gated = /\bsessionGate\b/.test(current.get(START_FILE) ?? (yield* read(START_FILE)) ?? "")
     // a server function the guard could not reach (its `.middleware(...)` is not a written-out
     // list) is named, with the fix; the project's own lint rule fails on it until then
+    const namedAlready = new Set<string>()
     for (const t of active) {
       if (t.name !== "addServerFnMiddleware" || t.args.file === undefined) continue
       const text = current.get(t.args.file)
       if (text === undefined) continue
       const middleware = t.args.middleware ?? "requireSession"
-      for (const fn of unguardedServerFns(t.args.file, text, middleware))
+      for (const fn of unguardedServerFns(t.args.file, text, middleware)) {
+        namedAlready.add(`${t.args.file}#${fn}`)
         notes.push(
           `${fn} in ${t.args.file} has no ${middleware}: its .middleware(...) is not a list efforge can add to. Put ${middleware} first in it, as .middleware([${middleware}, ...]), and import it from "${t.args.from ?? "./require-session"}". ${gated ? "sessionGate still refuses a signed-out call at runtime, but" : "Until then it answers signed-out requests, and"} pnpm check fails on it (efforge/server-fn-session).`,
         )
+      }
     }
-    // auth added now: say what changed for the owner's own server functions, and how to open one
+    // auth added now: say what changed for server functions and routes, and name every server
+    // function pnpm check now fails on (the owner's own, exported or not, in a route file too)
     if (gated && newIds.some((id) => id.startsWith("auth/"))) {
-      const own: string[] = []
-      // efforge's own files: written by a release (hashed) or by an add-on of this stack
-      const efforgeFiles = new Set([
-        ...Object.keys(manifest.files),
-        ...written,
-        ...scope.flatMap(({ manifest: m }) =>
-          [...m.files, ...(m.card?.files ?? [])].map((f) => f.target),
-        ),
-      ])
       const names = yield* fs
         .readDirectory(path.join(dir, WEB_SRC), { recursive: true })
         .pipe(Effect.orElseSucceed(() => [] as string[]))
-      const files = names
-        .map((n) => `${WEB_SRC}${n.split(path.sep).join("/")}`)
-        .filter((f) => /\.tsx?$/.test(f) && !f.endsWith(".d.ts"))
-        .toSorted(byName)
-      for (const file of files) {
-        if (efforgeFiles.has(file)) continue
+      const files = new Set([
+        ...names.map((n) => `${WEB_SRC}${n.split(path.sep).join("/")}`),
+        ...[...current.keys()].filter((f) => f.startsWith(WEB_SRC)),
+      ])
+      const texts: Array<[string, string]> = []
+      for (const file of [...files].toSorted(byName)) {
+        if (!/\.tsx?$/.test(file)) continue
         const text = current.get(file) ?? (yield* read(file))
-        if (text === undefined || !text.includes("createServerFn")) continue
-        for (const m of text.matchAll(/export const (\w+)\s*=\s*[\w.]*createServerFn\b/g))
-          own.push(`${m[1]} (${file})`)
+        if (text !== undefined) texts.push([file, text])
       }
+      const list = publicList(current.get(PUBLIC_LIST_FILE) ?? (yield* read(PUBLIC_LIST_FILE)))
       notes.push(
-        `Every server function now requires a session: sessionGate runs before each one (${START_FILE}), ${own.length > 0 ? `yours too: ${own.join(", ")}` : "including any you write later"}. A signed-out call gets Unauthorized. To let signed-out visitors call one, add its file and name to ${PUBLIC_LIST_FILE}, as getSession and getStack are.`,
+        sessionNote(
+          unguardedIn(texts, list).filter((f) => !namedAlready.has(`${f.file}#${f.name}`)),
+        ),
       )
     }
     const transformed = new Set<string>()

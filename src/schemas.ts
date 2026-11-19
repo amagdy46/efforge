@@ -471,6 +471,10 @@ export const UpgradeCheckOutput = Schema.Struct({
   kept: Kept,
   steps: Steps,
   warnings: Strings,
+  notes: Strings.annotate({
+    description:
+      "Things to know after the upgrade, one line each, as add gives them (when it brings the session gates: what they change and what pnpm check fails on).",
+  }),
 }).annotate({ title: "efforge upgrade --check --json" })
 
 export const UpgradeApplyOutput = Schema.Struct({
@@ -502,6 +506,10 @@ export const UpgradeApplyOutput = Schema.Struct({
   needsAction: NeedsAction,
   nextSteps: Schema.Array(Schema.Struct({ command: Schema.String, cwd: Schema.String })),
   warnings: Strings,
+  notes: Strings.annotate({
+    description:
+      "Things to know after the upgrade, one line each, as add gives them (when it brings the session gates: what they change and what pnpm check fails on).",
+  }),
   diff: Schema.optionalKey(
     Schema.String.annotate({ description: "With --diff: what it changed, as a git diff." }),
   ),

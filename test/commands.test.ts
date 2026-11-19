@@ -428,15 +428,36 @@ it("add auth says every server function now needs a session, names the owner's o
     join("app", "apps/web/src/server/export.ts"),
     'import { createServerFn } from "@tanstack/react-start"\n\nexport const exportAll = createServerFn({ method: "GET" }).handler(() => "rows")\n',
   )
+  // one not exported, in a route file: the usual form there
+  writeFileSync(
+    join("app", "apps/web/src/routes/report.tsx"),
+    'import { createFileRoute } from "@tanstack/react-router"\nimport { createServerFn } from "@tanstack/react-start"\n\nconst inRoute = createServerFn({ method: "GET" }).handler(() => "rows")\n\nexport const Route = createFileRoute("/report")({ loader: () => inRoute() })\n',
+  )
   const r = await cli(["add", "auth/better-auth", "--json", "--no-install", "--cwd", "app"])
-  expect(r.exitCode).toBe(0)
+  expect(r.exitCode, r.out).toBe(0)
   const notes = json(r.out).notes as string[]
   const note = notes.filter((n) => n.startsWith("Every server function now requires a session"))
   expect(note).toHaveLength(1)
   expect(note[0]).toContain("exportAll (apps/web/src/server/export.ts)")
+  expect(note[0]).toContain("inRoute (apps/web/src/routes/report.tsx)")
+  // what pnpm check now does with them, and how to open one
+  expect(note[0]).toContain(
+    "pnpm check fails on each of them until it chains .middleware([requireSession])",
+  )
   expect(note[0]).toContain("apps/web/src/server/public-server-fns.json")
-  // efforge's own server functions are not the owner's
-  expect(note[0]).not.toContain("greet")
+  // routes: under /api/ they need a session now, outside it they check it themselves
+  expect(note[0]).toContain("Every request under /api/ now requires a session too")
+  expect(note[0]).toContain("public-api-paths.json (/api/auth/)")
+  expect(note[0]).toContain("A route outside /api/ is not checked")
+  // efforge's own server functions are guarded, and the public ones are public
+  for (const name of ["greet", "getGreeting", "getSession", "getStack", "listNotes"])
+    expect(note[0]).not.toContain(`${name} (`)
+  // the same line in text
+  await create("app2", "--database=d1", "--orm=effect-sql", "--auth=none")
+  const plain = await cli(["add", "auth/better-auth", "--no-install", "--cwd", "app2"])
+  expect(
+    stripVTControlCharacters([plain.out, ...plain.s.output].join("\n")).replace(/\s+/g, " "),
+  ).toContain("A route outside /api/ is not checked")
   const text = await cli(["add", "storage", "--no-install", "--cwd", "app"])
   expect(stripVTControlCharacters(text.out)).not.toContain("Every server function now requires")
 })
