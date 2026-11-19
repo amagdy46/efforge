@@ -38,6 +38,71 @@ const postWithHost = (url: string, host: string, body: string) =>
   })
 
 /**
+ * Uses the storage, email, workflows, AI and browser cards: each one's working state and its tagged
+ * error. Needs no account: R2, email and Workflows are emulated, the AI card has no key (with
+ * organizations it says to add one) and containers are off in local dev.
+ */
+const useServiceCards = async (page: Page) => {
+  const storage = page.locator("#storage")
+  await storage.getByText("No files yet").waitFor()
+  const upload = storage.getByRole("button", { name: "Upload", exact: true })
+  await storage.getByLabel("File to upload").setInputFiles({
+    name: "big.bin",
+    mimeType: "application/octet-stream",
+    buffer: Buffer.alloc(1_100_000),
+  })
+  await upload.click()
+  await storage.getByRole("alert").getByText("FileTooLarge").waitFor()
+  await storage.getByLabel("File to upload").setInputFiles({
+    name: "hello.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("hello from R2\n"),
+  })
+  await upload.click()
+  const link = storage.getByRole("link", { name: "hello.txt" })
+  await link.waitFor()
+  const download = await page.request.get((await link.getAttribute("href")) ?? "")
+  if (download.status() !== 200 || (await download.text()) !== "hello from R2\n")
+    throw new Error(`the signed link answered ${download.status()}`)
+  await storage.getByRole("button", { name: "Delete hello.txt" }).click()
+  await storage.getByText("No files yet").waitFor()
+
+  const email = page.locator("#email")
+  const send = email.getByRole("button", { name: "Send a test email" })
+  await email.getByLabel("To").fill("not an address")
+  await send.click()
+  await email.getByRole("alert").getByText("InvalidAddress").waitFor()
+  await email.getByLabel("To").fill("ada@example.com")
+  await send.click()
+  await email.getByText("Printed to the dev server log").waitFor()
+
+  const workflows = page.locator("#workflows")
+  const start = workflows.getByRole("button", { name: "Start workflow" })
+  await workflows.getByLabel("Name").fill(" ")
+  await start.click()
+  await workflows.getByRole("alert").getByText("MissingName").waitFor()
+  await workflows.getByLabel("Name").fill("Ada")
+  await start.click()
+  await workflows.getByText("Hello, Ada! The workflow finished.").waitFor({ timeout: 90_000 })
+
+  const ai = page.locator("#ai")
+  await ai.getByRole("button", { name: "Ask" }).click()
+  await ai.getByText("Not configured yet").waitFor()
+  await ai.getByLabel("Prompt").fill("")
+  await ai.getByRole("button", { name: "Ask" }).click()
+  await ai.getByText("EmptyPrompt").last().waitFor()
+
+  const browser = page.locator("#browser")
+  const open = browser.getByRole("button", { name: "Open" })
+  await browser.getByLabel("Address").fill("ftp://example.com")
+  await open.click()
+  await browser.getByRole("alert").getByText("InvalidUrl").waitFor()
+  await browser.getByLabel("Address").fill("https://example.com")
+  await open.click()
+  await browser.getByText("Not configured yet").waitFor({ timeout: 100_000 })
+}
+
+/**
  * Uses every card's demo as a signed-in user, then replays each server function call the dashboard
  * made without the session cookie: every one must be refused with `Unauthorized`, reads included.
  * Also checks that a failed add keeps the typed note.
@@ -69,6 +134,7 @@ const cardsRequireSession = async (page: Page) => {
   await realtime.getByText("Connected", { exact: true }).waitFor()
   await realtime.getByRole("button", { name: "Send from the server" }).click()
   await realtime.getByText(/broadcast it to/).waitFor()
+  await useServiceCards(page)
 
   const seen = new Map(calls.map((c) => [`${c.method()} ${c.url()}`, c]))
   const names = new Set<string>()
@@ -111,7 +177,21 @@ const cardsRequireSession = async (page: Page) => {
   })
   if (closed.code !== 4401)
     throw new Error(`an anonymous socket closed with ${closed.code} ${closed.reason}, not 4401`)
-  for (const fn of ["greet", "listNotes", "addNote", "announce"])
+  for (const fn of [
+    "greet",
+    "listNotes",
+    "addNote",
+    "announce",
+    "listFiles",
+    "uploadFile",
+    "deleteFile",
+    "mailSettings",
+    "sendTestEmail",
+    "startWorkflow",
+    "watchWorkflow",
+    "askModel",
+    "visitPage",
+  ])
     if (!names.has(fn))
       throw new Error(`the dashboard never called ${fn}; replayed ${[...names].join(", ")}`)
 }

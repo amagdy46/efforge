@@ -22,7 +22,7 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - `list --json` outside a project's root, but inside one or beside one, names it in `nearby`, and the text output says so.
 - `efforge add ai` (or `infra`) means the slot's one add-on.
 - Generated apps open on a landing page that names the project and shows the stack it was created with, read from `efforge.jsonc`, so it stays true after `efforge add`. It links to the dashboard, points to `AGENTS.md`, and gives the `add` command for a capability the project does not have.
-- The dashboard (`/app`) shows one card per capability: a working demo next to the Effect code behind it, read from the files as they are, and the files, test and `AGENTS.md` section to read next. Runtime, database, auth and realtime have cards, and a layer graph shows what `AppLayer` merges.
+- The dashboard (`/app`) shows one card per capability: a working demo next to the Effect code behind it, read from the files as they are, and the files, test and `AGENTS.md` section to read next. Runtime, database, auth, AI, workflows, realtime, browser, storage and email have cards, and a layer graph shows what `AppLayer` merges.
 - An add-on contributes its card with a `card` entry in `addon.json`; `create` and `add` register it. `docs/capability-cards.md` describes the contract. A card's files and the transforms on them are one unit: in a project made before cards, `add` adds the add-on without any of it and says so in a note.
 - On auth stacks every server function a card calls requires a session, reads included. efforge adds the guard, also to cards that were there before auth was added.
 - A card shows only the marked region of a file: a Vite plugin in the generated app cuts it out at build time, so the rest of the file never reaches the browser, and a file without the region fails the build.
@@ -35,6 +35,18 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - `add` says, for each new add-on, where its card is, which `AGENTS.md` sections it added and where its docs page is; under `--json` these are `card`, `agents` and `docs` in each `added` entry.
 - A marker counts only on a line of its own, and each region needs one opening and one closing marker, in order, not nested. When a README or `AGENTS.md` breaks that, `add` leaves the whole file as it is and names the marker, in text and in `notes`. A seeded property test with random user text and random marker damage holds this ([ADR 0010](docs/decisions/0010-generated-docs-regions.md)).
 
+- Storage has a dashboard card: upload a file to R2, list the bucket, open a file through a signed link, delete it. `Storage` gains `list`, and the `upload`, `listUploads` and `deleteUpload` programs come with `FileTooLarge` and `NotAnUpload`.
+- Email has a dashboard card: it says which transport is active and how to switch, sends a test email and shows what went out. `sendTestEmail` refuses a non-address with `InvalidAddress`.
+- Workflows card: start a run of the example workflow and follow it step by step as it happens, a failed first attempt retried, a durable 5-second sleep and the result, read from `WorkflowInstance.subscribe`. A blank name is `MissingName`.
+- AI card: ask the configured model and read the answer as it streams. With no key the card names the missing setting and its file, or, with organizations, says to add a key in Settings > AI.
+- Browser card: open a page in the Playwright container and see its screenshot, title and request count. A local or private address is `UrlRefused`. With containers off in `pnpm dev`, the card says what to turn on. Every call ends within 90 seconds.
+- Test layers you can reuse in your own tests ship in `packages/core/test`: `StorageInMemory`, `MailerInMemory`, `JobsInMemory`, `LlmFixed`, `LlmUnconfigured` and `BrowserInMemory`, each with a test, and the `AGENTS.md` sections say how to use them.
+- Without auth, every card whose server functions write or spend says so ("Open endpoint"), and an `AGENTS.md` subsection says the same; both go away once auth is added. Cards read the stack through one hook, `useStack`, which asks `getStack` once per page.
+- On a project with auth, every server function requires a session, wherever its file is, and `pnpm check` fails on one without `requireSession` unless it is on the short public list in `vite.config.ts` (`efforge/server-fn-session`).
+- `add auth` puts `requireSession` first in a server function's existing middleware list, and names in a note any function it cannot guard, with the fix.
+- On a project with auth, the realtime room refuses a WebSocket without a session (close code 4401, "Not signed in"), and the card shows it. Without auth, the card says the room is open.
+- Lint rejects `?raw` and other whole-file imports, and `pnpm build` fails if a server file, `.dev.vars`, `.env*` or a secret's value would reach the browser.
+- The layer graph has nine tempering colours, so a project with every add-on shows nine different ones.
 ### Changed
 
 - The `--json` output changed shape (see [ADR 0007](docs/decisions/0007-json-contract.md)). Against 0.2.1:
@@ -75,6 +87,12 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - The README's "Run it", `create`'s next steps and `nextSteps` under `--json` come from one function, and depend only on the stack in `efforge.jsonc`, never on which untracked files exist.
 - Alchemy with Postgres: `DATABASE_URL` has no default keyed on the stage name, and `pnpm dev` turns TLS off only for a database on this machine (`localhost`, `127.0.0.1`, `::1`).
 
+- Service interfaces grew. If you wrote your own implementation of one (a test fake, say), add the new members: `Jobs.events` (workflows), `Llm.streamText` (AI), `Storage.list` (storage), and `Mailer.transport` and `Mailer.from` (email). `StoredObject` gains `uploaded`; `StorageError`, `MailerError`, `JobError` and `BrowserError` carry a `message`.
+- The example server functions `example-job.ts` and `run-browser.ts` are now the cards' `workflows-demo.ts` and `browser-demo.ts`. A project made before cards (0.2.x) that adds workflows or browser gets the service, its layer and its tests but no demo server function, and `add` says so: its note now names the card files it left out instead of saying there is nothing to do.
+- The browser container answers a refused address with 403 and a page that would not load with 502, and returns a screenshot.
+- A missing or unusable setting names itself on the page and from `/api/auth/*`, for example `STORAGE_SIGNING_SECRET is too short`, a malformed `BETTER_AUTH_URL`, or an `LLM_PROVIDER` that is not a provider.
+- Every region a card shows fits 80 characters on every stack, so the code panel never scrolls sideways at 1440 px; a test checks all nine cards on both infras.
+- The README's Deploy section covers every add-on that binds a Cloudflare resource, from one record in `src/readme.ts`; a test fails for a new add-on with a wrangler binding until Deploy names it on both infras.
 ### Fixed
 
 - `npx create-efforge lst` no longer creates a project called "lst", and following the fixes for `ad email --cwd my-app` no longer ends in a project called `ad-email-my-app`. The root form takes exactly one name: a command in other case (`Add`), a typo of one, a word people guess as a command (`help`, `version`, `update`, `init`, `install`, `remove`, `ls`, `new`, `run`, `dev`, `build`, `deploy` and more), more words, or a flag only `add` and `list` take is refused with `UnknownCommand`, before anything else parses, with the command it names or no fix. Inside an efforge project the root form creates nothing (`InsideProject`), so `update --json` there no longer makes `my-app/update`. `create <name>` still takes any valid name. `create my app` is no longer turned into `my-app`.
@@ -95,6 +113,11 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - `pnpm db:generate` no longer fails on a new Postgres + Drizzle project ("snapshot.json is not of the latest version"): the committed snapshots are the version the pinned drizzle-kit reads, and CI runs `pnpm db:generate` on every Drizzle stack.
 - `pnpm run deploy` deploys the built Worker config; wrangler refused the config in `apps/web`.
 - `pnpm db:migrate --remote` on D1 no longer passes `--local` too, which wrangler refuses. On Alchemy, D1 + Drizzle's `pnpm db:migrate` says why it doesn't apply and leaves no `packages/db/migrations/` behind.
+- Better Auth no longer fails sign-ups on a cold Worker: its start-up goes to `waitUntil` instead of being awaited across requests.
+- The realtime room counts only clients that are there, so the count stays right under `pnpm dev`.
+- With Alchemy and the AI add-on, `pnpm dev` starts without `LLM_API_KEY`. Before, Alchemy refused to plan.
+- `vite.config.ts` no longer warns about `./regions` on every `pnpm dev` and `pnpm build`.
+- The browser add-on passes the lint of a project made by efforge 0.2.x (it read `_tag`, which that lint forbids).
 
 ## 0.2.1 (2026-11-18)
 

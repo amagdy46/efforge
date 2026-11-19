@@ -157,7 +157,7 @@ jobs:
       - run: docker build "$RUNNER_TEMP/house-app/apps/browser"
 
   # Drives the generated pg-drizzle-orgs + realtime app in Chromium against a real Postgres:
-  # sign up, create an org, see the realtime card, invite, accept, both members visible.
+  # sign up, create an org, use every card, invite, accept, both members visible.
   browser-flow:
     name: browser flow (pg-drizzle-orgs + realtime)
     runs-on: ubuntu-latest
