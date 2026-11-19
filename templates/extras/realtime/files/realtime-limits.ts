@@ -22,6 +22,21 @@ const encoder = new TextEncoder()
 export const isMessageTooLarge = (message: string): boolean =>
   encoder.encode(message).byteLength > MAX_MESSAGE_BYTES
 
+/** How long a new socket has to send its first ping (`useRoom` sends one when it opens). */
+export const JOIN_GRACE_MS = 10_000
+
+/**
+ * Whether the room counts a socket and sends to it: it has pinged since the handshake, or it was
+ * accepted less than `JOIN_GRACE_MS` ago. A client that closes its socket before or during the
+ * handshake (a reload, React StrictMode running an effect twice) can leave the room's end open
+ * with nobody there; it never pings, so once the grace period is over the room closes it.
+ */
+export const isAttended = (
+  socket: { readonly pinged: boolean; readonly acceptedAt: number | undefined },
+  now: number,
+): boolean =>
+  socket.pinged || (socket.acceptedAt !== undefined && now - socket.acceptedAt < JOIN_GRACE_MS)
+
 const BASE_DELAY_MS = 1000
 const MAX_DELAY_MS = 30_000
 

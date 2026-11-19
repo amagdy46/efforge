@@ -1,7 +1,9 @@
 import { expect, it } from "vitest"
 import {
+  isAttended,
   isMessageTooLarge,
   isValidRoomId,
+  JOIN_GRACE_MS,
   MAX_MESSAGE_BYTES,
   reconnectDelay,
 } from "../src/realtime-limits"
@@ -29,4 +31,14 @@ it("backs off exponentially, jittered, never past 30 seconds", () => {
   expect(reconnectDelay(50, () => 0)).toBe(15_000)
   for (let attempt = 0; attempt < 40; attempt++)
     expect(reconnectDelay(attempt)).toBeLessThanOrEqual(30_000)
+})
+
+it("counts a client that pinged, and a new socket only during its grace period", () => {
+  const now = 100_000
+  expect(isAttended({ pinged: true, acceptedAt: 0 }, now)).toBe(true)
+  // a client that closed during the handshake never pings: counted at first, then not
+  const silent = { pinged: false, acceptedAt: now - 1 }
+  expect(isAttended(silent, now)).toBe(true)
+  expect(isAttended(silent, now + JOIN_GRACE_MS)).toBe(false)
+  expect(isAttended({ pinged: false, acceptedAt: undefined }, now)).toBe(false)
 })
