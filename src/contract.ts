@@ -66,9 +66,11 @@ export const errorCodes = {
   TransformAnchorMissing:
     "`add` couldn't find where to edit a file you changed. Nothing was written. Apply `snippet` by hand, then re-run.",
   CommandFailed:
-    "`add` wrote its files, then a command it runs (pnpm install) failed. `fix` runs it again.",
-  UpgradeNeedsCheck:
-    "`upgrade` without `--check`: efforge can't apply an upgrade yet. No fix; `command` is the same command with --check, which reports what to do.",
+    "`add` or `upgrade` wrote its files, then a command it runs (pnpm install) failed. `fix` runs it again.",
+  ProjectNewerThanCli:
+    "`upgrade` was run by an efforge older than the one that made or last upgraded the project, which would undo the newer one's changes. Nothing was written. No fix; `command` is the same command with create-efforge@latest.",
+  UncommittedChanges:
+    "`upgrade` found changes in the project that aren't committed, so git diff couldn't show what it did. Nothing was written. No fix: commit or stash first; `command` is the same command with --allow-dirty.",
   InternalError: "A bug in efforge or a broken install. No fix; report it.",
 } as const
 

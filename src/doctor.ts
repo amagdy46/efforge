@@ -14,10 +14,13 @@ import { INSTALL } from "./exec.ts"
 import { matches } from "./generate.ts"
 import { installOwed } from "./installed.ts"
 import type { EfforgeManifest } from "./manifest.ts"
+import type { UpgradeReport } from "./upgrade.ts"
 import { compareVersions, satisfies } from "./semver.ts"
 import type { StackConfig } from "./stack.ts"
 import type { TransformCall } from "./transforms/index.ts"
-import { checkUpgrade, missingOverrides, pinnedPnpm, readWorkspace } from "./upgrade.ts"
+import { Node, SyntaxKind } from "ts-morph"
+import { parseTs } from "./transforms/util.ts"
+import { missingOverrides, pinnedPnpm, planUpgrade, readWorkspace } from "./upgrade.ts"
 import {
   effectOverrides,
   efforgeVersion,
@@ -34,14 +37,18 @@ import {
 // add-ons' manifests, so an add-on contributes to `env`, `bindings` and `layers` by declaring its
 // env vars and transforms; a check of its own is a new entry here (docs/decisions/0009).
 
-export type CheckStatus = "ok" | "warn" | "fail" | "skipped"
+/** `unverified`: the check couldn't read what it looks for in the shape it knows; `details` says what. */
+export type CheckStatus = "ok" | "warn" | "fail" | "skipped" | "unverified"
 
 export interface CheckResult {
   readonly id: string
   readonly status: CheckStatus
   /** One or two sentences: what was found and why it matters. */
   readonly message: string
-  /** A shell command that fixes it, or null (then `details` says what to change). */
+  /**
+   * A command after which this check passes and no other check is worse, or null (then
+   * `message` and `details` say what to change).
+   */
   readonly fix: string | null
   readonly details?: Readonly<Record<string, unknown>>
 }
@@ -56,6 +63,8 @@ export interface Probe {
   readonly reachable: (host: string, port: number) => Effect.Effect<boolean>
   /** The names in the `d1_migrations` table of each local D1 database file. */
   readonly appliedD1: (files: ReadonlyArray<string>) => string[] | undefined
+  /** Files with uncommitted changes under `dir`, or undefined when it isn't in a git checkout. */
+  readonly dirty: (dir: string) => string[] | undefined
 }
 
 const spawnText = (cmd: string, args: string[], cwd: string, timeout: number) => {
@@ -122,6 +131,14 @@ export const liveProbe: Probe = {
       if (original !== undefined) Object.defineProperty(process, "emitWarning", original)
     }
   },
+  dirty: (dir) => {
+    const r = spawnText("git", ["status", "--porcelain", "--", "."], dir, 30_000)
+    if (r === undefined || r.status !== 0) return undefined
+    return r.stdout
+      .split("\n")
+      .map((l) => l.slice(3).trim())
+      .filter((l) => l !== "")
+  },
 }
 
 export const DoctorProbe = Context.Reference<Probe>("efforge/DoctorProbe", {
@@ -147,6 +164,36 @@ export interface DoctorContext {
   readonly here: (...commands: string[]) => string
   /** An efforge command for this project, with --cwd when efforge was run elsewhere. */
   readonly efforge: (args: string) => string
+  /** What `upgrade` would do here, computed once; undefined when it can't be computed. */
+  readonly plan: Effect.Effect<UpgradeReport | undefined, never, FileSystem.FileSystem | Path.Path>
+}
+
+/**
+ * `upgrade` as a check's fix: only when it has something to apply, the project isn't newer than
+ * this CLI, and there is nothing uncommitted (upgrade refuses that, and the fix must work).
+ */
+const upgradeFix = (ctx: DoctorContext, plan: UpgradeReport | undefined): string | null => {
+  if (plan === undefined || plan.project.status === "ahead") return null
+  if (plan.changes.size + plan.removes.size === 0 && !plan.installOwed) return null
+  if ((ctx.probe.dirty(ctx.dir) ?? []).length > 0) return null
+  return ctx.efforge("upgrade")
+}
+
+/** Why `upgradeFix` is null, for `details`. */
+const upgradeFacts = (ctx: DoctorContext, plan: UpgradeReport | undefined) => {
+  const dirty = ctx.probe.dirty(ctx.dir) ?? []
+  return dirty.length > 0
+    ? {
+        command: ctx.efforge("upgrade"),
+        uncommitted: dirty,
+        reason: "commit or stash first: upgrade refuses uncommitted changes",
+      }
+    : plan?.project.status === "ahead"
+      ? {
+          command: ctx.efforge("upgrade").replace(BIN, `${BIN}@latest`),
+          reason: `the project is from efforge ${plan.project.efforgeVersion}, newer than this CLI`,
+        }
+      : { command: ctx.efforge("upgrade --check") }
 }
 
 export interface Check {
@@ -281,14 +328,16 @@ const installCheck: Check = {
       if (!existsSync(join(ctx.dir, "node_modules", ".modules.yaml")))
         return {
           status: "fail" as const,
-          message: "Dependencies aren't installed (no node_modules).",
+          message: existsSync(join(ctx.dir, "node_modules"))
+            ? "node_modules wasn't installed by pnpm (it has no .modules.yaml), and efforge projects are pnpm workspaces."
+            : "Dependencies aren't installed (no node_modules).",
           fix: ctx.here(INSTALL),
         }
       if (installOwed(ctx.dir))
         return {
           status: "fail" as const,
           message:
-            "node_modules doesn't match the package.json files and pnpm-workspace.yaml: something changed them after the last install, or an install didn't finish.",
+            "node_modules doesn't match the package.json files, pnpm-workspace.yaml or pnpm-lock.yaml: something changed them after the last install, or an install didn't finish.",
           fix: ctx.here(INSTALL),
         }
       if (ctx.read("pnpm-lock.yaml") === undefined)
@@ -297,7 +346,9 @@ const installCheck: Check = {
           message: "There is no pnpm-lock.yaml, so each install can resolve different versions.",
           fix: ctx.here(INSTALL),
         }
-      return ok("node_modules matches the package.json files and pnpm-workspace.yaml.")
+      return ok(
+        "node_modules matches the package.json files, pnpm-workspace.yaml and pnpm-lock.yaml.",
+      )
     }),
 }
 
@@ -338,7 +389,7 @@ const effectCheck: Check = {
   id: "effect",
   title: "One Effect version",
   run: (ctx) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       const catalog = readWorkspace(ctx.dir).catalog.effect
       const lock = resolved(ctx)
       if (lock === undefined) return skipped("Nothing is installed or locked yet.")
@@ -359,11 +410,18 @@ const effectCheck: Check = {
       if (off.length === 0)
         return ok(`Every Effect package resolved to ${pin} (${lock.file}).`, { effect: pin })
       const guard = missingOverrides(readWorkspace(ctx.dir).overrides, pin).length === 0
+      const plan = guard ? undefined : yield* ctx.plan
+      const fix = guard ? ctx.here(INSTALL) : upgradeFix(ctx, plan)
       return {
         status: "fail" as const,
-        message: `effect is ${pin}, but ${off.join(", ")} resolved to another version: two Effects in one build, which fails (Effect's packages only work at one shared version). ${guard ? "The overrides are in place, so a fresh install fixes it." : "pnpm-workspace.yaml lacks the overrides that prevent it; upgrade --check prints the lines."}`,
-        fix: guard ? ctx.here(INSTALL) : ctx.efforge("upgrade --check"),
-        details: { effect: pin, others: off, lockfile: lock.file },
+        message: `effect is ${pin}, but ${off.join(", ")} resolved to another version: two Effects in one build, which fails (Effect's packages only work at one shared version). ${guard ? "The overrides are in place, so a fresh install fixes it." : "pnpm-workspace.yaml lacks the overrides that prevent it; upgrade writes them and installs."}`,
+        fix,
+        details: {
+          effect: pin,
+          others: off,
+          lockfile: lock.file,
+          ...(fix === null ? upgradeFacts(ctx, plan) : {}),
+        },
       }
     }),
 }
@@ -372,19 +430,21 @@ const guardCheck: Check = {
   id: "effect-guard",
   title: "Effect overrides",
   run: (ctx) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       const { catalog, overrides } = readWorkspace(ctx.dir)
       const effect = catalog.effect
       if (effect === undefined) return skipped("The catalog has no effect pin.")
       const missing = missingOverrides(overrides, effect)
-      return missing.length === 0
-        ? ok(`pnpm-workspace.yaml holds every Effect package at ${effect}.`)
-        : {
-            status: "warn" as const,
-            message: `pnpm-workspace.yaml ${missing.length === Object.keys(effectOverrides(effect)).length ? "has no overrides holding Effect's packages" : `doesn't hold every Effect package (${missing.join(", ")})`} at ${effect}, so the next install can put a newer one next to it and break the build. upgrade --check prints the lines to add; efforge add writes them too.`,
-            fix: ctx.efforge("upgrade --check"),
-            details: { missing },
-          }
+      if (missing.length === 0)
+        return ok(`pnpm-workspace.yaml holds every Effect package at ${effect}.`)
+      const plan = yield* ctx.plan
+      const fix = upgradeFix(ctx, plan)
+      return {
+        status: "warn" as const,
+        message: `pnpm-workspace.yaml ${missing.length === Object.keys(effectOverrides(effect)).length ? "has no overrides holding Effect's packages" : `doesn't hold every Effect package (${missing.join(", ")})`} at ${effect}, so the next install can put a newer one next to it and break the build. upgrade writes them.`,
+        fix,
+        details: { missing, ...(fix === null ? upgradeFacts(ctx, plan) : {}) },
+      }
     }),
 }
 
@@ -438,11 +498,24 @@ const peersCheck: Check = {
         return skipped("Nothing is installed yet.")
       const pin = pinnedPnpm(json(ctx.read("package.json"))?.packageManager)
       const global = ctx.probe.pnpmVersion()
-      // in the project pnpm switches to the pinned version, which it may have to download
-      if (!ctx.online && pin !== undefined && global !== undefined && pin !== global)
-        return skipped(
-          `pnpm here is ${pin} (packageManager) and ${global} on your PATH; running it may download ${pin}. Run doctor --online to check peers anyway.`,
-        )
+      // in the project pnpm switches to the pinned version, which it may have to download; when
+      // that version made node_modules, it is on this machine already
+      const installedWith = /"packageManager":\s*"pnpm@([^"]+)"/.exec(
+        ctx.read("node_modules/.modules.yaml") ?? "",
+      )?.[1]
+      if (
+        !ctx.online &&
+        pin !== undefined &&
+        global !== undefined &&
+        pin !== global &&
+        installedWith !== pin
+      )
+        return {
+          status: "skipped" as const,
+          message: `pnpm ${pin} (packageManager) runs peers here, your PATH has ${global}, and node_modules was installed by ${installedWith === undefined ? "another pnpm" : `pnpm ${installedWith}`}, so running it may download ${pin}. Run ${ctx.here("pnpm peers check")} yourself, or doctor --online.`,
+          fix: null,
+          details: { packageManager: pin, path: global, installedWith: installedWith ?? null },
+        }
       const out = ctx.probe.peers(ctx.dir)
       let report: unknown
       try {
@@ -662,16 +735,16 @@ const bindingsCheck: Check = {
                 message: `${file} is missing, and it declares the Worker and its bindings.`,
                 fix: null,
               }
-        const flat = text.replace(/\s+/g, " ")
-        const lacking = wanted.filter(({ t }) => {
-          const name = t.args.name as string
-          const binding = t.args.binding ?? name
-          const entry =
-            binding === name
-              ? new RegExp(`[{,]\\s*${name}\\s*[,}]`)
-              : new RegExp(`\\b${binding}\\s*:\\s*${name}\\b`)
-          return !flat.includes(`const ${name} =`) || !entry.test(flat)
-        })
+        // read as code, so a commented-out binding doesn't count and a renamed variable does
+        const env = envObjectOf(file, text)
+        if (env === undefined)
+          return {
+            status: "unverified" as const,
+            message: `Couldn't find the Worker's \`env: { ... }\` (or \`bindings:\`) object in ${file}, so the ${wanted.length} bindings this stack needs (${wanted.map(({ t }) => t.args.binding ?? t.args.name).join(", ")}) weren't checked.`,
+            fix: null,
+            details: { file, lookedFor: wanted.map(({ t }) => t.args.binding ?? t.args.name) },
+          }
+        const lacking = wanted.filter(({ t }) => !env.has(String(t.args.binding ?? t.args.name)))
         if (lacking.length > 0)
           return {
             status: "fail" as const,
@@ -856,21 +929,43 @@ const layersCheck: Check = {
           message: `${LAYERS} is missing: it composes the app's layers.`,
           fix: null,
         }
-      // inside `AppLayer = Layer.mergeAll(...)`, not the imports above it
-      const flat = text.replace(/\s+/g, "")
-      const at = flat.indexOf("AppLayer=Layer.mergeAll(")
-      const call = at < 0 ? "" : flat.slice(at)
-      const lacking = wanted.filter(
-        ({ t }) => !call.includes((t.args.layer as string).replace(/\s+/g, "")),
-      )
+      // read as code: a commented-out layer doesn't count, and AppLayer built from another const does
+      const used = appLayerNames(LAYERS, text)
+      if (used === undefined)
+        return {
+          status: "unverified" as const,
+          message: `Couldn't find \`export const AppLayer = ...\` in ${LAYERS}, so the layers this stack needs (${wanted.map(({ t }) => t.args.import).join(", ")}) weren't checked.`,
+          fix: null,
+          details: { file: LAYERS, lookedFor: wanted.map(({ t }) => t.args.import) },
+        }
+      const imported = importedNames(LAYERS, text)
+      const name = (t: TransformCall) => t.args.import as string
+      // imported but not composed: commented out, or dropped from the list
+      const lacking = wanted.filter(({ t }) => imported.has(name(t)) && !used.has(name(t)))
+      // neither imported nor used: replaced by a layer of yours, which efforge can't read
+      const replaced = wanted.filter(({ t }) => !imported.has(name(t)) && !used.has(name(t)))
       if (lacking.length > 0)
         return {
           status: "fail" as const,
-          message: `AppLayer in ${LAYERS} lacks ${lacking.map(({ t, addon }) => `${t.args.layer} (${addon.id})`).join(", ")}, so the services ${lacking.length === 1 ? "it provides fail" : "they provide fail"} at runtime with a missing service.`,
+          message: `AppLayer in ${LAYERS} imports ${lacking.map(({ t, addon }) => `${t.args.import} (${addon.id})`).join(", ")} but doesn't use ${lacking.length === 1 ? "it" : "them"}, so the services ${lacking.length === 1 ? "it provides fail" : "they provide fail"} at runtime with a missing service.`,
           fix: null,
           details: {
             file: LAYERS,
             missing: lacking.map(({ t }) => ({
+              layer: t.args.layer,
+              import: t.args.import,
+              from: t.args.from,
+            })),
+          },
+        }
+      if (replaced.length > 0)
+        return {
+          status: "unverified" as const,
+          message: `AppLayer in ${LAYERS} has no ${replaced.map(({ t, addon }) => `${t.args.import} (${addon.id})`).join(", ")}. If a layer of yours provides the same services, that's fine; efforge can't tell.`,
+          fix: null,
+          details: {
+            file: LAYERS,
+            lookedFor: replaced.map(({ t }) => ({
               layer: t.args.layer,
               import: t.args.import,
               from: t.args.from,
@@ -885,6 +980,66 @@ const layersCheck: Check = {
     }),
 }
 
+/** Local names imported into `text`. */
+const importedNames = (file: string, text: string): Set<string> =>
+  new Set(
+    parseTs(file, text)
+      .getImportDeclarations()
+      .flatMap((d) =>
+        d
+          .getNamedImports()
+          .map((n) => n.getAliasNode()?.getText() ?? n.getName())
+          .concat(d.getDefaultImport()?.getText() ?? [])
+          .concat(d.getNamespaceImport()?.getText() ?? []),
+      ),
+  )
+
+/**
+ * Every identifier AppLayer's initializer mentions, following the file's own consts it uses
+ * (`const Base = Layer.mergeAll(...)`); undefined without an AppLayer. Comments aren't code.
+ */
+export const appLayerNames = (file: string, text: string): Set<string> | undefined => {
+  const sf = parseTs(file, text)
+  const app = sf.getVariableDeclaration("AppLayer")
+  const init = app?.getInitializer()
+  if (init === undefined) return undefined
+  const out = new Set<string>()
+  const visit = (node: Node) => {
+    for (const id of node.getDescendantsOfKind(SyntaxKind.Identifier)) {
+      const name = id.getText()
+      if (out.has(name)) continue
+      out.add(name)
+      const local = sf.getVariableDeclaration(name)?.getInitializer()
+      if (local !== undefined && name !== "AppLayer") visit(local)
+    }
+  }
+  visit(init)
+  return out
+}
+
+/** The keys of the Worker's `env:` (or `bindings:`) object in alchemy.run.ts; undefined without one. */
+export const envObjectOf = (file: string, text: string): Set<string> | undefined => {
+  const sf = parseTs(file, text)
+  const prop = sf
+    .getDescendantsOfKind(SyntaxKind.PropertyAssignment)
+    .find(
+      (p) =>
+        ["env", "bindings"].includes(p.getName()) &&
+        Node.isObjectLiteralExpression(p.getInitializer()),
+    )
+  const obj = prop?.getInitializer()
+  if (obj === undefined || !Node.isObjectLiteralExpression(obj)) return undefined
+  return new Set(
+    obj
+      .getProperties()
+      .flatMap((p) =>
+        Node.isPropertyAssignment(p) || Node.isShorthandPropertyAssignment(p)
+          ? [p.getName().replace(/^["']|["']$/g, "")]
+          : [],
+      ),
+  )
+}
+
 const upgradeCheck: Check = {
   id: "upgrade",
   title: "Compared with this efforge",
@@ -892,31 +1047,43 @@ const upgradeCheck: Check = {
     Effect.gen(function* () {
       const manifest = ctx.manifest
       if (manifest === undefined) return skipped("efforge.jsonc isn't valid.")
-      const report = yield* checkUpgrade(ctx.dir, manifest, ctx.all, { diff: false }).pipe(
-        Effect.map((r) => r as typeof r | undefined),
-        Effect.catch(() => Effect.succeed(undefined)),
-      )
+      const report = yield* ctx.plan
       if (report === undefined)
         return skipped(`Couldn't render efforge ${efforgeVersion}'s templates for this stack.`)
       const made = `Made with efforge ${manifest.efforgeVersion}`
-      if (!report.drifted)
-        return ok(
-          `${made}; nothing to do to match efforge ${efforgeVersion}${report.project.status === "ahead" ? " (the project is newer than this CLI)" : ""}.`,
-        )
-      return {
-        status: "warn" as const,
-        message: `${made}; it differs from what efforge ${efforgeVersion} generates (${[
-          report.guards.some((g) => !g.ok) ? "the Effect guard" : undefined,
-          report.pins.some((p) => p.status === "behind")
-            ? `${report.pins.filter((p) => p.status === "behind").length} ${report.pins.filter((p) => p.status === "behind").length === 1 ? "pin" : "pins"} behind`
-            : undefined,
-          report.files.some((f) => f.status === "refresh") ? "files to refresh" : undefined,
-          report.seams.length > 0 ? "missing seams" : undefined,
-        ]
-          .filter((x) => x !== undefined)
-          .join(", ")}). upgrade --check says what to do.`,
-        fix: ctx.efforge("upgrade --check"),
+      if (report.project.status === "ahead")
+        return {
+          status: "skipped" as const,
+          message: `${made}, newer than this CLI (${efforgeVersion}); compare with that one: ${ctx.efforge("doctor").replace(BIN, `${BIN}@latest`)}.`,
+          fix: null,
+        }
+      const fix = upgradeFix(ctx, report)
+      const facts = {
+        status: report.status,
+        needsAction: report.needsAction.map((n) => n.id),
+        ...(fix === null ? upgradeFacts(ctx, report) : {}),
       }
+      if (report.status === "needs-action") {
+        // upgrade fixes it when every item is one upgrade writes or installs
+        const fixable = report.needsAction.every((n) => n.fix !== null)
+        return {
+          status: "fail" as const,
+          message: `${made}; ${report.needsAction.map((n) => n.message).join(" ")}`,
+          fix: fixable ? fix : null,
+          details: facts,
+        }
+      }
+      if (report.status === "behind")
+        return {
+          status: "warn" as const,
+          message: `${made}; efforge ${efforgeVersion} has newer pins or templates for it (${report.covers.join(", ")}). upgrade applies them and leaves your changes alone.`,
+          fix,
+          details: facts,
+        }
+      return ok(
+        `${made}; nothing to apply from efforge ${efforgeVersion}${report.kept.length > 0 ? ` (${report.kept.length} ${report.kept.length === 1 ? "file" : "files"} you changed ${report.kept.length === 1 ? "differs" : "differ"} from its templates; upgrade --check lists ${report.kept.length === 1 ? "it" : "them"})` : ""}.`,
+        { status: report.status },
+      )
     }),
 }
 
@@ -952,11 +1119,11 @@ export const runChecks = (ctx: DoctorContext, list: ReadonlyArray<Check> = check
     ),
   )
 
-/** The worst status of `results`: fail, then warn, then ok. */
+/** The worst status of `results`: fail, then warn (or a check that couldn't verify), then ok. */
 export const overall = (results: ReadonlyArray<CheckResult>): "ok" | "warn" | "fail" =>
   results.some((r) => r.status === "fail")
     ? "fail"
-    : results.some((r) => r.status === "warn")
+    : results.some((r) => r.status === "warn" || r.status === "unverified")
       ? "warn"
       : "ok"
 
@@ -971,6 +1138,8 @@ export const doctorContext = (opts: {
   readonly engines: string
 }): DoctorContext => {
   const rel = relative(process.cwd(), opts.dir)
+  const efforge = (args: string) => `${BIN} ${args}${rel === "" ? "" : ` --cwd ${quote(rel)}`}`
+  let planned: UpgradeReport | undefined | null = null
   return {
     ...opts,
     addons:
@@ -988,6 +1157,24 @@ export const doctorContext = (opts: {
       }
     },
     here: (...commands) => inDir(rel, commands),
-    efforge: (args) => `${BIN} ${args}${rel === "" ? "" : ` --cwd ${quote(rel)}`}`,
+    efforge,
+    plan: Effect.suspend(() => {
+      if (planned !== null) return Effect.succeed(planned)
+      const manifest = opts.manifest
+      if (manifest === undefined) return Effect.succeed(undefined)
+      return planUpgrade(opts.dir, manifest, opts.all, {
+        diff: false,
+        bin: efforge,
+        here: (c) => inDir(rel, [c]),
+      }).pipe(
+        Effect.map((r) => r as UpgradeReport | undefined),
+        Effect.catch(() => Effect.succeed(undefined)),
+        Effect.tap((r) =>
+          Effect.sync(() => {
+            planned = r
+          }),
+        ),
+      )
+    }),
   }
 }

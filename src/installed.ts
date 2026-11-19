@@ -152,7 +152,39 @@ export const installOwed = (dir: string): boolean => {
   const installedOverrides = Object.fromEntries(
     Object.entries(record(lock.overrides)).map(([k, v]) => [k, text(v)]),
   )
-  return !sameDeps(declaredOverrides, installedOverrides)
+  if (!sameDeps(declaredOverrides, installedOverrides)) return true
+  // pnpm-lock.yaml moved on (a teammate's lockfile-only bump): what it resolves differs from
+  // what was installed
+  const wanted = lockfileImporters(readText(join(dir, "pnpm-lock.yaml")))
+  return wanted !== undefined && wanted !== lockfileImporters(lockText)
+}
+
+/**
+ * Each importer's dependencies with the versions they resolved to, as one string, from a pnpm
+ * lockfile (the project's, or the copy pnpm keeps of what it installed); undefined when unreadable.
+ * pnpm-lock.yaml can hold two documents (pnpm's own pin first); the importers are in the last.
+ */
+const lockfileImporters = (lockText: string | undefined): string | undefined => {
+  if (lockText === undefined) return undefined
+  const docs = lockText.split(/^---\s*$/m).filter((d) => /^importers:/m.test(d))
+  const main = docs.at(-1)
+  if (main === undefined) return undefined
+  try {
+    const head = main.split(/^packages:/m)[0] ?? main
+    const byImporter = record(record(parse(head)).importers)
+    const out: string[] = []
+    for (const name of Object.keys(byImporter).toSorted()) {
+      const entry = record(byImporter[name])
+      for (const field of depFields)
+        for (const [dep, v] of Object.entries(record(entry[field])).toSorted(([a], [b]) =>
+          a < b ? -1 : a > b ? 1 : 0,
+        ))
+          out.push(`${name}\0${field}\0${dep}\0${text(record(v).version)}`)
+    }
+    return out.join("\n")
+  } catch {
+    return undefined
+  }
 }
 
 /** `.` and every workspace package directory pnpm-workspace.yaml names, relative to `dir`. */

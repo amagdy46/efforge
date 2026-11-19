@@ -192,7 +192,7 @@ it("effect: one package at another version is two Effects, named in one line", a
   expect(r.fix).toBe("pnpm install --no-frozen-lockfile")
 })
 
-it("effect: without the overrides, the fix is upgrade --check", async () => {
+it("effect: without the overrides, the fix is upgrade, which writes them and installs", async () => {
   const dir = await project()
   edit(dir, "pnpm-workspace.yaml", (t) => {
     const doc = parseDocument(t)
@@ -202,8 +202,27 @@ it("effect: without the overrides, the fix is upgrade --check", async () => {
   })
   installed(dir, ["effect@4.0.5", "@effect/sql-d1@4.1.4"])
   const r = await doctor(dir)
-  expect(get(r, "effect").fix).toMatch(/^npx -y create-efforge upgrade --check( --cwd \S+)?$/)
-  expect(get(r, "effect-guard").status).toBe("warn")
+  expect(get(r, "effect").fix).toBe("npx -y create-efforge upgrade")
+  expect(get(r, "effect-guard")).toMatchObject({
+    status: "warn",
+    fix: "npx -y create-efforge upgrade",
+  })
+})
+
+// ruling 9: a fix is a command after which the check passes; upgrade refuses uncommitted changes
+it("effect-guard: with uncommitted changes there is no fix, and the facts say why", async () => {
+  const dir = await project()
+  edit(dir, "pnpm-workspace.yaml", (t) => {
+    const doc = parseDocument(t)
+    doc.setIn(["overrides"], { vite: "catalog:" })
+    return doc.toString()
+  })
+  const r = get(await doctor(dir, { dirty: () => ["pnpm-workspace.yaml"] }), "effect-guard")
+  expect(r.fix).toBeNull()
+  expect(r.details).toMatchObject({
+    command: "npx -y create-efforge upgrade",
+    uncommitted: ["pnpm-workspace.yaml"],
+  })
 })
 
 it("peers: unmet ones fail; the known upstream Alchemy issue and optional peers don't", () => {
@@ -321,6 +340,32 @@ it("bindings: with Alchemy, a deleted resource fails", async () => {
   expect(r.message).toContain("STORAGE")
 })
 
+// ruling 10: read as code, not text
+it("bindings: with Alchemy, a commented-out binding fails and a renamed variable passes", async () => {
+  const dir = await project({ infra: "alchemy", extras: ["storage"] })
+  edit(dir, "infra/alchemy.run.ts", (t) =>
+    t.replace(/^(\s*)STORAGE: storage,$/m, "$1// STORAGE: storage,"),
+  )
+  expect(get(await doctor(dir), "bindings").status).toBe("fail")
+  edit(dir, "infra/alchemy.run.ts", (t) =>
+    t
+      .replace(/^(\s*)\/\/ STORAGE: storage,$/m, "$1STORAGE: uploads,")
+      .replace("const storage = ", "const uploads = "),
+  )
+  expect(get(await doctor(dir), "bindings").status).toBe("ok")
+})
+
+it("bindings: with Alchemy and no env object efforge can find, it could not verify", async () => {
+  const dir = await project({ infra: "alchemy", extras: ["storage"] })
+  edit(dir, "infra/alchemy.run.ts", (t) => t.replace(/\benv: \{/, "env: {}, more: {"))
+  const r = get(await doctor(dir), "bindings")
+  expect(r.status === "fail" || r.status === "unverified").toBe(true)
+  edit(dir, "infra/alchemy.run.ts", (t) => t.replace("env: {}, more: {", "more: {"))
+  const u = get(await doctor(dir), "bindings")
+  expect(u.status).toBe("unverified")
+  expect(u.details?.lookedFor).toContain("STORAGE")
+})
+
 it("migrations: pending ones warn; all applied is ok", async () => {
   const dir = await project()
   const state = join(dir, ".wrangler/state/v3/d1/miniflare-D1DatabaseObject")
@@ -357,12 +402,68 @@ it("layers: a layer removed from AppLayer fails", async () => {
   expect(r.message).toContain("AuthLive (auth/better-auth)")
 })
 
-it("upgrade: a project that drifted warns and points at upgrade --check", async () => {
+it("layers: a commented-out layer fails; AppLayer built from another const passes", async () => {
   const dir = await project()
+  edit(dir, "apps/web/src/server/layers.ts", (t) =>
+    t.replace(/^(\s*)AuthLive,$/m, "$1// AuthLive,"),
+  )
+  expect(get(await doctor(dir), "layers").status).toBe("fail")
+  edit(dir, "apps/web/src/server/layers.ts", (t) =>
+    t
+      .replace(/^(\s*)\/\/ AuthLive,$/m, "$1AuthLive,")
+      .replace("export const AppLayer = Layer.mergeAll(", "const Base = Layer.mergeAll(")
+      .concat("\nexport const AppLayer = Base.pipe(Layer.orDie)\n"),
+  )
+  expect(get(await doctor(dir), "layers").status).toBe("ok")
+})
+
+it("layers: a layer replaced by one of yours could not be verified, and isn't a failure", async () => {
+  const dir = await project()
+  edit(dir, "apps/web/src/server/layers.ts", (t) =>
+    t
+      .replace('import { AuthLive } from "./auth-live"', 'import { MyAuthLive } from "./my-auth"')
+      .replace(/^(\s*)AuthLive,$/m, "$1MyAuthLive,"),
+  )
+  const results = await doctor(dir)
+  const r = get(results, "layers")
+  expect(r.status).toBe("unverified")
+  expect(r.message).toContain("AuthLive")
+})
+
+it("upgrade: needs action fails with upgrade as the fix; behind warns; current is ok", async () => {
+  const dir = await project()
+  expect(get(await doctor(dir), "upgrade").status).toBe("ok")
+  edit(dir, "efforge.jsonc", (t) =>
+    t.replace(/"efforgeVersion": "[^"]*"/, '"efforgeVersion": "0.2.0"'),
+  )
+  const behind = get(await doctor(dir), "upgrade")
+  expect(behind).toMatchObject({ status: "warn", fix: "npx -y create-efforge upgrade" })
   edit(dir, "package.json", (t) => t.replace(`pnpm@${pnpmVersion}`, "pnpm@12.4.2"))
   const r = get(await doctor(dir), "upgrade")
-  expect(r.status).toBe("warn")
-  expect(r.fix).toContain("upgrade --check")
+  expect(r).toMatchObject({ status: "fail", fix: "npx -y create-efforge upgrade" })
+})
+
+it("peers: run when the pinned pnpm made node_modules, even with another pnpm on PATH", async () => {
+  const dir = await project()
+  installed(dir, [])
+  writeFileSync(
+    join(dir, "node_modules/.modules.yaml"),
+    `{"packageManager": "pnpm@${pnpmVersion}"}\n`,
+  )
+  let ran = false
+  const r = get(
+    await doctor(dir, {
+      pnpmVersion: () => "12.4.2",
+      peers: () => ((ran = true), "{}"),
+    }),
+    "peers",
+  )
+  expect(ran).toBe(true)
+  expect(r.status).toBe("ok")
+  writeFileSync(join(dir, "node_modules/.modules.yaml"), '{"packageManager": "pnpm@12.4.2"}\n')
+  const skipped = get(await doctor(dir, { pnpmVersion: () => "12.4.2" }), "peers")
+  expect(skipped.status).toBe("skipped")
+  expect(skipped.message).toContain("pnpm peers check")
 })
 
 // --- The command ------------------------------------------------------------------------------
@@ -423,24 +524,4 @@ it("doctor text: one line per check, a Try: line under each problem", async () =
   expect(lines.filter((l) => /^[✓!✗-] /.test(l))).toHaveLength(checks.length)
   expect(r.stdout).toContain("Try: pnpm install --no-frozen-lockfile")
   expect(r.stdout).toMatch(/1 failed, 1 warning, \d+ ok, \d+ skipped\.$/)
-})
-
-it("upgrade without --check is UpgradeNeedsCheck, with the command to run", async () => {
-  const dir = await project()
-  const r = await cli(["upgrade", "--json"], dir)
-  const doc = JSON.parse(r.stdout)
-  expect(doc.error).toMatchObject({
-    code: "UpgradeNeedsCheck",
-    fix: null,
-    command: "npx -y create-efforge upgrade --json --check",
-  })
-})
-
-it("upgrade --check --patch prints only the patch; nothing to do prints nothing", async () => {
-  const dir = await project()
-  expect((await cli(["upgrade", "--check", "--patch"], dir)).stdout).toBe("")
-  edit(dir, "package.json", (t) => t.replace(`pnpm@${pnpmVersion}`, "pnpm@12.4.2"))
-  const r = await cli(["upgrade", "--check", "--patch"], dir)
-  expect(r.stdout.startsWith("diff --git a/package.json b/package.json")).toBe(true)
-  expect(r.exitCode).toBe(2)
 })

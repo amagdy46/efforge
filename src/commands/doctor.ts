@@ -16,6 +16,7 @@ const mark: Record<CheckResult["status"], string> = {
   warn: pc.yellow("!"),
   fail: pc.red("✗"),
   skipped: pc.dim("-"),
+  unverified: pc.yellow("?"),
 }
 
 /** One line per check, with the fix under anything that isn't ok. */
@@ -23,7 +24,12 @@ export const renderDoctor = (results: ReadonlyArray<CheckResult>): string => {
   const width = Math.max(...results.map((r) => r.id.length))
   const lines: string[] = []
   for (const r of results) {
-    const text = r.status === "skipped" ? pc.dim(`skipped: ${r.message}`) : r.message
+    const text =
+      r.status === "skipped"
+        ? pc.dim(`skipped: ${r.message}`)
+        : r.status === "unverified"
+          ? `could not verify: ${r.message}`
+          : r.message
     lines.push(`${mark[r.status]} ${r.id.padEnd(width)}  ${text}`)
     if (r.fix !== null && r.status !== "ok")
       lines.push(`  ${" ".repeat(width)}  ${pc.dim("Try:")} ${r.fix}`)
@@ -35,6 +41,7 @@ export const renderDoctor = (results: ReadonlyArray<CheckResult>): string => {
       ? pc.yellow(`${n("warn")} ${n("warn") === 1 ? "warning" : "warnings"}`)
       : undefined,
     `${n("ok")} ok`,
+    n("unverified") > 0 ? pc.yellow(`${n("unverified")} not verified`) : undefined,
     n("skipped") > 0 ? `${n("skipped")} skipped` : undefined,
   ].filter((x) => x !== undefined)
   lines.push("", `${tally.join(", ")}.`)

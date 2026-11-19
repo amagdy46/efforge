@@ -102,8 +102,18 @@ const known: Record<Verb, { readonly values: string[]; readonly booleans: string
   },
   list: { values: ["cwd", ...globalValues], booleans: ["json", ...globalBooleans] },
   upgrade: {
-    values: ["cwd", ...globalValues],
-    booleans: ["check", "patch", "diff", "verbose", "json", ...globalBooleans],
+    values: ["cwd", "file", ...globalValues],
+    booleans: [
+      "check",
+      "dry-run",
+      "diff",
+      "verbose",
+      "strict",
+      "allow-dirty",
+      "install",
+      "json",
+      ...globalBooleans,
+    ],
   },
   doctor: { values: ["cwd", ...globalValues], booleans: ["online", "json", ...globalBooleans] },
 }
@@ -111,7 +121,7 @@ const known: Record<Verb, { readonly values: string[]; readonly booleans: string
 /** The commands that take `--flag`, in `commands` order. */
 export const commandsTaking = (flag: string): Verb[] =>
   commands.filter((v) => known[v].values.includes(flag) || known[v].booleans.includes(flag))
-const allValueFlags = new Set([...stackFlags, "cwd", ...globalValues])
+const allValueFlags = new Set([...stackFlags, "cwd", "file", ...globalValues])
 const allBooleans = new Set(Object.values(known).flatMap((k) => k.booleans))
 const shortFlags: Record<string, string> = { y: "yes", h: "help", v: "version" }
 const truthy = new Set(["true", "yes", "on", "1", "y"])
@@ -487,11 +497,11 @@ export const finish = (
   steps: ReadonlyArray<string>,
 ): string | null => {
   const o = intentOf(args)
-  if (o.verb !== "create" && o.verb !== "add") return null
+  if (o.verb !== "create" && o.verb !== "add" && o.verb !== "upgrade") return null
   const v = view(o)
   if (switchOf(v, "dry-run") !== false) return null
   const install = switchOf(v, "install") !== false
-  const git = o.verb === "add" || switchOf(v, "git") !== false
+  const git = o.verb !== "create" || switchOf(v, "git") !== false
   const kept = steps.filter(
     (s) =>
       !s.includes("create-efforge") &&

@@ -110,7 +110,7 @@
         "warn",
         "fail"
       ],
-      "description": "The worst check: fail (exit code 2), then warn, then ok."
+      "description": "The worst check: fail (exit code 2), then warn (or unverified), then ok."
     },
     "checks": {
       "type": "array",
@@ -127,8 +127,10 @@
               "ok",
               "warn",
               "fail",
-              "skipped"
-            ]
+              "skipped",
+              "unverified"
+            ],
+            "description": "unverified: the check couldn't read what it looks for in the shape it knows; `details.lookedFor` says what."
           },
           "message": {
             "type": "string"
@@ -142,7 +144,7 @@
                 "type": "null"
               }
             ],
-            "description": "A shell command that fixes it, or null (then `details` says what to change)."
+            "description": "A command after which this check passes and no other check is worse, or null (then `message` and `details` say what to change)."
           },
           "details": {
             "type": "object"

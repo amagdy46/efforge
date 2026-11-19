@@ -5,13 +5,15 @@ import { ChildProcessSpawner } from "effect/process"
  * A spawner that records `cmd args` and succeeds, so create's step order can be asserted.
  * `cwds`, when given, gets each call's working directory at the same index. `fail`, when given,
  * makes a command exit 1 with the output it returns (undefined: succeed). `hang`, when given,
- * makes a command never exit, so a test can interrupt the run there.
+ * makes a command never exit, so a test can interrupt the run there. `print`, when given, is what a
+ * command that succeeds prints (`git status --porcelain` with changes).
  */
 export const recordingSpawner = (
   calls: string[],
   cwds?: Array<string | undefined>,
   fail?: (command: string) => string | undefined,
   hang?: (command: string) => boolean,
+  print?: (command: string) => string | undefined,
 ) =>
   Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
@@ -25,8 +27,9 @@ export const recordingSpawner = (
       calls.push(line)
       cwds?.push(c.options.cwd)
       const output = fail?.(line)
+      const printed = output ?? print?.(line)
       const out =
-        output === undefined ? Stream.empty : Stream.make(new TextEncoder().encode(output))
+        printed === undefined ? Stream.empty : Stream.make(new TextEncoder().encode(printed))
       return Effect.succeed(
         ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(1),

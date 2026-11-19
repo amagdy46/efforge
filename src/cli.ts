@@ -192,7 +192,17 @@ const reportParseError = (args: ReadonlyArray<string>, error: CliError.ShowHelp)
 // and `list` are meant. `create <name>` always creates.
 
 /** Flags `create` doesn't take: with them, the root form was never meant as a create. */
-const notCreateFlags = new Set(["cwd", "overwrite", "check", "patch", "diff", "verbose", "online"])
+const notCreateFlags = new Set([
+  "cwd",
+  "overwrite",
+  "check",
+  "diff",
+  "file",
+  "verbose",
+  "strict",
+  "allow-dirty",
+  "online",
+])
 
 /** Why the arguments aren't a create or a command, as the contract reports it; or undefined. */
 export const notACreate = (args: ReadonlyArray<string>): Failure | undefined => {
@@ -220,7 +230,7 @@ export const notACreate = (args: ReadonlyArray<string>): Failure | undefined => 
           : lower === "ls"
             ? ` To see the add-ons, run ${BIN} list.`
             : lower === "update"
-              ? ` To see how a project differs from this efforge, run ${BIN} upgrade --check.`
+              ? ` To bring a project up to date with this efforge, run ${BIN} upgrade (--check to see what it would do).`
               : ""
     return {
       code: "UnknownCommand",

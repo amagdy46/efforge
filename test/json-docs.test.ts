@@ -48,6 +48,8 @@ interface Scenario {
   readonly cwd?: string
   /** Commands that fail, with their output. */
   readonly fail?: (command: string) => string | undefined
+  /** What a command that succeeds prints (`git status --porcelain`). */
+  readonly print?: (command: string) => string | undefined
   readonly templates?: string
   /** Stop the run (as Ctrl-C would) when it starts a command with this prefix. */
   readonly interruptAt?: string
@@ -89,7 +91,7 @@ const cli = async (
         Layer.mergeAll(
           NodeServices.layer,
           quietIO,
-          recordingSpawner(calls, undefined, s.fail, hang),
+          recordingSpawner(calls, undefined, s.fail, hang, s.print),
           fixedProbe,
           ...(s.templates === undefined ? [] : [Layer.succeed(TemplatesDir, s.templates)]),
         ),
@@ -185,23 +187,41 @@ const scenarios: Record<string, Scenario> = {
   },
   InternalError: { templates: "/nonexistent/templates" },
   upgrade: { setup: myApp },
-  "upgrade-drifted": {
+  "upgrade-drifted": { setup: (work) => pinnedLike020(work), exit: 2 },
+  "upgrade-apply": { setup: (work) => pinnedLike020(work) },
+  doctor: { setup: myApp, exit: 2 },
+  ProjectNewerThanCli: {
     setup: async (work) => {
       await myApp(work)
-      // what a project made by efforge 0.2.0 looks like: effect 4.0.5, no overrides, pnpm 12.4.2
-      const ws = join(work, "my-app/pnpm-workspace.yaml")
-      const doc = parseDocument(readFileSync(ws, "utf8"))
-      for (const name of ["effect", "@effect/platform-node", "@effect/sql-d1", "@effect/vitest"])
-        if (doc.hasIn(["catalog", name])) doc.setIn(["catalog", name], "4.0.5")
-      doc.setIn(["overrides"], { vite: "catalog:" })
-      writeFileSync(ws, doc.toString())
-      const pkg = join(work, "my-app/package.json")
-      writeFileSync(pkg, readFileSync(pkg, "utf8").replace("pnpm@12.21.0", "pnpm@12.4.2"))
+      const m = join(work, "my-app/efforge.jsonc")
+      writeFileSync(
+        m,
+        readFileSync(m, "utf8").replace(/"efforgeVersion": "[^"]*"/, '"efforgeVersion": "0.4.0"'),
+      )
     },
-    exit: 2,
   },
-  doctor: { setup: myApp, exit: 2 },
-  UpgradeNeedsCheck: { setup: myApp },
+  UncommittedChanges: {
+    setup: (work) => pinnedLike020(work),
+    print: (c) => (c.startsWith("git status") ? " M package.json\n?? notes.md\n" : undefined),
+  },
+}
+
+/** What a project made by efforge 0.2.0 is pinned like: effect 4.0.5, no overrides, pnpm 12.4.2. */
+const pinnedLike020 = async (work: string) => {
+  await myApp(work)
+  const ws = join(work, "my-app/pnpm-workspace.yaml")
+  const doc = parseDocument(readFileSync(ws, "utf8"))
+  for (const name of ["effect", "@effect/platform-node", "@effect/sql-d1", "@effect/vitest"])
+    if (doc.hasIn(["catalog", name])) doc.setIn(["catalog", name], "4.0.5")
+  doc.setIn(["overrides"], { vite: "catalog:" })
+  writeFileSync(ws, doc.toString())
+  const pkg = join(work, "my-app/package.json")
+  writeFileSync(pkg, readFileSync(pkg, "utf8").replace("pnpm@12.21.0", "pnpm@12.4.2"))
+  const m = join(work, "my-app/efforge.jsonc")
+  writeFileSync(
+    m,
+    readFileSync(m, "utf8").replace(/"efforgeVersion": "[^"]*"/, '"efforgeVersion": "0.2.0"'),
+  )
 }
 
 /** Splits a documented command the way a shell would (single quotes only). */
