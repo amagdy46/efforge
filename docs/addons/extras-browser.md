@@ -15,13 +15,13 @@ A headless browser you drive from the server. The `Browser` service sends a URL 
 When you create the project:
 
 ```sh
-npm create efforge my-app -- --extras=browser
+npx -y create-efforge my-app --yes --extras=browser
 ```
 
 Add it to an existing project:
 
 ```sh
-npx create-efforge add extras/browser
+npx -y create-efforge add extras/browser
 ```
 
 ## Needs

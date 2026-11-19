@@ -15,13 +15,13 @@ WebSocket rooms. Each room is a Durable Object (`Room`) that hibernates while id
 When you create the project:
 
 ```sh
-npm create efforge my-app -- --extras=realtime
+npx -y create-efforge my-app --yes --extras=realtime
 ```
 
 Add it to an existing project:
 
 ```sh
-npx create-efforge add extras/realtime
+npx -y create-efforge add extras/realtime
 ```
 
 ## Needs

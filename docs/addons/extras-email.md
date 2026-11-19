@@ -15,13 +15,13 @@ Send invitations, receipts and password resets. Call `send` on the `Mailer` serv
 When you create the project:
 
 ```sh
-npm create efforge my-app -- --extras=email
+npx -y create-efforge my-app --yes --extras=email
 ```
 
 Add it to an existing project:
 
 ```sh
-npx create-efforge add extras/email
+npx -y create-efforge add extras/email
 ```
 
 ## Needs

@@ -15,13 +15,13 @@ Durable background jobs on Cloudflare Workflows. Start a job and read its status
 When you create the project:
 
 ```sh
-npm create efforge my-app -- --extras=workflows
+npx -y create-efforge my-app --yes --extras=workflows
 ```
 
 Add it to an existing project:
 
 ```sh
-npx create-efforge add extras/workflows
+npx -y create-efforge add extras/workflows
 ```
 
 ## Needs

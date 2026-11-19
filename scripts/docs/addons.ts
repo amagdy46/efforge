@@ -233,18 +233,18 @@ const commands = (slot: SlotId, option: string) => {
       "Every project has it; there is nothing to choose.",
       "",
       "```sh",
-      `npm create efforge my-app`,
+      `npx -y create-efforge my-app --yes`,
       "```",
     ]
   const lines = [
     "When you create the project:",
     "",
     "```sh",
-    `npm create efforge my-app -- --${slot}=${option}`,
+    `npx -y create-efforge my-app --yes --${slot}=${option}`,
     "```",
   ]
   for (const c of addCommands(slot, option))
-    lines.push("", c.intro, "", "```sh", `npx create-efforge add ${c.ids.join(" ")}`, "```")
+    lines.push("", c.intro, "", "```sh", `npx -y create-efforge add ${c.ids.join(" ")}`, "```")
   return lines
 }
 
@@ -559,9 +559,9 @@ const index = (addons: ReadonlyArray<AddonManifest>): string => {
     "",
     "# Add-ons",
     "",
-    "A slot is one decision about the stack: the database, the ORM, auth, and so on. Each add-on is one choice in one slot. Most slots take one choice or none; Extras takes any number. Pick them when you create a project, or add them later with `npx create-efforge add <slot>/<option>`. Every page has the same headings: What it is for, Add it, Needs, Conflicts with, Service and layer, Files it writes, Files it edits, Dependencies, Environment variables, Package scripts, Rules it adds to AGENTS.md, Limits.",
+    "A slot is one decision about the stack: the database, the ORM, auth, and so on. Each add-on is one choice in one slot. Most slots take one choice or none; Extras takes any number. Pick them when you create a project, or add them later with `npx -y create-efforge add <slot>/<option>`. Every page has the same headings: What it is for, Add it, Needs, Conflicts with, Service and layer, Files it writes, Files it edits, Dependencies, Environment variables, Package scripts, Rules it adds to AGENTS.md, Limits.",
     "",
-    "`npx create-efforge list` prints the same list, and `list --json` prints it as JSON.",
+    "`npx -y create-efforge list` prints the same list, and `list --json` prints it as JSON.",
   ]
   for (const slot of slots) {
     const inSlot = addons.filter((m) => m.id.startsWith(`${slot.id}/`))

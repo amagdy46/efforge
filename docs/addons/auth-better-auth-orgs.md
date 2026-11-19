@@ -15,19 +15,19 @@ Everything in Better Auth, plus organizations: each user belongs to one or more,
 When you create the project:
 
 ```sh
-npm create efforge my-app -- --auth=better-auth-orgs
+npx -y create-efforge my-app --yes --auth=better-auth-orgs
 ```
 
 Add it to an existing project whose `auth` is `none`:
 
 ```sh
-npx create-efforge add auth/better-auth-orgs
+npx -y create-efforge add auth/better-auth-orgs
 ```
 
 Auth needs a database. On a project without one, add a database and an ORM in the same command (any of them works):
 
 ```sh
-npx create-efforge add database/postgres orm/drizzle auth/better-auth-orgs
+npx -y create-efforge add database/postgres orm/drizzle auth/better-auth-orgs
 ```
 
 ## Needs

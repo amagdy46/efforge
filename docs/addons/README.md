@@ -2,9 +2,9 @@
 
 # Add-ons
 
-A slot is one decision about the stack: the database, the ORM, auth, and so on. Each add-on is one choice in one slot. Most slots take one choice or none; Extras takes any number. Pick them when you create a project, or add them later with `npx create-efforge add <slot>/<option>`. Every page has the same headings: What it is for, Add it, Needs, Conflicts with, Service and layer, Files it writes, Files it edits, Dependencies, Environment variables, Package scripts, Rules it adds to AGENTS.md, Limits.
+A slot is one decision about the stack: the database, the ORM, auth, and so on. Each add-on is one choice in one slot. Most slots take one choice or none; Extras takes any number. Pick them when you create a project, or add them later with `npx -y create-efforge add <slot>/<option>`. Every page has the same headings: What it is for, Add it, Needs, Conflicts with, Service and layer, Files it writes, Files it edits, Dependencies, Environment variables, Package scripts, Rules it adds to AGENTS.md, Limits.
 
-`npx create-efforge list` prints the same list, and `list --json` prints it as JSON.
+`npx -y create-efforge list` prints the same list, and `list --json` prints it as JSON.
 
 ## Runtime (`runtime`)
 

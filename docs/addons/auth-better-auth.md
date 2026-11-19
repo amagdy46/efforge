@@ -15,19 +15,19 @@ Email and password accounts with Better Auth. Server code reads the signed-in us
 When you create the project:
 
 ```sh
-npm create efforge my-app -- --auth=better-auth
+npx -y create-efforge my-app --yes --auth=better-auth
 ```
 
 Add it to an existing project whose `auth` is `none`:
 
 ```sh
-npx create-efforge add auth/better-auth
+npx -y create-efforge add auth/better-auth
 ```
 
 Auth needs a database. On a project without one, add a database and an ORM in the same command (any of them works):
 
 ```sh
-npx create-efforge add database/postgres orm/drizzle auth/better-auth
+npx -y create-efforge add database/postgres orm/drizzle auth/better-auth
 ```
 
 ## Needs

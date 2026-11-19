@@ -15,13 +15,13 @@ Drizzle 1.0 for queries and migrations. The `Database` service hands you a Drizz
 When you create the project:
 
 ```sh
-npm create efforge my-app -- --orm=drizzle
+npx -y create-efforge my-app --yes --orm=drizzle
 ```
 
 An ORM needs a database, and a project without an ORM has no database either, so add both in one command (`database/d1` works too):
 
 ```sh
-npx create-efforge add database/postgres orm/drizzle
+npx -y create-efforge add database/postgres orm/drizzle
 ```
 
 ## Needs

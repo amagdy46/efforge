@@ -15,13 +15,13 @@ Postgres for the app's data. On Workers the app connects through a Hyperdrive bi
 When you create the project:
 
 ```sh
-npm create efforge my-app -- --database=postgres
+npx -y create-efforge my-app --yes --database=postgres
 ```
 
 A database needs an ORM, so a project without a database gets both in one command (`orm/effect-sql` works too):
 
 ```sh
-npx create-efforge add database/postgres orm/drizzle
+npx -y create-efforge add database/postgres orm/drizzle
 ```
 
 ## Needs

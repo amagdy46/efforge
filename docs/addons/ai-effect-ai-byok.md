@@ -15,13 +15,13 @@ Text generation through Effect AI. Call `generateText(prompt)` on the `Llm` serv
 When you create the project:
 
 ```sh
-npm create efforge my-app -- --ai=effect-ai-byok
+npx -y create-efforge my-app --yes --ai=effect-ai-byok
 ```
 
 Add it to an existing project whose `ai` is `none`:
 
 ```sh
-npx create-efforge add ai/effect-ai-byok
+npx -y create-efforge add ai/effect-ai-byok
 ```
 
 ## Needs

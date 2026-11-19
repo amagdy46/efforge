@@ -2,7 +2,7 @@
 
 Every server capability in an efforge project (database, auth, email, storage, AI) is built from the same three pieces: an interface, a layer that implements it, and one line in one file that puts the layer in the app. A test swaps the layer for another. This page follows one capability, notes, through those pieces, then shows the two places where Cloudflare and Effect meet, then the path of one request.
 
-You need TypeScript and to have heard of Effect; each Effect term is defined where it first appears. The code comes from a project made with the default stack, `npm create efforge my-app -- --yes` (Postgres, Drizzle and Better Auth). Every project with a database has the same notes code.
+You need TypeScript and to have heard of Effect; each Effect term is defined where it first appears. The code comes from a project made with the default stack, `npx -y create-efforge my-app --yes` (Postgres, Drizzle and Better Auth). Every project with a database has the same notes code.
 
 ## The idea in one picture
 

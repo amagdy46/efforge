@@ -97,3 +97,37 @@ it("every command efforge prints runs without a prompt of npx or npm", { timeout
   const printed = seen.reduce((n, s) => n + s.text.split("npx -y create-efforge").length - 1, 0)
   expect(printed).toBeGreaterThan(30)
 })
+
+/** The code in a Markdown or text document: each line of a fenced block, and each code span. */
+const code = (text: string): string[] => [
+  ...[...text.matchAll(/```[^\n]*\n([\s\S]*?)```/g)].flatMap((m) => (m[1] as string).split("\n")),
+  ...[...text.replace(/```[\s\S]*?```/g, "").matchAll(/`([^`\n]+)`/g)].map((m) => m[1] as string),
+]
+
+it("every command in the README, the docs, llms.txt and the skill runs without a prompt of npx or npm", () => {
+  const docs = [
+    "README.md",
+    "llms.txt",
+    "skills/efforge/SKILL.md",
+    ...readdirSync(join(root, "docs"))
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => `docs/${f}`),
+    ...readdirSync(join(root, "docs/addons")).map((f) => `docs/addons/${f}`),
+  ]
+  const all = docs.flatMap((doc) =>
+    code(readFileSync(join(root, doc), "utf8"))
+      .map((piece) => piece.trim())
+      // a synopsis (`npm create efforge [name] -- [flags]`) is not a command
+      .filter((piece) => !piece.includes("["))
+      // `npm create efforge my-app` is the way in for a person at the prompts, which ask by design
+      .filter((piece) => !/^npm create(?: [\w@/.-]+)?(?: [\w.-]+)?$/.test(piece))
+      .flatMap((piece) => asking(piece).map((line) => `${doc}: ${line}`)),
+  )
+  expect(all).toEqual([])
+  // not vacuous: the documents show efforge's command many times over
+  const shown = docs.reduce(
+    (n, doc) => n + readFileSync(join(root, doc), "utf8").split("npx -y create-efforge").length - 1,
+    0,
+  )
+  expect(shown).toBeGreaterThan(50)
+})

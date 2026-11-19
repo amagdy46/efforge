@@ -44,14 +44,20 @@ it.each(ids)("every Add it command on %s's page runs", { timeout: 120_000 }, asy
   const [slot, option] = id.split("/") as [SlotId, string]
   const page = readFileSync(join(root, pagesDir, pageName(id)), "utf8")
   const section = page.slice(page.indexOf("## Add it"), page.indexOf("## Needs"))
-  const shown = [...section.matchAll(/^npx create-efforge add .*$/gm)].map((m) => m[0])
+  const shown = [...section.matchAll(/^npx -y create-efforge add .*$/gm)].map((m) => m[0])
   const commands = addCommands(slot, option)
-  expect(shown).toEqual(commands.map((c) => `npx create-efforge add ${c.ids.join(" ")}`))
+  expect(shown).toEqual(commands.map((c) => `npx -y create-efforge add ${c.ids.join(" ")}`))
+  // the create command above them, as written (it creates under a fresh directory)
+  const creates = [...section.matchAll(/^npx -y create-efforge (my-app .*)$/gm)].map((m) => m[1])
+  expect(creates).toHaveLength(1)
 
   const work = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "efforge-docs-add-"))
   const before = process.cwd()
   process.chdir(work)
   try {
+    const create = (creates[0] as string).split(" ")
+    const made = await cli([...create, "--dry-run"])
+    expect(made.code, `${create.join(" ")}\n${made.out}`).toBe(0)
     for (const [i, c] of commands.entries()) {
       const dir = join(work, `p${i}`)
       // toCommand: `npx -y create-efforge create <name> --yes ...`

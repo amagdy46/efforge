@@ -15,13 +15,13 @@ SQLite on Cloudflare D1, reached through the `DB` binding. `pnpm db:migrate` app
 When you create the project:
 
 ```sh
-npm create efforge my-app -- --database=d1
+npx -y create-efforge my-app --yes --database=d1
 ```
 
 A database needs an ORM, so a project without a database gets both in one command (`orm/effect-sql` works too):
 
 ```sh
-npx create-efforge add database/d1 orm/drizzle
+npx -y create-efforge add database/d1 orm/drizzle
 ```
 
 ## Needs

@@ -15,13 +15,13 @@ Declares the Worker and its bindings in TypeScript, in `infra/alchemy.run.ts`, i
 When you create the project:
 
 ```sh
-npm create efforge my-app -- --infra=alchemy
+npx -y create-efforge my-app --yes --infra=alchemy
 ```
 
 Add it to an existing project whose `infra` is `none`:
 
 ```sh
-npx create-efforge add infra/alchemy
+npx -y create-efforge add infra/alchemy
 ```
 
 ## Needs

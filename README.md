@@ -82,7 +82,7 @@ Interfaces and their tagged errors (errors with a name the compiler knows, such 
 **Add.** `efforge add` wires a capability into a project you already have. It edits your code as code (AST transforms, not text), records a hash of each file it wrote, and refuses to overwrite one you changed. `add email` writes the `Mailer` service and its layer, and adds the layer to the app:
 
 ```sh
-npx create-efforge add email
+npx -y create-efforge add email
 ```
 
 <!-- diff: apps/web/src/server/layers.ts after add email -->
@@ -96,7 +96,7 @@ npx create-efforge add email
  )
 ```
 
-**See.** Besides the dashboard, `npx create-efforge graph` prints the layers `AppLayer` merges, with what each provides and needs, as Mermaid for a README or a pull request.
+**See.** Besides the dashboard, `npx -y create-efforge graph` prints the layers `AppLayer` merges, with what each provides and needs, as Mermaid for a README or a pull request.
 
 **Test.** Code asks for a service, never a layer, so a test swaps the layer. From `packages/core/test/notes.test.ts` in every project with a database:
 
@@ -135,7 +135,7 @@ The first question offers a preset, a whole stack in one choice, or each part in
 | `ai` | D1, Effect SQL, Better Auth, AI with your own key, and realtime |
 | `minimal` | No database and no auth: the app, its layers and the dashboard |
 
-`npm create efforge my-app -- --preset=saas --database=d1` takes a preset with one part changed. Or set the parts:
+`npx -y create-efforge my-app --yes --preset=saas --database=d1` takes a preset with one part changed. Or set the parts:
 
 | Part | Flag values | Default |
 |---|---|---|
@@ -150,7 +150,7 @@ An ORM goes with a database, and auth needs one. Postgres needs Docker on your m
 
 ## For coding agents
 
-Tell your agent to use efforge, or install the skill: `npx skills add amagdy46/efforge`. They need create-efforge 0.3.0 or later, whose documents all carry `contract: 1`. `--json` never prompts and prints one JSON document. On failure, `error.fix` is a command that does what was asked, or `null` with the values to choose from (and, when there are several ways out, `alternatives`: complete commands, one per way).
+Tell your agent to use efforge, or install the skill: `npx -y skills add amagdy46/efforge --yes`. They need create-efforge 0.3.0 or later, whose documents all carry `contract: 1`. `--json` never prompts and prints one JSON document. On failure, `error.fix` is a command that does what was asked, or `null` with the values to choose from (and, when there are several ways out, `alternatives`: complete commands, one per way).
 
 ```sh
 npx -y create-efforge@latest create my-app --json --database=d1 --auth=better-auth

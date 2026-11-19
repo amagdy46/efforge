@@ -15,13 +15,13 @@ Plain SQL through Effect SQL: the `Database` service hands you an `SqlClient`, a
 When you create the project:
 
 ```sh
-npm create efforge my-app -- --orm=effect-sql
+npx -y create-efforge my-app --yes --orm=effect-sql
 ```
 
 An ORM needs a database, and a project without an ORM has no database either, so add both in one command (`database/d1` works too):
 
 ```sh
-npx create-efforge add database/postgres orm/effect-sql
+npx -y create-efforge add database/postgres orm/effect-sql
 ```
 
 ## Needs

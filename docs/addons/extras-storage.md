@@ -15,13 +15,13 @@ File storage on R2. The `Storage` service puts, gets and deletes objects, and si
 When you create the project:
 
 ```sh
-npm create efforge my-app -- --extras=storage
+npx -y create-efforge my-app --yes --extras=storage
 ```
 
 Add it to an existing project:
 
 ```sh
-npx create-efforge add extras/storage
+npx -y create-efforge add extras/storage
 ```
 
 ## Needs

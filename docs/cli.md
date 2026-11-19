@@ -16,11 +16,11 @@ npm create efforge [name] -- [flags]
 --git / --no-git            git init + initial commit (default: yes)
 ```
 
-`npm create` passes flags to efforge only after `--`. `pnpm create`, `bun create` and a direct call take them without it: `npx create-efforge my-app --yes --database=d1`.
+`npm create` passes flags to efforge only after `--`. `pnpm create`, `bun create` and a direct call take them without it: `npx -y create-efforge my-app --yes --database=d1`.
 
 Pass `.` as the name to create the project in the current directory, named after it. The target directory must be empty; a directory holding only `.git` counts as empty.
 
-`npx create-efforge create my-app` is the same as `npx create-efforge my-app`. A first argument that looks like a command is refused rather than taken as a project name: a command in other case or one typo away (`Add`, `lst`, `ad`), or a word people guess as one (`help`, `update`, `init`, `install`, `ls` and the rest of `reservedWords` in `src/fix.ts`). Inside an efforge project the form without `create` creates nothing. `create lst` names a project `lst`, wherever you run it.
+`npx -y create-efforge create my-app` is the same as `npx -y create-efforge my-app`. A first argument that looks like a command is refused rather than taken as a project name: a command in other case or one typo away (`Add`, `lst`, `ad`), or a word people guess as one (`help`, `update`, `init`, `install`, `ls` and the rest of `reservedWords` in `src/fix.ts`). Inside an efforge project the form without `create` creates nothing. `create lst` names a project `lst`, wherever you run it.
 
 After the name, the first question is "Start from a preset, or choose each part?". A preset is a whole stack:
 
@@ -38,14 +38,14 @@ Choosing one shows the stack and asks "Create it?" with three answers: Yes, Chan
 
 A preset's contents can change between versions, so nothing records its name: the summary, the `command` in `efforge.jsonc` and `--json` give the stack as flags: one for each part that differs from the default. Running that command makes the same project with any later efforge whose defaults are the same; a part left at its default follows the default.
 
-`--dry-run` prints a line per add-on, how many files it writes and in which top-level directories (`base 64 apps/web 45, (root) 13, ...`, then `auth/better-auth +20 ...`); `--verbose` lists every file under its add-on, and `--json` always has the full list. `create` has no `--cwd`: it creates the project under the directory you run it in, and every path it prints is relative to that; run it from there (`cd ~/projects && npx create-efforge my-app`).
+`--dry-run` prints a line per add-on, how many files it writes and in which top-level directories (`base 64 apps/web 45, (root) 13, ...`, then `auth/better-auth +20 ...`); `--verbose` lists every file under its add-on, and `--json` always has the full list. `create` has no `--cwd`: it creates the project under the directory you run it in, and every path it prints is relative to that; run it from there (`cd ~/projects && npx -y create-efforge my-app`).
 
 Also available: `--help` (with examples), `--version`, `--completions bash|zsh|fish|powershell` (prints a completion script that covers both `create-efforge` and `efforge`) and `--log-level`, which efforge accepts and which changes nothing, since efforge logs nothing. None of them prompts. efforge has no `--wizard`: the prompts above do that job.
 
 The summary before writing, and the `command` field of `efforge.jsonc`, give a non-interactive command that recreates the stack, for example:
 
 ```sh
-npm create efforge my-app -- --yes --database=d1 --orm=effect-sql --auth=better-auth --extras=storage,realtime
+npx -y create-efforge create my-app --yes --database=d1 --orm=effect-sql --auth=better-auth --extras=storage,realtime
 ```
 
 When it finishes, `create` prints the next steps for the stack: `docker compose up -d --wait` for Postgres, `pnpm db:migrate` when there is a database, then `pnpm dev` (with Alchemy, no `db:migrate` on D1). Whether `pnpm db:migrate` is still owed is read from the project, as `doctor`'s `migrations` check reads it: on D1 it is there while the local database lacks a migration file, so `add` says it after an add-on that brings a migration (auth's tables) and after any earlier run that never migrated, and leaves it out when everything is applied. Postgres can't be read without connecting, so there it follows the migration files the run writes. The generated README's "Run it" has the same steps, from the same code, and its other sections (scripts, layout, capabilities, a first deploy for wrangler or Alchemy) are written for the stack too.
@@ -60,15 +60,15 @@ In CI or a pipe, each step prints one line instead of a spinner. In a terminal t
 
 Exit codes: `0` success (and answering No at the confirmation), `1` an error, `2` `upgrade` or `doctor` found something that breaks the project, `3` `upgrade --check --strict` found something to apply, `130` cancelled with Ctrl-C. Cancelling during setup leaves the files written so far and prints the commands that finish the job.
 
-`--json` makes `create`, `add`, `list`, `info`, `graph`, `upgrade` and `doctor` print exactly one JSON document on stdout, on success and on failure, and nothing else. It never prompts, and it still creates the project unless you add `--dry-run`. Errors carry a stable `code` and a `fix`: the command to run instead. The documents, every error code and the versioning rules are in [json.md](json.md); JSON Schemas ship in the package under `schemas/`. Under `npm create`, npm prints its own lines first; use `npx create-efforge ... --json`. Coding agents can learn all of this from one file: [skills/efforge/SKILL.md](../skills/efforge/SKILL.md).
+`--json` makes `create`, `add`, `list`, `info`, `graph`, `upgrade` and `doctor` print exactly one JSON document on stdout, on success and on failure, and nothing else. It never prompts, and it still creates the project unless you add `--dry-run`. Errors carry a stable `code` and a `fix`: the command to run instead. The documents, every error code and the versioning rules are in [json.md](json.md); JSON Schemas ship in the package under `schemas/`. Under `npm create`, npm prints its own lines first; use `npx -y create-efforge ... --json`. Coding agents can learn all of this from one file: [skills/efforge/SKILL.md](../skills/efforge/SKILL.md).
 
 Before writing anything, efforge checks that pnpm is installed (unless `--no-install`), warns about unsupported Node versions, and skips git if git isn't installed.
 
 ## `efforge list`
 
 ```sh
-npx create-efforge list            # every add-on with a one-line description
-npx create-efforge list --json     # {project, addons: [{id, slot, option, title, description, installed?}]}
+npx -y create-efforge list            # every add-on with a one-line description
+npx -y create-efforge list --json     # {project, addons: [{id, slot, option, title, description, installed?}]}
 ```
 
 Inside an efforge project (or with `--cwd`), add-ons the project already has are marked `✓`. Outside one, the list ends with the presets `create --preset` takes; `list --json` always has them, under `presets`.
@@ -78,8 +78,8 @@ Inside an efforge project (or with `--cwd`), add-ons the project already has are
 Run inside a generated project, or pass `--cwd`:
 
 ```sh
-npx create-efforge add email
-npx create-efforge add ai/effect-ai-byok extras/storage --dry-run
+npx -y create-efforge add email
+npx -y create-efforge add ai/effect-ai-byok extras/storage --dry-run
 ```
 
 Ids are `email`, `extras/email` or `ai/effect-ai-byok`, in any case. A slot name with one add-on (`ai`, `infra`) means that add-on; a typo or an ambiguous id (`auth`) gets a suggestion. Flags: `--overwrite`, `--dry-run`, `--json`, `--cwd <dir>`, `--no-install`.
@@ -99,8 +99,8 @@ With no ids, in a terminal, `add` opens a picker: every add-on the project doesn
 ## `efforge info <id>`
 
 ```sh
-npx create-efforge info email
-npx create-efforge info ai --json --cwd my-app
+npx -y create-efforge info email
+npx -y create-efforge info ai --json --cwd my-app
 ```
 
 Describes one add-on from its manifest: what it is for, the Effect service and layer it adds, what a project needs first and what it conflicts with, the files it writes, the files it edits in place (the seams) with the transforms that edit them, packages, scripts, env vars, its dashboard card, the `AGENTS.md` sections it adds, and its page under `docs/addons/`. Ids resolve as `add` resolves them, the typo rule included. Inside a project (or with `--cwd`) it lists only what that project would get, and ends with whether the project has it, the command that adds it, or why it can't be added alone and the commands that add it with what it needs.
@@ -108,10 +108,10 @@ Describes one add-on from its manifest: what it is for, the Effect service and l
 ## `efforge graph`
 
 ```sh
-npx create-efforge graph                  # Mermaid, for a README, an issue or a PR
-npx create-efforge graph --format=text    # an indented list
-npx create-efforge graph --json           # nodes and edges
-npx create-efforge graph --write          # into README.md, kept current by add
+npx -y create-efforge graph                  # Mermaid, for a README, an issue or a PR
+npx -y create-efforge graph --format=text    # an indented list
+npx -y create-efforge graph --json           # nodes and edges
+npx -y create-efforge graph --write          # into README.md, kept current by add
 ```
 
 Run inside a generated project, or pass `--cwd <dir>`.
@@ -125,10 +125,10 @@ Prints the project's layer graph: the layers `AppLayer` merges in `apps/web/src/
 Run inside a generated project, or pass `--cwd`:
 
 ```sh
-npx create-efforge upgrade --check            # what differs, what breaks, and what upgrade would do
-npx create-efforge upgrade --dry-run          # the files upgrade would write; nothing written
-npx create-efforge upgrade                    # apply it, then pnpm install
-npx create-efforge upgrade --check --diff --file apps/web/src/routes/app/index.tsx   # efforge's version of one file
+npx -y create-efforge upgrade --check            # what differs, what breaks, and what upgrade would do
+npx -y create-efforge upgrade --dry-run          # the files upgrade would write; nothing written
+npx -y create-efforge upgrade                    # apply it, then pnpm install
+npx -y create-efforge upgrade --check --diff --file apps/web/src/routes/app/index.tsx   # efforge's version of one file
 ```
 
 It renders today's templates for the project's own stack and compares, then applies what is still efforge's and leaves what is yours. How it tells them apart:
@@ -156,8 +156,8 @@ A CI job can gate on `upgrade --check`: it fails only when something breaks the 
 ## `efforge doctor`
 
 ```sh
-npx create-efforge doctor           # one line per check, the fix under each problem
-npx create-efforge doctor --json    # {status, checks: [{id, status, message, fix, details?}]}
+npx -y create-efforge doctor           # one line per check, the fix under each problem
+npx -y create-efforge doctor --json    # {status, checks: [{id, status, message, fix, details?}]}
 ```
 
 Run inside a generated project, or pass `--cwd <dir>`.
@@ -172,6 +172,6 @@ It changes nothing and uses no network unless you pass `--online` (to run `pnpm 
 
 **`pnpm check` says "Expected at least one target file", or the app renders without styles.** The formatter and Tailwind both skip files a `.gitignore` ignores, and a project that isn't its own git repository is under the ignore rules of the repository around it. If that one ignores everything (a dotfiles repository in `~` with `*` in its `.gitignore`), a project created with `--no-git` has no files to check and no classes to style. `create` says so when it happens (a warning under `--json`), and `doctor`'s `ignored` check names the rule. Run `git init` in the project: a repository of its own has its own ignore rules. The default flow already does this.
 
-**The app returns 500 at startup.** A layer is missing configuration. Run `npx create-efforge doctor`: its `env` check names each variable `.dev.vars` (`.env` with Alchemy) lacks. `.env.example` lists what each add-on needs, and a value marked "Fill in" is a secret only you have.
+**The app returns 500 at startup.** A layer is missing configuration. Run `npx -y create-efforge doctor`: its `env` check names each variable `.dev.vars` (`.env` with Alchemy) lacks. `.env.example` lists what each add-on needs, and a value marked "Fill in" is a secret only you have.
 
-**A project made by an older efforge stopped building.** Run `npx create-efforge doctor`, then `npx create-efforge upgrade --check` to see what `upgrade` would change, and `npx create-efforge upgrade` to apply it.
+**A project made by an older efforge stopped building.** Run `npx -y create-efforge doctor`, then `npx -y create-efforge upgrade --check` to see what `upgrade` would change, and `npx -y create-efforge upgrade` to apply it.

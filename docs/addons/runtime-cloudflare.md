@@ -15,7 +15,7 @@ Every project has it. The app runs as one Cloudflare Worker, and `@cloudflare/vi
 Every project has it; there is nothing to choose.
 
 ```sh
-npm create efforge my-app
+npx -y create-efforge my-app --yes
 ```
 
 ## Needs
