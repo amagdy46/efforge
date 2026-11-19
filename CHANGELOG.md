@@ -66,6 +66,10 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - Every service call is a named span (`Notes.list`, `Storage.put`, `Auth.currentSession`, ...) and every server function call is one (`serverFn.addNote`). Nothing records them until a tracer is set; then a trace reads by name.
 - `layers.ts` has a telemetry slot, `TelemetryLive`, underneath `AppLayer`, so a tracer there reaches what a layer forks while it builds as well as each request. Add-ons fill it with the new `addTelemetry` transform.
 - The generated `AGENTS.md` says how to add an error to a service and handle it in a component, to restart `pnpm dev` after adding a dependency, and where the Local Explorer is (`/cdn-cgi/local/explorer/`: D1 rows, R2 objects, Durable Object storage, Workflows, traces).
+- `doctor` has a `gates` check on stacks with auth: `sessionGate` first in `functionMiddleware` and passed to `createStart`, `requireApiSession` first in `workerRoutes`. A gate taken out, or something listed before it, fails with the lines to put back; on a project made before the gates, the fix is `upgrade`, which adds them.
+- `add --dry-run` groups what it would write by add-on, as `create --dry-run` does, with rows for the files it edits and removes; `--verbose` lists every file.
+- A new error code, `UpgradeFirst`: `add` refuses to write dashboard cards onto a project whose card boundary (`apps/web/src/server/outcome.ts`) is older than the cards, and writes nothing. `fix` is `upgrade`; `then` is the same `add`, to run after it.
+- `upgrade --json` and `upgrade --check --json` have `notes`, as `add` does.
 
 ### Changed
 
@@ -123,6 +127,11 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 
 - Service errors in `packages/core` are `Schema.TaggedError` classes (were `Data.TaggedError`), and several carry the fields a UI needs: `InvalidName.length`, `InvalidNote.limit`, `MessageTooLarge.limit`, `FileTooLarge.size` and `limit`, `InvalidAddress.address`, `UrlRefused.url`, `InvalidUrl.url`.
 - Effect's "experimental API" warning is off in `tsconfig.base.json` and lint, like the "unstable" one: an add-on that uses an experimental API (Effect Cluster) no longer fails `pnpm check`.
+- A server function's errors are one list, declared beside it (`export const AnnounceErrors = [MessageTooLarge, RealtimeError] as const`) and spread on both sides: `runOutcome(program, ...AnnounceErrors)` and `useServerCall(announce, ...AnnounceErrors)`. The types hold them together: a client that lists other errors, one too few or none does not typecheck. The nine cards, `docs/capability-cards.md` and the generated `AGENTS.md` show it.
+- A card's code panel holds an 80-character line at 1280 px as well as at 1440: the code column is never narrower than 80 characters of its font, and below that the demo and the code stack.
+- The note `add auth` prints names every server function `pnpm check` now fails on, exported or not, in a route file too, and says what changed for routes: under `/api/` they need a session, outside it they check it themselves. `upgrade` prints the same note when it brings the session gates to a project made before them.
+- The realtime room's rule for which sockets count is `isAttended` in `realtime-limits.ts`, with a test in the generated project.
+- `docs/upgrading.md`'s worked example is today's output, and an end-to-end test holds each quoted line to a real run on the committed 0.2.0 project.
 
 ### Fixed
 
@@ -167,6 +176,9 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - With Alchemy and the AI add-on, `pnpm dev` starts without `LLM_API_KEY`. Before, Alchemy refused to plan.
 - `vite.config.ts` no longer warns about `./regions` on every `pnpm dev` and `pnpm build`.
 - The browser add-on passes the lint of a project made by efforge 0.2.x (it read `_tag`, which that lint forbids).
+- A route file under `/api/auth/` answered a signed-out request at `/API/auth/...` or `/%61pi/auth/...`: `requireApiSession` exempted the path after lower-casing and decoding it, while Better Auth's handler takes only the raw `/api/auth/`. A path is now public only as that handler serves it.
+- `public-server-fns.json` and `public-api-paths.json` are checked as they load. A string where a list belongs no longer matches as a substring: a list of the wrong shape makes nothing public and says so in the server log.
+- A `// #region card` line inside a template string or a string started a card region. The markers in a `.ts` or `.tsx` file are now read as comments by the parser.
 
 ## 0.2.1 (2026-11-18)
 
