@@ -660,10 +660,13 @@ const envCheck: Check = {
           .join(", ")
       const details = { file, vars: findings }
       if (bad.length > 0) {
+        // efforge's local value for each, when it has one (a real secret has none)
         const lines = bad.flatMap((f) => {
           const v = devValues.get(f.name)
-          return v === undefined || values.has(f.name) ? [] : [`${f.name}=${v}`]
+          return v === undefined || v === "" ? [] : [`${f.name}=${v}`]
         })
+        // an empty line is replaced, not followed by a second one
+        const emptied = bad.filter((f) => values.has(f.name)).map((f) => f.name)
         return {
           status: "fail" as const,
           message: `${local === undefined ? `There is no ${file}, so the` : "The"} app reads ${bad.length === 1 ? "a setting" : "settings"} that ${file} doesn't set: ${describe(bad)}. ${bad.length === 1 ? "It fails" : "They fail"} at startup with a "not configured" page. See .env.example for what each is.${soft.length > 0 ? ` Also: ${describe(soft)}.` : ""}`,
@@ -671,9 +674,13 @@ const envCheck: Check = {
           fix:
             local === undefined && file === ".env" && ctx.read(".env.example") !== undefined
               ? ctx.here("cp .env.example .env")
-              : lines.length === bad.length
-                ? ctx.here(`printf '%s\\n' ${lines.map(quote).join(" ")} >> ${file}`)
-                : null,
+              : lines.length !== bad.length
+                ? null
+                : emptied.length === 0
+                  ? ctx.here(`printf '%s\\n' ${lines.map(quote).join(" ")} >> ${file}`)
+                  : ctx.here(
+                      `{ grep -v -E ${quote(`^(${emptied.join("|")})=`)} ${file}; printf '%s\\n' ${lines.map(quote).join(" ")}; } > ${file}.new && mv ${file}.new ${file}`,
+                    ),
           details,
         }
       }

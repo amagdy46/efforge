@@ -276,14 +276,21 @@ it("peers: skipped when the pinned pnpm differs from PATH's, unless --online", a
   expect(get(await doctor(dir, other, true), "peers").status).toBe("ok")
 })
 
-it("env: a blanked secret fails with the line to add, and never prints a value", async () => {
+it("env: a blanked secret fails; the fix puts efforge's public local value back, and no other value shows", async () => {
   const dir = await project()
-  edit(dir, ".dev.vars", (t) => t.replace(/^BETTER_AUTH_SECRET=.*$/m, "BETTER_AUTH_SECRET="))
+  edit(dir, ".dev.vars", (t) =>
+    t
+      .replace(/^BETTER_AUTH_SECRET=.*$/m, "BETTER_AUTH_SECRET=")
+      .concat("MY_TOKEN=s3cr3t-of-mine\n"),
+  )
   const r = get(await doctor(dir), "env")
   expect(r.status).toBe("fail")
   expect(r.message).toContain("BETTER_AUTH_SECRET (empty)")
-  expect(JSON.stringify(r)).not.toMatch(/dev-only-secret/)
-  expect(r.fix).toBeNull()
+  expect(JSON.stringify(r)).not.toMatch(/s3cr3t-of-mine/)
+  // the empty line is replaced, not followed by a second one
+  expect(r.fix).toBe(
+    "{ grep -v -E '^(BETTER_AUTH_SECRET)=' .dev.vars; printf '%s\\n' BETTER_AUTH_SECRET=dev-only-secret-replace-me-with-openssl-rand-base64-32; } > .dev.vars.new && mv .dev.vars.new .dev.vars",
+  )
 })
 
 it("env: no .dev.vars at all fails, and the fix writes efforge's local values", async () => {

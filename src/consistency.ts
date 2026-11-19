@@ -3,7 +3,7 @@ import { closure, normalize, sourceInfo, type SourceInfo } from "./source.ts"
 import { addRegionText } from "./transforms/addRegion.ts"
 import { setDeclarationText } from "./transforms/setDeclaration.ts"
 
-// Keeps an upgrade a consistent set (docs/decisions/0010-upgrade-applies-what-efforge-can-prove.md).
+// Keeps an upgrade a consistent set (docs/decisions/0011-upgrade-applies-what-efforge-can-prove.md).
 // Every import that the plan touches must still hold afterwards: a file efforge writes gets what
 // it imports (the file, its names, its `?region=` blocks, the declarations those names use), and
 // a file efforge doesn't write keeps what it imported. Where a file efforge edits in place lacks

@@ -83,7 +83,7 @@ After `create`, after `add`, and whenever an install or build fails in an efforg
 npx -y create-efforge@latest doctor --json --cwd my-app
 ```
 
-`checks` lists each check with `id`, `status` (`ok`, `warn`, `fail`, `skipped`), `message` and `fix`. Fix every `fail`: run its `fix` when it isn't `null`; when it is, `details` says what to add (a missing binding, layer or env var). Tell the user about each `warn`. `status` is the worst check; the exit code is `2` when it is `fail`, and the document still has `ok: true`. doctor never changes anything and never prints a secret's value. A `fail` you can't fix (a Node version) goes to the user.
+`checks` lists each check with `id`, `status` (`ok`, `warn`, `fail`, `skipped`, `unverified`), `message` and `fix`. Fix every `fail`: run its `fix` when it isn't `null` (after it, that check passes); when it is `null`, `message` and `details` say what to change (a missing binding, layer or env var), or what to do first (`details.uncommitted`: commit, then run `details.command`). Tell the user about each `warn` and `unverified` (doctor couldn't read a file of theirs the way it expects; not a failure). `status` is the worst check; the exit code is `2` when it is `fail`, and the document still has `ok: true`. doctor never changes anything and never prints a secret's value. A `fail` you can't fix (a Node version) goes to the user.
 
 ## Bring an older project up to date
 
@@ -91,7 +91,13 @@ npx -y create-efforge@latest doctor --json --cwd my-app
 npx -y create-efforge@latest upgrade --check --json --cwd my-app
 ```
 
-It changes nothing. `drifted` (and exit code `2`) says whether there is anything to do; `steps` is what to do, in order, ending with the project's gate. The usual way: commit first, then run the `patch` step (`npx -y create-efforge@latest upgrade --check --patch | git apply` in the project; it changes only files the user hasn't edited), then `install`, then each `scripts` and `review` step: these are files and scripts that differ from efforge's templates where efforge can't tell whose change it is. Show the user each one's diff (`--diff`) and ask before taking efforge's version; never take it for a file the user edited without asking. End with the `gate` step. Bare `upgrade` (without `--check`) answers `UpgradeNeedsCheck`.
+It changes nothing. `status` is `needs-action` (something breaks the project; exit code `2`), `behind` (`upgrade` has something to apply) or `current`. When it isn't `current`, the first step is `upgrade`; its `covers` lists everything it does, so don't do any of those by hand. Commit (or ask the user to), then:
+
+```sh
+npx -y create-efforge@latest upgrade --json --cwd my-app
+```
+
+It applies only what is still efforge's (pins, guards, scripts, files the user never changed, new files, and what new files need in files efforge edits in place), never a file the user changed, and runs `pnpm install`. With uncommitted changes it stops with `UncommittedChanges`. Then run `nextSteps` (the gate). `kept` lists files it left: `review` (the user changed it and so did efforge's template) and `held` (efforge's, held back because something of the user's depends on the old version). Tell the user about each, with `reason`; show efforge's version with `upgrade --check --diff --file <path>` and change a user's file only if they ask. A `needsAction` entry with `fix: null` (a set of pins half moved by the user) goes to the user with its `lines`.
 
 ## Errors
 
@@ -115,12 +121,13 @@ It changes nothing. `drifted` (and exit code `2`) says whether there is anything
 | `TransformAnchorMissing` | Nothing was written. Apply `snippet` to `file` by hand, then run the same command again. |
 | `PnpmMissing` | Install pnpm (`npm install --global pnpm`) and run the command again, or ask the user. |
 | `SetupIncomplete`, `CommandFailed` | The files are written; a command failed (`output` says why, often the network). Run `fix`, then the rest of `nextSteps`; the error also carries `env`. Running the same `add` again also finishes the install it owes. |
-| `UpgradeNeedsCheck` | `upgrade` needs `--check`; efforge can't apply an upgrade itself yet. Run `command`, then follow its `steps`. |
+| `UncommittedChanges` | `upgrade` wrote nothing because the project has uncommitted changes (`files`). Commit them (or ask the user to), then run the same command. `command` applies on top of them anyway; use it only if the user says so. |
+| `ProjectNewerThanCli` | The project was made or upgraded by a newer efforge. Run `command` (the same with `create-efforge@latest`). |
 | `WriteFailed`, `InternalError` | Stop and tell the user, with `message`. |
 
 A code not in this table is newer than this skill: treat it as a failure, run `fix` if it isn't `null`, and otherwise tell the user `message`.
 
-Exit codes: `0` success, `1` error, `2` `upgrade --check` or `doctor` found something (the document has `ok: true`), `130` stopped (with `--json`, `create` and `add` still print an `Interrupted` document; stopped in the first moment, before anything was written, stdout can be empty: run the same command again).
+Exit codes: `0` success, `1` error, `2` `upgrade` or `doctor` found something that breaks the project (the document has `ok: true`), `3` `upgrade --check --strict` found something to apply, `130` stopped (with `--json`, `create` and `add` still print an `Interrupted` document; stopped in the first moment, before anything was written, stdout can be empty: run the same command again).
 
 ## Verify
 

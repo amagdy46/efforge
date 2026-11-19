@@ -1,6 +1,7 @@
-# 0009 — `upgrade --check` reports drift from today's templates, `doctor` checks the checkout
+# 0009 — `upgrade` compares a project with today's templates, `doctor` checks the checkout
 
-Date: 2026-11-18. Status: accepted.
+Date: 2026-11-18, revised 2026-11-19. Status: accepted. How `upgrade` applies changes is
+[0011](0011-upgrade-applies-what-efforge-can-prove.md).
 
 ## Context
 
@@ -17,67 +18,88 @@ upgrade" needs both.
 - `upgrade --check` renders today's templates for the project's own stack in
   memory and compares. It reports the pins (grouped into the sets that move
   together, `pinSets` in `src/versions.ts`), the two guards of ADR 0005,
-  every generated file by bucket, seams, scripts, and ordered steps. It never
-  writes. Bare `upgrade` is an error (`UpgradeNeedsCheck`) until applying
-  exists; the document already says `check: true`, so an apply can say
-  `false` without a change of contract.
+  every generated file by bucket, seams, scripts, what it would keep and why,
+  and ordered steps. It never writes; `upgrade` applies (ADR 0011).
 - efforge.jsonc holds the hash of what efforge wrote, not the content, so
-  efforge can tell *who* changed a file (the hash) and whether the template
-  moved on (today's render), but can't merge. Files are `current`,
-  `refresh` (unchanged since written, template moved: safe to replace),
-  `review` (both changed), `yours`, `deleted`, `dropped`, `new`, and
-  `differs` for files efforge edits in place and so never hashed
-  (`layers.ts`, `AGENTS.md`, `auth.ts`). A freshly created, installed and
-  formatted project equals today's render byte for byte (checked), so
-  `differs` is exact, not a formatting false alarm.
-- `--patch` prints one git patch of every change that keeps the user's
-  edits: guard, pins, missing dependencies/scripts/`engines`, seams, refreshed
-  and new files, and their new hashes in efforge.jsonc (so a later `add`
-  still treats them as efforge's). `git apply` refuses it if anything
-  changed since. This makes the steps one command without efforge writing
-  into a project; review files and scripts stay with the user, and
-  `--diff | git apply --include=<file>` takes one of them whole.
-- Exit code `2` means a check ran and found something (`drifted`, or a
-  `doctor` check that failed); the document still has `ok: true`. `1` stays
-  "the command failed". `drifted` is true exactly when a guard is missing or
-  the patch is non-empty: a file the user edited, deleted or keeps
-  differently never counts, so every project can reach `0` and a CI gate
-  can't nag forever.
+  efforge can tell *who* changed a file and whether the template moved on,
+  but can't merge. For files efforge edits in place (`layers.ts`,
+  `AGENTS.md`, `wrangler.jsonc`), which have no hash, it compares
+  structure, not text: two versions are the same when they hold the same
+  lines in any order (or, for JSONC, the same data), as `add` compares its
+  own output. `add` appends a layer or a section where `create` puts it in
+  slot order, so a project that ran `add` is not different for that. An
+  earlier version of this ADR said the comparison was exact; it was a text
+  comparison, and every project that ran `add` was reported as differing for
+  good.
+- Exit codes answer two questions apart. `2` means something breaks the
+  project now (`needs-action`): a guard missing, a set half moved, an import
+  that is broken, an install owed. `behind` (efforge has newer pins or
+  templates the project could take) is `0`, or `3` with `--strict`. `1` stays
+  "the command failed". Under `--json` the document has `ok: true` either way,
+  and `status` says which.
 - `doctor` is a list of named checks (`checks` in `src/doctor.ts`), each a
   small unit with a stable `id`, run in order, a thrown check reported as
   failed. The add-on seam is the manifest, not a new field: `env` derives
-  from each add-on's `envVars` and `addDevVar` transforms plus the
-  `Config.*("NAME")` reads in the code, `bindings` from `addWranglerBinding`
-  and `addAlchemyResource` transforms, `layers` from `addLayer`. An add-on
-  that declares those gets its checks for free; an add-on that needs a check
-  of its own adds an entry to `checks` (a `checks` field in `addon.json` can
-  come later, when one needs it).
+  from each add-on's `envVars` plus the `Config.*("NAME")` reads in the code,
+  `bindings` from `addWranglerBinding` and `addAlchemyResource` transforms,
+  `layers` from `addLayer`. An add-on that declares those gets its checks for
+  free; one that needs a check of its own adds an entry to `checks`.
+- A check's `fix` is a promise, like an error's: a command after which that
+  check passes and no other check is worse, or `null` with the facts. For
+  the `effect`, `effect-guard` and `upgrade` checks it is `upgrade` (which
+  writes the guard and installs), or `null` when `upgrade` would refuse
+  (uncommitted changes) or has nothing to apply. `test/fix-property.test.ts`
+  follows each check's fix on broken projects and asserts the check then
+  passes and nothing else got worse.
+- `doctor` reads code as code: `layers` and the Alchemy `bindings` parse the
+  file, so a commented-out layer is missing and `AppLayer` built from another
+  const counts. Where it can't find the shape it knows (a layer of the
+  owner's in place of efforge's, an `env` object built another way), the
+  status is `unverified`, with what it looked for, not a failure.
 - `doctor` writes nothing and needs no network by default. The outside world
   (`node`, `pnpm --version`, `pnpm peers check`, a TCP connect to the local
-  Postgres, the local D1 file) goes through `DoctorProbe`, so tests stub it.
-  `pnpm` is asked its version from the filesystem root, where no
-  `packageManager` switches it; `pnpm peers check` in the project is skipped
-  when the pinned pnpm differs from the one on PATH (it may download), unless
-  `--online`.
+  Postgres, the local D1 file, `git status`) goes through `DoctorProbe`, so
+  tests stub it. `pnpm` is asked its version from the system temp directory,
+  where no `packageManager` switches it. `pnpm peers check` runs in the
+  project when the pnpm on PATH is the pinned one, or when the pinned one
+  made `node_modules` (`node_modules/.modules.yaml` says which), since then
+  it is on this machine; otherwise it is skipped with the command to run it
+  yourself, or `--online` runs it.
 
 ## Not done: a scheduled `upgrade --check` in generated projects
 
-A weekly workflow in the template that runs `npx create-efforge@latest
-upgrade --check` was considered and left out. It would run unpinned code from
-npm on a schedule with the repository's token, fail the default branch for
-pins that are merely behind (a nag, not a breakage), and need maintaining in
-every project for a check one command already does. The failure it would
-have caught in November 2026 is now caught in efforge's own repo
-(`scripts/bump.ts`, the daily CI run, the e2e lockfile check). docs/cli.md
-says how to add the step to your own CI if you want it.
+A workflow in the template that runs `upgrade --check` on a schedule was
+considered and left out, for now.
+
+What efforge's own CI does (`scripts/bump.ts`, the daily run, the e2e
+lockfile check) tells efforge when its templates go stale. It tells an
+existing project nothing: a project made last month learns that efforge has
+moved on only when its owner runs a command. That is the gap a scheduled
+check would close, and the promise ("the maintained way") is about that
+project.
+
+The obstacle was the exit code. Before ADR 0011, `2` meant both "this will
+break" (a missing guard, two Effects) and "the templates moved", so any
+schedule would fail the default branch every time efforge shipped a
+template change, a nag rather than a warning. With two answers, a project
+can gate on `needs-action` alone.
+
+It would be worth shipping when it can run without failing a branch for
+`behind`: a weekly workflow, off by default, that runs a pinned efforge,
+fails only on `needs-action`, and for `behind` opens or updates one issue
+with no write permission beyond that. Until then, an owner who wants it now
+adds one step to their CI:
+
+```sh
+npx -y create-efforge@latest upgrade --check   # fails (exit 2) only when something breaks
+```
 
 ## Consequences
 
-- A template change shows up as `refresh` in every project made before it.
-  That is the point, but a template edit that only reformats now costs
-  users a step; keep template changes meaningful.
-- A file the user edited *and* efforge's template changed shows as
-  `review`, forever, until the user takes efforge's version or an apply
-  records the new hash. It doesn't set the exit code.
-- `differs` can't tell a user's edit of `auth.ts` from an older efforge's
-  version of it. The step says so and shows the diff.
+- A template change shows up as `refresh` in every project made before it,
+  and `upgrade` applies it where the file is still efforge's. A template
+  edit that only reformats still costs every project a refresh; keep
+  template changes meaningful.
+- A file the owner edited *and* efforge's template changed is `review`
+  until the owner takes efforge's version or the template moves back. It
+  never sets the exit code.

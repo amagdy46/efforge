@@ -5,7 +5,7 @@ import { compareVersions, exactVersion } from "./semver.ts"
 // What each efforge release generated, so `upgrade` can tell its own older output from an owner's
 // choice where it has no hash: a pin, a script or a dependency equal to what a release wrote is
 // efforge's to move; anything else is the owner's. Written by scripts/history.ts at each release
-// (docs/decisions/0010-upgrade-applies-what-efforge-can-prove.md).
+// (docs/decisions/0011-upgrade-applies-what-efforge-can-prove.md).
 
 export interface Release {
   /** The pnpm `packageManager` pinned. */

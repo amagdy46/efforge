@@ -15,11 +15,11 @@ import { parseArgs } from "node:util"
  *   1. the packed package.json declares no dependencies, so nothing is resolved at install time;
  *   2. `npm install` of the tarball into an empty directory (no lockfile), then --version, --help,
  *      a --dry-run create, a create with no install and an `add email` (the ts-morph transforms),
- *      then `upgrade --check` (nothing to do) and `doctor` (the install check fails);
+ *      then `upgrade --check` (nothing to apply) and `doctor` (the install check fails);
  *   3. the README's entry points with the tarball: `npx --package` and `pnpm dlx`, as dry runs;
  *   4. what `npm create efforge` does: `npm exec` the tarball, create the default stack with
  *      install and git, `pnpm build` it, `efforge add email` with the packed bin, build again,
- *      then `upgrade --check` (nothing to do) and `doctor` (no check fails).
+ *      then `upgrade --check` and `upgrade` (nothing to apply) and `doctor` (no check fails).
  */
 
 const { values } = parseArgs({
@@ -166,8 +166,20 @@ try {
     readFileSync(join(project, "packages/core/src/index.ts"), "utf8").includes("./mailer"),
     "add email exported the mailer",
   )
-  const fresh = report("upgrade --check", bin, ["upgrade", "--check", "--json"], project, [0])
-  check(fresh.ok === true && fresh.drifted === false, "upgrade --check: nothing to do after add")
+  const fresh = report(
+    "upgrade --check",
+    bin,
+    ["upgrade", "--check", "--strict", "--json"],
+    project,
+    [0],
+  )
+  check(
+    fresh.ok === true &&
+      fresh.status === "current" &&
+      (fresh.steps as unknown[]).length === 0 &&
+      (fresh.kept as unknown[]).length === 0,
+    "upgrade --check: nothing to apply and nothing kept after add",
+  )
   const notInstalled = report("doctor", bin, ["doctor", "--json"], project, [2], noDatabase)
   check(
     (notInstalled.checks as Array<{ id: string; status: string }>).some(
@@ -214,11 +226,19 @@ try {
   const upgraded = report(
     "upgrade --check, installed",
     "npm",
-    cli("efforge", "upgrade", "--check", "--json"),
+    cli("efforge", "upgrade", "--check", "--strict", "--json"),
     app,
     [0],
   )
-  check(upgraded.drifted === false, "upgrade --check: an installed project has nothing to do")
+  check(
+    upgraded.status === "current" && (upgraded.steps as unknown[]).length === 0,
+    "upgrade --check: an installed project has nothing to apply",
+  )
+  const applied = report("upgrade, installed", "npm", cli("efforge", "upgrade", "--json"), app, [0])
+  check(
+    applied.ok === true && (applied.changed as unknown[]).length === 0,
+    "upgrade: nothing to write on an up-to-date project",
+  )
   const healthy = report(
     "doctor, installed",
     "npm",

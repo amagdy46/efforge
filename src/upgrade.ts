@@ -45,7 +45,7 @@ import {
 import { upgradeNote } from "./upgrade-notes.ts"
 
 // `upgrade`: how a project differs from what this efforge generates for its stack, and the set of
-// changes efforge can make without touching the owner's work (docs/decisions/0010). It renders
+// changes efforge can make without touching the owner's work (docs/decisions/0011-upgrade-applies-what-efforge-can-prove.md). It renders
 // today's templates in memory and compares, file by file, pin by pin, using two records: the hash
 // of each file efforge wrote (efforge.jsonc) and what each release generated (src/history.ts).
 // Where neither says a thing is efforge's, it is the owner's, and efforge leaves it alone.
@@ -354,8 +354,9 @@ const activeTransforms = (
   stack: StackConfig,
   has: (file: string) => boolean,
 ): TransformCall[] =>
-  [...manifest.transforms, ...presentCardTransforms(manifest, has)]
-    .filter((t) => matches((t as { when?: never }).when, stack))
+  [...manifest.transforms, ...presentCardTransforms(manifest, has)].filter((t) =>
+    matches((t as { when?: never }).when, stack),
+  )
 
 /** What a transform adds, for people: `section auth-secret`. */
 const describe = (t: TransformCall): string => {
