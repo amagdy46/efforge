@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { stripVTControlCharacters } from "node:util"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
@@ -560,8 +561,10 @@ it("doctor outside a project is NotAnEfforgeProject, pointing --cwd at the one b
 it("doctor text: one line per check, a Try: line under each problem", async () => {
   const dir = await project()
   const r = await cli(["doctor"], dir)
-  const lines = r.stdout.split("\n")
+  // with CI set, picocolors colours the marks even in a pipe: read the text without the codes
+  const text = stripVTControlCharacters(r.stdout)
+  const lines = text.split("\n")
   expect(lines.filter((l) => /^[✓!✗-] /.test(l))).toHaveLength(checks.length)
-  expect(r.stdout).toContain("Try: pnpm install --no-frozen-lockfile")
-  expect(r.stdout).toMatch(/1 failed, 1 warning, \d+ ok, \d+ skipped\.$/)
+  expect(text).toContain("Try: pnpm install --no-frozen-lockfile")
+  expect(text).toMatch(/1 failed, 1 warning, \d+ ok, \d+ skipped\.$/)
 })
