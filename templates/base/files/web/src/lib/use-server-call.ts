@@ -1,7 +1,14 @@
 import { Cause, Exit, Option } from "effect"
 import { useCallback, useState } from "react"
 import { asFailure } from "./failure"
-import { decodeOutcome, type ErrorSchema, type Errors, type Failure, type Outcome } from "./outcome"
+import {
+  decodeOutcome,
+  type EarlierOutcome,
+  type ErrorSchema,
+  type Errors,
+  type Failure,
+  type Outcome,
+} from "./outcome"
 
 /** A call's result: its value, or the error it failed with. */
 export type CallResult<A, E> =
@@ -38,7 +45,7 @@ const resultOf = <A, E>(exit: Exit.Exit<A, E>): CallResult<A, E> => {
  * `useServerCall` runs), or `asFailure(error)` for a call the server rejected.
  */
 export const settleCall = <A, const S extends ReadonlyArray<ErrorSchema> = []>(
-  call: Promise<Outcome<A, unknown>>,
+  call: Promise<Outcome<A, unknown> | EarlierOutcome<A>>,
   ...errors: S
 ): Promise<CallResult<A, Errors<S>>> =>
   call.then(
@@ -57,7 +64,7 @@ export function useServerCall<
   A,
   I extends ReadonlyArray<unknown>,
   const S extends ReadonlyArray<ErrorSchema> = [],
->(call: (...input: I) => Promise<Outcome<A, unknown>>, ...errors: S) {
+>(call: (...input: I) => Promise<Outcome<A, unknown> | EarlierOutcome<A>>, ...errors: S) {
   const [state, setState] = useState<CallState<A, Errors<S>>>({ status: "idle" })
   // the classes to decode into; the same on every render
   const [listed] = useState(errors)

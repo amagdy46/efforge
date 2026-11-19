@@ -56,13 +56,24 @@ export type Errors<S extends ReadonlyArray<ErrorSchema>> =
   | NotConfigured
   | Failure
 
+/**
+ * What a server function returned before efforge 0.3: the value, or the error's
+ * tag and message. `upgrade` keeps a server function it cannot prove is its own,
+ * so one may still answer this way; the client reads both.
+ */
+export type EarlierOutcome<A> =
+  | { readonly ok: true; readonly value: A }
+  | { readonly ok: false; readonly error: Failure }
+
 /** `outcome`, decoded with `errors` back into an `Exit` whose failures are class instances. */
 export const decodeOutcome = <A, const S extends ReadonlyArray<ErrorSchema>>(
-  outcome: Outcome<A, unknown>,
+  outcome: Outcome<A, unknown> | EarlierOutcome<A>,
   errors: S,
-): Exit.Exit<A, Errors<S>> =>
-  outcome._tag === "Success"
+): Exit.Exit<A, Errors<S>> => {
+  if ("ok" in outcome) return outcome.ok ? Exit.succeed(outcome.value) : Exit.fail(outcome.error)
+  return outcome._tag === "Success"
     ? Exit.succeed(outcome.value)
     : Exit.failCause(
         Cause.fromReasons(Schema.decodeUnknownSync(failureCodec(errors))(outcome.cause).reasons),
       )
+}

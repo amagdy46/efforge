@@ -67,6 +67,10 @@ it("NotConfigured always arrives as itself; an unlisted Data.TaggedError keeps i
   const b = failure(decodeOutcome(wire(new OwnersOwn({ message: "ours" }), []), []))
   expect(b?._tag === "Some" && b.value).toEqual({ _tag: "OwnersOwn", message: "ours" })
   expect(decodeOutcome({ _tag: "Success", value: 1 }, [])).toEqual(Exit.succeed(1))
+  // a server function upgrade kept from before 0.3 still answers { ok, value | error }
+  expect(decodeOutcome({ ok: true, value: 1 }, [])).toEqual(Exit.succeed(1))
+  const earlier = failure(decodeOutcome({ ok: false, error: { _tag: "Old", message: "m" } }, []))
+  expect(earlier?._tag === "Some" && earlier.value).toEqual({ _tag: "Old", message: "m" })
 })
 
 it("every core service error is a Schema.TaggedError, so it can cross the wire", async () => {

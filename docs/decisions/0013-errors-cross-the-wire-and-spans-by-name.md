@@ -59,6 +59,12 @@ emit no spans, so a trace would show nothing by name.
   every add-on; the landing page does not change.
 - A card lists its errors twice, in the server function and in the demo. A mismatch is not a
   type error: an unlisted class arrives as its tag and message.
-- An owner's own server function that read the old `{ ok, value }` result straight from the call
-  (not through `useServerCall`) must read the `Exit` shape or go through `settleCall`;
-  `upgrade`'s consistency check holds `outcome.ts` back for such a project and says why.
+- `upgrade` keeps a server function file it cannot prove is its own (an owner's, or a card's in a
+  project made between releases, which no release record covers) and then holds the new
+  `outcome.ts` back, since that file imports `runOutcome`. Such a function still returns the
+  earlier `{ ok, value }` / `{ ok: false, error: { _tag, message } }`, so the client reads both
+  shapes (`EarlierOutcome` in `lib/outcome.ts`), and the refreshed cards work on it, with tags
+  and messages. The upgrade e2e cases cover a project made by `next` before this change, with and
+  without an owner's own `Data.TaggedError` service on `runOutcome` and `useServerCall`.
+- Code that reads a server function's result directly, not through `useServerCall` or
+  `settleCall`, reads whichever shape its server function returns; `decodeOutcome` takes both.
