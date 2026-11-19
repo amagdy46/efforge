@@ -64,6 +64,9 @@ Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`. It has one m
 | `apps/web/src/server/session.ts` | Always |
 | `apps/web/src/server/require-session.ts` | Always |
 | `apps/web/src/server/socket-session.ts` | Always |
+| `apps/web/src/server/public-server-fns.json` | Always |
+| `apps/web/src/server/api-session.ts` | Always |
+| `apps/web/src/server/public-api-paths.json` | Always |
 | `apps/web/src/lib/auth-client.ts` | Always |
 | `apps/web/src/lib/redirect.ts` | Always |
 | `apps/web/src/lib/form.ts` | Always |
@@ -105,6 +108,11 @@ Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`. It has one m
 ### `apps/web/src/server/routes.ts`
 
 - Adds `authRoute` to `workerRoutes`.
+- Adds `requireApiSession` to `workerRoutes`.
+
+### `apps/web/src/start.ts`
+
+- Adds `sessionGate` to `functionMiddleware`.
 
 ### `packages/db/src/index.ts`
 

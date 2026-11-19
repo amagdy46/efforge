@@ -1,5 +1,5 @@
 // Two rules that keep what the server holds on the server. Both are configured in vite.config.ts.
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { join, relative, sep } from "node:path"
 
 /** `file` relative to the project root, with forward slashes. */
@@ -60,6 +60,30 @@ const nameOf = (top) => {
   return node?.id?.type === "Identifier" ? node.id.name : undefined
 }
 
+/** The local names `middleware` is imported as from the guard file (`./require-session`). */
+const guardImports = (program, guard, middleware) => {
+  const base = guard.replace(/^.*\//, "").replace(/\.tsx?$/, "")
+  const names = new Set()
+  for (const node of program.body) {
+    if (node.type !== "ImportDeclaration" || typeof node.source.value !== "string") continue
+    const from = node.source.value.replace(/\.tsx?$/, "")
+    if (from !== base && !from.endsWith(`/${base}`)) continue
+    for (const spec of node.specifiers)
+      if (spec.type === "ImportSpecifier" && spec.imported.name === middleware)
+        names.add(spec.local.name)
+  }
+  return names
+}
+
+/** The public list file: `{ "<file>": ["<server function>", ...] }`, or {} when it is not there. */
+const readPublicList = (context, file) => {
+  try {
+    return JSON.parse(readFileSync(join(context.cwd, file), "utf8"))
+  } catch {
+    return {}
+  }
+}
+
 const serverFnSession = {
   meta: {
     type: "problem",
@@ -70,6 +94,7 @@ const serverFnSession = {
         properties: {
           guard: { type: "string" },
           middleware: { type: "string" },
+          publicList: { type: "string" },
           public: {
             type: "object",
             additionalProperties: { type: "array", items: { type: "string" } },
@@ -86,11 +111,54 @@ const serverFnSession = {
     // without auth there is no session to require: the rule switches on with the guard's file
     if (!existsSync(join(context.cwd, guard))) return {}
     const file = projectPath(context)
-    const open = new Set(options.public?.[file] ?? [])
+    const listFile = options.publicList ?? "apps/web/src/server/public-server-fns.json"
+    const open = new Set([
+      ...(options.public?.[file] ?? []),
+      ...(readPublicList(context, listFile)[file] ?? []),
+    ])
     let imported = { names: new Set(), namespaces: new Set() }
+    let guards = new Set()
+    const hint = `Call it as \`createServerFn(...)\`, imported from "@tanstack/react-start" in the file that defines the server function, so this rule can check it.`
     return {
       Program(program) {
         imported = serverFnNames(program)
+        guards = guardImports(program, guard, middleware)
+      },
+      // `createServerFn` passed around (an alias, a re-export) hides the server function from the rule
+      Identifier(node) {
+        if (!imported.names.has(node.name)) return
+        const parent = node.parent
+        if (parent?.type === "CallExpression" && parent.callee === node) return
+        if (parent?.type === "ImportSpecifier" || parent?.type === "ImportDefaultSpecifier") return
+        // a property or key that only shares the name
+        if (parent?.type === "MemberExpression" && parent.property === node && !parent.computed)
+          return
+        if (parent?.type === "Property" && parent.key === node && parent.value !== node) return
+        context.report({
+          node,
+          message: `\`${node.name}\` (createServerFn) in ${file} is used other than by calling it. ${hint}`,
+        })
+      },
+      MemberExpression(node) {
+        if (!isServerFn(node, imported)) return
+        const parent = node.parent
+        if (parent?.type === "CallExpression" && parent.callee === node) return
+        context.report({
+          node,
+          message: `\`${node.object.name}.createServerFn\` in ${file} is used other than by calling it. ${hint}`,
+        })
+      },
+      ExportNamedDeclaration(node) {
+        if (node.source?.value !== "@tanstack/react-start") return
+        if (node.specifiers.some((spec) => spec.local?.name === "createServerFn"))
+          context.report({
+            node,
+            message: `${file} re-exports createServerFn. ${hint}`,
+          })
+      },
+      ExportAllDeclaration(node) {
+        if (node.source?.value === "@tanstack/react-start")
+          context.report({ node, message: `${file} re-exports createServerFn. ${hint}` })
       },
       CallExpression(node) {
         if (!isServerFn(node.callee, imported)) return
@@ -101,13 +169,13 @@ const serverFnSession = {
           (link) =>
             link.name === "middleware" &&
             link.args[0]?.type === "ArrayExpression" &&
-            link.args[0].elements.some((e) => e?.type === "Identifier" && e.name === middleware),
+            link.args[0].elements.some((e) => e?.type === "Identifier" && guards.has(e.name)),
         )
         if (guarded) return
         const fn = name === undefined ? "This server function" : `\`${name}\``
         context.report({
           node,
-          message: `${fn} in ${file} runs without a session. This project has auth (${guard}), so every server function needs one: chain \`.middleware([${middleware}])\` right after \`createServerFn(...)\`, with \`import { ${middleware} } from "@/server/require-session"\`. A function that must answer signed-out visitors goes on the \`public\` list of the efforge/server-fn-session rule in vite.config.ts.`,
+          message: `${fn} in ${file} runs without a session. This project has auth (${guard}), so every server function needs one: chain \`.middleware([${middleware}])\` right after \`createServerFn(...)\`, with \`import { ${middleware} } from "@/server/require-session"\` (the real one: a local function of that name does not count). At runtime sessionGate (apps/web/src/start.ts) checks every server function anyway; this rule is early feedback. A function that must answer signed-out visitors goes in ${listFile}.`,
         })
       },
     }

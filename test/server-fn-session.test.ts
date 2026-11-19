@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process"
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { afterAll, expect, it } from "@effect/vitest"
@@ -47,7 +47,8 @@ const lint = (dir: string, tree: Tree): Diagnostic[] => {
   const files = [...tree.keys()].filter(
     (f) => f.startsWith("apps/web/src/") && /\.tsx?$/.test(f) && !f.endsWith(".d.ts"),
   )
-  for (const f of [...files, "lint/efforge.js"]) {
+  const lists = ["apps/web/src/server/public-server-fns.json"].filter((f) => tree.has(f))
+  for (const f of [...files, ...lists, "lint/efforge.js"]) {
     mkdirSync(dirname(join(dir, f)), { recursive: true })
     writeFileSync(join(dir, f), tree.get(f) ?? "")
   }
@@ -81,8 +82,17 @@ const stack = (config: Record<string, unknown>): StackConfig =>
 
 const EXTRAS: ReadonlyArray<string> = ["workflows", "realtime", "browser", "storage", "email"]
 
-it("lint/efforge.js and src/cards.ts list the same public server functions", () => {
-  expect(efforgeRules["efforge/server-fn-session"]?.[1]).toEqual({ public: PUBLIC_SERVER_FNS })
+it("the project's public list (read by lint and runtime) is src/cards.ts's", () => {
+  expect(efforgeRules["efforge/server-fn-session"]?.[1]).toEqual({
+    publicList: "apps/web/src/server/public-server-fns.json",
+  })
+  const list = JSON.parse(
+    readFileSync(
+      join(templates, "auth/better-auth/files/shared/server/public-server-fns.json"),
+      "utf8",
+    ),
+  ) as unknown
+  expect(list).toEqual(PUBLIC_SERVER_FNS)
 })
 
 it("every stack's own lint passes: each server function is guarded on auth stacks", async () => {
@@ -135,6 +145,62 @@ it("the rule names an unguarded server function on an auth stack, and is off wit
     handwritten,
   )
   expect(lint(join(tmp, "none"), without)).toEqual([])
+})
+
+it("the rule sees the reviewer's bypasses: an alias, a re-export, a middleware only named requireSession", async () => {
+  const addons = await run(loadAddons(templates))
+  const tree = new Map(await run(generate(stack({}), addons)))
+    .set(
+      "apps/web/src/server/alias.ts",
+      [
+        'import { createServerFn } from "@tanstack/react-start"',
+        "",
+        "const make = createServerFn",
+        'export const viaAlias = make({ method: "GET" }).handler(() => "rows")',
+        "",
+      ].join("\n"),
+    )
+    .set(
+      "apps/web/src/server/reexport.ts",
+      'export { createServerFn as serverFn } from "@tanstack/react-start"\n',
+    )
+    .set(
+      "apps/web/src/server/fake.ts",
+      [
+        'import { createMiddleware, createServerFn } from "@tanstack/react-start"',
+        "",
+        'const requireSession = createMiddleware({ type: "function" }).server(({ next }) => next())',
+        'export const fake = createServerFn({ method: "GET" })',
+        "  .middleware([requireSession])",
+        '  .handler(() => "rows")',
+        "",
+      ].join("\n"),
+    )
+    .set(
+      "apps/web/src/server/renamed.ts",
+      [
+        'import { createServerFn } from "@tanstack/react-start"',
+        'import { logCalls as requireSession } from "./log-calls"',
+        "",
+        'export const renamed = createServerFn({ method: "GET" })',
+        "  .middleware([requireSession])",
+        '  .handler(() => "rows")',
+        "",
+      ].join("\n"),
+    )
+  const found = lint(join(tmp, "bypass"), tree).map((d) => d.message)
+  expect(found).toEqual(
+    expect.arrayContaining([
+      expect.stringMatching(
+        /^`createServerFn` \(createServerFn\) in apps\/web\/src\/server\/alias\.ts is used other than by calling it/,
+      ),
+      expect.stringMatching(/^apps\/web\/src\/server\/reexport\.ts re-exports createServerFn/),
+      expect.stringMatching(/^`fake` in apps\/web\/src\/server\/fake\.ts runs without a session/),
+      expect.stringMatching(
+        /^`renamed` in apps\/web\/src\/server\/renamed\.ts runs without a session/,
+      ),
+    ]),
+  )
 })
 
 it("lint refuses whole-file imports and allows ?region= and stylesheet URLs", async () => {

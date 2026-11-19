@@ -54,16 +54,12 @@ export default defineConfig({
       {
         files: ["apps/web/**"],
         rules: {
-          // with auth, a server function without `.middleware([requireSession])` is an error
-          // unless it is listed here: keep this list to what signed-out visitors must reach
+          // with auth, sessionGate runs before every server function (apps/web/src/start.ts);
+          // this rule is early feedback: a function without `.middleware([requireSession])` is an
+          // error unless it is in the public list, which the runtime reads too
           "efforge/server-fn-session": [
             "error",
-            {
-              public: {
-                "apps/web/src/server/session.ts": ["getSession", "getAppState"],
-                "apps/web/src/server/stack.ts": ["getStack"],
-              },
-            },
+            { publicList: "apps/web/src/server/public-server-fns.json" },
           ],
           // only ?region=<name> may import a file as text; the rest would ship it to the browser
           "efforge/no-whole-file-import": [

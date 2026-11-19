@@ -3,6 +3,7 @@ import { Node, SyntaxKind } from "ts-morph"
 import {
   addImportText,
   appendListItem,
+  prependListItem,
   missing,
   parseTs,
   req,
@@ -13,8 +14,9 @@ import {
 const norm = (s: string) => s.replace(/\s+/g, "")
 
 /**
- * args: `{ file, name, item, import?, from? }` — appends `item` to the array literal assigned to the
- * top-level `const name`, and adds `import` from `from` when both are given.
+ * args: `{ file, name, item, import?, from?, at? }` — appends `item` to the array literal assigned
+ * to the top-level `const name` (`at: "start"` puts it first), and adds `import` from `from` when
+ * both are given.
  */
 export const addArrayItem: Transform = (tree, args) =>
   Effect.gen(function* () {
@@ -34,7 +36,11 @@ export const addArrayItem: Transform = (tree, args) =>
 
     const elements = array.getElements()
     let next = text
-    if (!elements.some((e) => norm(e.getText()) === norm(item)))
+    const first = elements[0]
+    if (elements.some((e) => norm(e.getText()) === norm(item))) next = text
+    else if (args.at === "start" && first !== undefined)
+      next = prependListItem(text, array.getStart(), first.getStart(), item)
+    else
       next = appendListItem(
         text,
         array.getStart(),

@@ -43,6 +43,26 @@ export const appendListItem = (
   item: string,
 ): string => breakIfTooLong(appendListItemRaw(text, open, close, lastEnd, item), open)
 
+/**
+ * `item` as the first element of the list whose first element starts at `first`: on its own line
+ * in a list written one item per line (after a comment the line starts with), else `item, `
+ * before it. The bracket at `open` lets a list that grows too wide break the way the formatter does.
+ */
+export const prependListItem = (
+  text: string,
+  open: number,
+  first: number,
+  item: string,
+): string => {
+  const eol = text.includes("\r\n") ? "\r\n" : "\n"
+  if (text.slice(open + 1, first).includes("\n")) {
+    const lineStart = text.lastIndexOf("\n", first - 1) + 1
+    const indent = /^[ \t]*/.exec(text.slice(lineStart))?.[0] ?? ""
+    return `${text.slice(0, first)}${item},${eol}${indent}${text.slice(first)}`
+  }
+  return breakIfTooLong(`${text.slice(0, first)}${item}, ${text.slice(first)}`, open)
+}
+
 /** The formatter's line width (generated vite.config.ts `printWidth`). */
 const PRINT_WIDTH = 100
 

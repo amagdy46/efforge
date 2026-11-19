@@ -387,6 +387,24 @@ it("addArrayItem keeps user formatting in multi-line arrays", async () => {
   expect(t.get("r.ts")).toContain("  other(),\n  storageRoute,\n]")
 })
 
+it("addArrayItem with at: start puts the item first, after the marker, in either layout", async () => {
+  const one = await once(
+    { "r.ts": routesSrc("/* efforge:routes */ authRoute") },
+    arr("gate", { at: "start" }),
+  )
+  expect(one.get("r.ts")).toContain("[/* efforge:routes */ gate, authRoute]")
+  const multi = await once(
+    { "r.ts": routesSrc("\n  /* efforge:routes */ authRoute,\n  roomRoute,\n") },
+    arr("gate", { at: "start" }),
+  )
+  expect(multi.get("r.ts")).toContain(
+    "[\n  /* efforge:routes */ gate,\n  authRoute,\n  roomRoute,\n]",
+  )
+  // an empty list takes it as any other item; a second run changes nothing
+  const empty = await once({ "r.ts": routesSrc() }, arr("gate", { at: "start" }))
+  expect(empty.get("r.ts")).toContain("[/* efforge:routes */ gate]")
+})
+
 it("addArrayItem fails when the array is missing", async () => {
   const e = await fail(new Map([["r.ts", "export const x = 1\n"]]), arr())
   expect(e).toBeInstanceOf(TransformAnchorMissing)

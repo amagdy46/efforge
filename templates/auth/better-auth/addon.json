@@ -41,6 +41,18 @@
       "target": "apps/web/src/server/socket-session.ts"
     },
     {
+      "path": "../better-auth/files/shared/server/public-server-fns.json",
+      "target": "apps/web/src/server/public-server-fns.json"
+    },
+    {
+      "path": "../better-auth/files/shared/server/api-session.ts",
+      "target": "apps/web/src/server/api-session.ts"
+    },
+    {
+      "path": "../better-auth/files/shared/server/public-api-paths.json",
+      "target": "apps/web/src/server/public-api-paths.json"
+    },
+    {
       "path": "files/lib/auth-client.ts",
       "target": "apps/web/src/lib/auth-client.ts"
     },
@@ -275,14 +287,12 @@
       "name": "BETTER_AUTH_SECRET",
       "secret": true,
       "example": "change-me-to-a-long-random-string",
-
       "dev": "dev-only-secret-replace-me-with-openssl-rand-base64-32",
       "description": "Signs sessions and cookies (production: a Worker secret, `wrangler secret put BETTER_AUTH_SECRET` or the deploy env with Alchemy)"
     },
     {
       "name": "BETTER_AUTH_URL",
       "example": "https://app.example.com",
-
       "dev": "",
       "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port)."
     }
@@ -336,6 +346,28 @@
         "item": "authRoute",
         "import": "authRoute",
         "from": "./auth-route"
+      }
+    },
+    {
+      "name": "addArrayItem",
+      "args": {
+        "file": "apps/web/src/server/routes.ts",
+        "name": "workerRoutes",
+        "item": "requireApiSession",
+        "import": "requireApiSession",
+        "from": "./api-session",
+        "at": "start"
+      }
+    },
+    {
+      "name": "addArrayItem",
+      "args": {
+        "file": "apps/web/src/start.ts",
+        "name": "functionMiddleware",
+        "item": "sessionGate",
+        "import": "sessionGate",
+        "from": "./server/require-session",
+        "ifMissing": "apps/web/src/start.ts has no `const functionMiddleware = [...]` list passed to createStart (a project made before efforge 0.3), so server functions are guarded only where they chain `.middleware([requireSession])`, and the project's lint names any that don't. `npx -y create-efforge upgrade` brings the list; or add `functionMiddleware: [sessionGate]` to createStart's options yourself, with `import { sessionGate } from \"./server/require-session\"`."
       }
     },
     {

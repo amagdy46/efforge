@@ -1,0 +1,4 @@
+{
+  "apps/web/src/server/session.ts": ["getSession", "getAppState"],
+  "apps/web/src/server/stack.ts": ["getStack"]
+}

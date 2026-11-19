@@ -1,5 +1,5 @@
 import { createSerializationAdapter } from "@tanstack/react-router"
-import { createStart } from "@tanstack/react-start"
+import { type AnyFunctionMiddleware, createStart } from "@tanstack/react-start"
 
 type Tagged = Error & { readonly _tag: string }
 
@@ -25,4 +25,14 @@ const taggedError = createSerializationAdapter({
     Object.assign(new Error(fields.message), fields, { name: fields._tag }) as Tagged,
 })
 
-export const startInstance = createStart(() => ({ serializationAdapters: [taggedError] }))
+/**
+ * Runs before every server function, ahead of the function's own `.middleware([...])`. On a
+ * project with auth, efforge adds `sessionGate` here, so every server function requires a
+ * session unless it is on the public list (apps/web/src/server/public-server-fns.json).
+ */
+const functionMiddleware: Array<AnyFunctionMiddleware> = []
+
+export const startInstance = createStart(() => ({
+  serializationAdapters: [taggedError],
+  functionMiddleware,
+}))
