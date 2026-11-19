@@ -21,6 +21,8 @@ export interface Choice {
   readonly value: string
   readonly label: string
   readonly hint?: string | undefined
+  /** Shown, not selectable; `hint` says why. */
+  readonly disabled?: boolean | undefined
 }
 
 /** `id` names the prompt (a slot id, or "name"/"confirm"); the live layer ignores it, the scripted layer records it. */
@@ -129,9 +131,12 @@ const clean = (line: string): string =>
   stripVTControlCharacters(line.split("\r").pop() ?? "").trimEnd()
 
 const toOption = (c: Choice) =>
-  (c.hint === undefined
-    ? { value: c.value, label: c.label }
-    : { value: c.value, label: c.label, hint: c.hint }) as p.Option<string>
+  ({
+    value: c.value,
+    label: c.label,
+    ...(c.hint === undefined ? {} : { hint: c.hint }),
+    ...(c.disabled === true ? { disabled: true } : {}),
+  }) as p.Option<string>
 
 /**
  * clack 1.8.1 has no back/escape signal, so "go back" is a synthetic "← Back"
@@ -298,6 +303,8 @@ export interface Shown {
   readonly id: string
   readonly options: ReadonlyArray<string>
   readonly canGoBack: boolean
+  /** The options shown but not selectable. */
+  readonly disabled?: ReadonlyArray<string>
 }
 export interface Scripted {
   readonly layer: Layer.Layer<PromptIO>
@@ -332,6 +339,9 @@ export const scriptedPromptIO = (answers: ReadonlyArray<Answer>): Scripted => {
         id: o.id,
         options: o.options.map((c) => c.value),
         canGoBack: o.canGoBack,
+        ...(o.options.some((c) => c.disabled === true)
+          ? { disabled: o.options.filter((c) => c.disabled === true).map((c) => c.value) }
+          : {}),
       }) as Effect.Effect<ReadonlyArray<string> | GoBack, PromptError>,
     // like the live prompt, an answer that fails `validate` is reported and asked again
     text: (o) => {

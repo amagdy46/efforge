@@ -68,7 +68,13 @@ import {
   type TransformAnchorMissing,
   type UnknownTransform,
 } from "../transforms/index.ts"
-import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
+import {
+  canPrompt,
+  type Choice,
+  GoBack,
+  PromptIO,
+  type PromptIOShape,
+} from "../prompts/navigable.ts"
 import {
   effectOverrides,
   effectVersion,
@@ -935,6 +941,96 @@ export const addable = (stack: StackConfig): string[] =>
         .map((o) => `${s.id}/${o.id}`),
     )
 
+/**
+ * The picker `add` shows a person when it gets no ids: every add-on the project doesn't have, by
+ * slot, with its description; one in a slot the project already filled is shown disabled, with
+ * why. A pick the stack rules refuse (auth without a database) is said, and asked again.
+ */
+export const pickAddons = (
+  stack: StackConfig,
+  addons: ReadonlyMap<string, { readonly manifest: AddonManifest }>,
+  io: PromptIOShape,
+) =>
+  Effect.gen(function* () {
+    const choices: Choice[] = []
+    const width = Math.max(...slots.map((s) => s.id.length))
+    for (const s of slots) {
+      if (s.options.length <= 1) continue
+      const current = s.id === "extras" ? undefined : stack[s.id]
+      for (const o of s.options) {
+        if (o.id === "none") continue
+        const id = `${s.id}/${o.id}`
+        if (s.id === "extras" ? stack.extras.includes(o.id as never) : current === o.id) continue
+        const m = addons.get(id)?.manifest
+        const clause = (m?.description ?? "").split(/[:;,]\s|\.(?:\s|$)/)[0] ?? ""
+        const about = clause.length > 60 ? `${clause.slice(0, 59).trimEnd()}…` : clause
+        const blocked = current !== undefined && current !== "none"
+        const needs =
+          s.id === "auth" && stack.database === "none"
+            ? "needs a database: pick one too"
+            : s.id === "database"
+              ? "needs an ORM: pick one too"
+              : s.id === "orm" && stack.database === "none"
+                ? "needs a database: pick one too"
+                : undefined
+        // the hint shows beside the line under the cursor (always, for a disabled one)
+        choices.push({
+          value: id,
+          label: `${s.id.padEnd(width)}  ${m?.title ?? o.label}`,
+          hint: blocked
+            ? `this project's ${s.id} is ${current}; add can't swap it`
+            : needs === undefined
+              ? about
+              : `${needs}. ${about}`,
+          ...(blocked ? { disabled: true } : {}),
+        })
+      }
+    }
+    let picked: ReadonlyArray<string> = []
+    for (;;) {
+      const answer = yield* io.multiselect({
+        id: "addons",
+        message: "Add which? (space picks, enter adds; none adds nothing)",
+        options: choices,
+        initial: picked,
+        canGoBack: false,
+      })
+      // in slot order, as `add` lists them
+      const order = choices.map((c) => c.value)
+      picked = (answer === GoBack ? [] : answer).toSorted(
+        (x, y) => order.indexOf(x) - order.indexOf(y),
+      )
+      if (picked.length === 0) return picked
+      const exit = Effect.runSyncExit(applyIds(stack, picked))
+      if (Exit.isSuccess(exit)) return picked
+      const e = exit.cause.reasons.find((r) => r._tag === "Fail")?.error as
+        | {
+            readonly _tag: string
+            readonly slot?: string
+            readonly value?: string
+            readonly current?: string
+            readonly reason?: string
+            readonly ways?: ReadonlyArray<ReadonlyArray<string>>
+          }
+        | undefined
+      if (e?._tag === "SlotAlreadySet") {
+        const both = picked.filter((id) => id.startsWith(`${e.slot ?? ""}/`))
+        yield* io.warn(`A project has one ${e.slot ?? ""}: pick one of ${both.join(", ")}.`)
+        continue
+      }
+      const needs = needsOf(e?.ways ?? [])
+        .map((n) => `one of ${n.options.join(", ")}`)
+        .join(" and ")
+      const why = (e?.reason ?? "it doesn't fit the stack").replace(
+        /\. Add (?:one|an ORM|one) in the same command.*$| \(alternatives lists the ways\)$/,
+        "",
+      )
+      yield* io.warn(
+        `Can't add ${e?.slot ?? ""}/${e?.value ?? ""} with that pick: ${why}.${needs === "" ? "" : ` Pick ${needs} with it.`}`,
+      )
+    }
+  })
+
 /** `--cwd` for `dir`, relative to where efforge runs. */
 const cwdArg = (dir: string) => relative(process.cwd(), dir) || "."
 
@@ -1206,12 +1302,29 @@ export const addHandler = (input: {
           task: (_label, eff) => eff(() => {}),
         }
       : live
-    if (!input.json && input.ids.length > 0)
-      yield* io.intro(introLine(`add ${input.ids.join(" ")}`))
+    // without ids, a person at a terminal picks them; anyone else (no terminal, --json) is told
+    // what there is to add, as before
+    const picking = input.ids.length === 0 && !input.json
+    if (!input.json && (input.ids.length > 0 || canPrompt()))
+      yield* io.intro(introLine(`add ${input.ids.join(" ")}`.trimEnd()))
 
     const manifest = yield* readManifest(dir)
-    // a picker for people belongs here later; for now, say what there is to add
-    if (input.ids.length === 0) return yield* new NoAddonIds({ available: addable(manifest.stack) })
+    let ids: ReadonlyArray<string> = input.ids
+    if (picking) {
+      const addons = yield* loadAddons(yield* TemplatesDir)
+      const picked = yield* pickAddons(manifest.stack, addons, io).pipe(
+        Effect.catchTag("NeedsInput", () => Effect.succeed(undefined)),
+      )
+      if (picked !== undefined && picked.length === 0)
+        return yield* io.outro("Nothing picked, nothing added.")
+      if (picked !== undefined) {
+        const args = yield* Invocation
+        const same = alternative(args, (i) => ({ ...i, operands: picked }))
+        if (same !== null) yield* io.info(`The same without the picker: ${same}`)
+        ids = picked
+      }
+    }
+    if (ids.length === 0) return yield* new NoAddonIds({ available: addable(manifest.stack) })
     if (newer(manifest.efforgeVersion, efforgeVersion))
       yield* io.warn(
         `This project was made with efforge ${manifest.efforgeVersion}, newer than this CLI (${efforgeVersion}). Use npx -y create-efforge@latest add.`,
@@ -1227,7 +1340,7 @@ export const addHandler = (input: {
     // checked before anything is written: install and the route tree both need pnpm
     if (input.install && !input.dryRun && !(yield* has("pnpm"))) return yield* new PnpmMissing()
     // plan first (in memory): the dirty-tree warning only matters when something will change
-    const plan = yield* addAddons(dir, input.ids, { ...opts, dryRun: true })
+    const plan = yield* addAddons(dir, ids, { ...opts, dryRun: true })
     const changes = plan.written.length + plan.transformed.length + plan.removed.length > 0
     if (changes && !input.dryRun) {
       const dirty = yield* exec("git", ["status", "--porcelain"], dir).pipe(
@@ -1241,7 +1354,7 @@ export const addHandler = (input: {
     }
     if (!input.dryRun && changes) progress.phase = "writing"
     const result =
-      input.dryRun || !changes ? plan : yield* addAddons(dir, input.ids, { ...opts, dryRun: false })
+      input.dryRun || !changes ? plan : yield* addAddons(dir, ids, { ...opts, dryRun: false })
     if (progress.phase === "writing") progress.phase = "written"
     // only when dependencies changed: package.json files or the catalog
     const depsChanged = result.written.some(
