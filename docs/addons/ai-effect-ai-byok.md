@@ -115,6 +115,10 @@ Your code asks for `Llm`, declared in `packages/core/src/llm.ts`. It has one mem
 
 - Adds the rules under [Rules it adds to AGENTS.md](#rules-it-adds-to-agentsmd).
 
+### `apps/web/src/server/ai-settings.ts`
+
+- Runs `requireSession` before every server function in the file. Only with `auth=better-auth-orgs`.
+
 ### `apps/web/package.json`
 
 - Adds the dependencies listed below.

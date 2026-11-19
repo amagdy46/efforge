@@ -80,6 +80,10 @@ Your code asks for `Realtime`, declared in `packages/core/src/realtime.ts`. Its 
 
 - Adds `realtimeRoute` to `workerRoutes`.
 
+### `apps/web/src/server/realtime-route.ts`
+
+- Adds `requireSocketSession` to `upgradeGuards`. Only with `auth=better-auth` or `auth=better-auth-orgs`.
+
 ### `wrangler.jsonc`
 
 - Adds a `durable_objects.bindings` entry: `{"name":"ROOM","class_name":"Room"}`. Only with `infra=none`.
@@ -124,6 +128,8 @@ None.
 - Rooms are a Durable Object (`Room`, exported from `apps/web/src/server.ts`); WebSocket upgrades are handled by a Worker route in `server/routes.ts`.
 - Use the `Realtime` service from `@repo/core` on the server and the `useRoom` hook in `apps/web/src/lib/use-room.ts` in the UI.
 - Keep message payloads small and validate incoming messages with `Schema` before using them.
+- Access: with auth, `realtime-route.ts` runs its `upgradeGuards` first, and `requireSocketSession` closes a socket without a session with 4401 "Not signed in" (`useRoom` reports `refused`). Without auth the list is empty and anyone who can reach the app can join a room and read it.
+- `useRoom` sends a ping as soon as a socket opens. The room counts and sends only to sockets that have pinged, and closes one that has not 10 seconds after the handshake (a client that left mid-handshake).
 
 ## Limits
 
