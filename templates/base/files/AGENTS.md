@@ -15,11 +15,9 @@ Rules for AI agents (and humans) working in this repo. Read this before changing
   `// #region card` block (`?region=card`, cut by `apps/web/regions.ts`), which ships to the
   browser: never mark a secret, and keep the markers. Lint rejects `?raw` and other whole-file
   imports; `pnpm build` fails if a server file or a secret would ship.
-- The dashboard is a starter surface. To remove it, replace `routes/app/index.tsx` and delete
-  `capabilities/`, `components/{capability-card,code-block,layer-graph}.tsx`,
-  `lib/{highlight,layer-graph}.ts` and the cards' server files (the `@/server/...` modules the
-  cards import, such as `greeting.ts` and `notes.ts`, except `stack.ts`); in `server/stack.ts`
-  drop the registry import and return `cards: []`. Then run `pnpm typecheck && pnpm check`.
+- The dashboard is a starter surface. To remove it, replace `routes/app/index.tsx`, delete `capabilities/`, `components/{capability-card,code-block,layer-graph}.tsx`, `lib/{highlight,layer-graph}.ts`
+  and the `@/server/...` files the cards import (`greeting.ts`, `notes.ts`, ..., not `stack.ts`),
+  and in `server/stack.ts` drop the registry import and return `cards: []`. Run `pnpm typecheck`.
 - `apps/web/src/server/outcome.ts`: `runOutcome` runs an Effect for a server function and returns
   its tagged error as data (`{ ok: false, error: { _tag, message } }`), so the UI can match on it.
 - `efforge.jsonc`: the stack choices. `efforge add` reads it; leave it alone. To add a capability (email, storage, a database, auth, AI), run `npx -y create-efforge@latest add <id> --json` from the project root instead of wiring it by hand; `npx -y create-efforge@latest list --json` lists the ids.
