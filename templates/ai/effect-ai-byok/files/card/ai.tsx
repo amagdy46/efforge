@@ -132,7 +132,7 @@ export const ai: Capability = {
   title: "AI",
   summary:
     "A language model behind the Llm service, on Effect AI with your own key: ask, and read the answer as it streams.",
-  layer: { name: "LlmLive", provides: ["Llm"], needs: ["LLM_* settings or a saved key"] },
+  layer: { name: "LlmLive", provides: ["Llm"], needs: ["LLM_* settings"] },
   code: [
     { path: "packages/core/src/llm.ts", source: program },
     { path: "apps/web/src/server/ai-demo.ts", source: serverFn },

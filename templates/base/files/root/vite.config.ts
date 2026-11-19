@@ -69,6 +69,11 @@ export default defineConfig({
         },
       },
       {
+        // shared packages reach the browser too, through the app's imports
+        files: ["packages/**"],
+        rules: { "efforge/no-whole-file-import": "error" },
+      },
+      {
         files: ["**/*.test.ts", "**/*.test.tsx"],
         rules: { "effect-tests/no-manual-runtime": "error" },
       },

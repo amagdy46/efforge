@@ -130,7 +130,7 @@ None.
 
 - Use the `Storage` service from `@repo/core` (put, get, list, delete, signedUrl, verify); do not touch the R2 binding directly. Programs that use it (`upload`, `listUploads`, `deleteUpload`) live next to it in `packages/core/src/storage.ts`. Each takes an owner and works only under that owner's prefix, `uploads/<owner>/`: the card passes `currentOwner` from `apps/web/src/server/owner.ts` (the signed-in user's id with auth; one owner everyone shares without), so no user can list, open or delete another's files.
 - The layer is `StorageLive` in `apps/web/src/server/storage.ts`, on the `STORAGE` R2 binding; downloads are served by the Worker route in `storage-route.ts`. The dashboard card's server functions are in `apps/web/src/server/storage-demo.ts` (on a project with the dashboard).
-- Signed URLs are HMAC-signed with the `STORAGE_SIGNING_SECRET` secret (at least 32 characters; without it every page says "Not configured yet" and names it). Never log or return it.
+- Signed URLs are HMAC-signed with the `STORAGE_SIGNING_SECRET` secret (at least 32 characters; without it, on a project with `apps/web/src/server/settings.ts`, every page says "Not configured yet" and names it). Never log or return it.
 - Storage keys are opaque: generate them on the server, never from raw user input. Files are served as attachments with `nosniff`, inline only for raster images.
 - Test with `StorageInMemory` from `packages/core/test/storage-in-memory.ts` (`layer(StorageInMemory)` from `@effect/vitest`), as `storage.test.ts` does; do not mock R2.
 

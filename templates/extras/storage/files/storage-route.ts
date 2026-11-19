@@ -15,13 +15,15 @@ const decodeKey = (encoded: string) => {
 }
 
 /**
- * Serves `/files/<key>?expires=..&signature=..` (see `Storage.signedUrl`) straight from the bucket.
+ * Serves `/files/<key>?expires=..&signature=..` (see `Storage.signedUrl`) straight from the bucket,
+ * to GET and HEAD.
  * Keys are opaque: whoever holds a signed URL can read that key, so never build keys from user input.
  * Malformed URLs get 400, bad or expired signatures 403, a missing signing secret 500.
  */
 export const storageRoute: WorkerRoute = async (request) => {
   const url = new URL(request.url)
-  if (request.method !== "GET" || !url.pathname.startsWith(prefix)) return undefined
+  const head = request.method === "HEAD"
+  if ((request.method !== "GET" && !head) || !url.pathname.startsWith(prefix)) return undefined
   const key = decodeKey(url.pathname.slice(prefix.length))
   const params = parseSignedParams(
     url.searchParams.get("expires"),
@@ -37,7 +39,9 @@ export const storageRoute: WorkerRoute = async (request) => {
         if (!valid) return new Response("Forbidden", { status: 403 })
         const file = yield* storage.get(key)
         if (Option.isNone(file)) return new Response("Not found", { status: 404 })
-        return new Response(file.value.body, {
+        // HEAD: the same headers, without reading the object
+        if (head) yield* Effect.promise(() => file.value.body.cancel())
+        return new Response(head ? null : file.value.body, {
           headers: downloadHeaders(key, file.value.contentType),
         })
       }).pipe(Effect.orElseSucceed(() => new Response("Storage error", { status: 502 }))),

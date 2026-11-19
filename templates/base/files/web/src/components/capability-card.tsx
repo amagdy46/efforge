@@ -22,6 +22,13 @@ export const temperClasses = [
   "bg-temper-9",
 ] as const
 
+/** The footer on wide screens: one row for its entries (files, the test, the rules), up to five. */
+const footerColumns: Record<number, string> = {
+  3: "xl:grid-cols-3",
+  4: "xl:grid-cols-4",
+  5: "xl:grid-cols-5",
+}
+
 /** A file path that wraps after a `/`, not in the middle of a name. */
 function Path({ children }: { children: string }) {
   const parts = children.split("/")
@@ -115,7 +122,12 @@ export function CapabilityCard({
       </div>
       <footer className="border-t bg-muted/40 px-5 py-4">
         <h3 className="sr-only">Where to go next</h3>
-        <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2 xl:grid-cols-4">
+        <dl
+          className={cn(
+            "grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2",
+            footerColumns[files.length + 2],
+          )}
+        >
           {files.map(([what, path]) => (
             <div key={path} className="min-w-0">
               <dt className="text-xs text-muted-foreground">{what}</dt>

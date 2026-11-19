@@ -18,6 +18,16 @@ import { writeTree } from "../src/write.ts"
 // stack every server function a card calls requires a session, whichever add-on came first, and a
 // project without the card registry gets the add-on without any of it.
 
+/**
+ * The notes of an add that brought auth, without the one every such add gives (every server
+ * function now requires a session), which it checks is there.
+ */
+const besideGate = (notes: ReadonlyArray<string>): string[] => {
+  const gate = notes.filter((n) => n.startsWith("Every server function now requires a session"))
+  expect(gate).toHaveLength(1)
+  return notes.filter((n) => !gate.includes(n))
+}
+
 const templates = new URL("../templates", import.meta.url).pathname
 
 const run = <A, E>(eff: Effect.Effect<A, E, Layer.Success<typeof NodeServices.layer>>) =>
@@ -177,9 +187,9 @@ it("auth added later adds the guard to an existing middleware list, and names on
   // a list efforge can edit gets requireSession first; nothing passes silently
   expect(text).toContain(".middleware([requireSession, timing])")
   expect(text).toContain(".middleware(shared)")
-  expect(result.notes).toEqual([
+  expect(besideGate(result.notes)).toEqual([
     expect.stringMatching(
-      /^addNote in apps\/web\/src\/server\/notes\.ts is not guarded: .*\.middleware\(\[requireSession, \.\.\.\]\).*pnpm check fails/,
+      /^addNote in apps\/web\/src\/server\/notes\.ts has no requireSession: .*\.middleware\(\[requireSession, \.\.\.\]\).*sessionGate still refuses a signed-out call at runtime.*pnpm check fails/,
     ),
   ])
 })
@@ -197,7 +207,7 @@ it("auth added to a realtime project from before the socket check goes on, with 
   })
   // the add goes on and leaves the route as it was; the note says what to change by hand
   expect(readFileSync(join(dir, route), "utf8")).toBe(before)
-  expect(result.notes).toEqual([
+  expect(besideGate(result.notes)).toEqual([
     expect.stringMatching(
       /^apps\/web\/src\/server\/realtime-route\.ts has no upgradeGuards list .*requireSocketSession/,
     ),
@@ -209,7 +219,7 @@ it("auth added after realtime puts the session check on the room's upgrade", asy
   const route = readFileSync(join(dir, "apps/web/src/server/realtime-route.ts"), "utf8")
   expect(route).toContain('import { requireSocketSession } from "./socket-session"')
   expect(route).toMatch(/upgradeGuards: ReadonlyArray<WorkerRoute> = \[[^\]]*requireSocketSession/)
-  expect(result.notes).toEqual([])
+  expect(besideGate(result.notes)).toEqual([])
 })
 
 it("auth added after the cards guards their server functions too", async () => {
@@ -226,7 +236,7 @@ it("auth added after the cards guards their server functions too", async () => {
   // the same files, guarded the same way, as a project created with auth from the start
   const fresh = await run(generate(d1("better-auth", ["realtime"]), addons))
   for (const file of files) expect(read(file), file).toBe(fresh.get(file))
-  expect(result.notes).toEqual([])
+  expect(besideGate(result.notes)).toEqual([])
 })
 
 it("a card added after auth is guarded", async () => {
@@ -298,7 +308,9 @@ it("auth added to a project from before cards leaves its existing server functio
     "requireSession",
   )
   expect(existsSync(join(dir, "apps/web/src/server/account.ts"))).toBe(false)
-  expect(result.notes).toEqual([expect.stringMatching(/^No dashboard card for Better Auth: /)])
+  expect(besideGate(result.notes)).toEqual([
+    expect.stringMatching(/^No dashboard card for Better Auth: /),
+  ])
 })
 
 /** A templates dir with a base and one add-on whose card is `card`, plus `files` on disk. */

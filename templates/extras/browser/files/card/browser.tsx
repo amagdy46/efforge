@@ -41,8 +41,8 @@ function BrowserDemo() {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Try <code className="font-mono">http://localhost</code> to see the container refuse it
-          with <code className="font-mono">UrlRefused</code>, or leave out the scheme for{" "}
+          With the container running, try <code className="font-mono">http://localhost</code> to see
+          it refuse with <code className="font-mono">UrlRefused</code>; leave out the scheme for{" "}
           <code className="font-mono">InvalidUrl</code>.
         </p>
       </form>
