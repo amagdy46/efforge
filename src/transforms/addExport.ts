@@ -52,8 +52,19 @@ export const addExport: Transform = (tree, args) =>
       for (const n of fresh) target.addNamedExport(n)
       return withFile(tree, file, sf.getFullText())
     }
-    return withFile(tree, file, append(text, `export { ${fresh.join(", ")} } from "${from}"`))
+    return withFile(tree, file, append(text, namedExport(fresh, from)))
   })
+
+/** The formatter's print width; `add` doesn't format, so a transform writes what it would. */
+const PRINT_WIDTH = 100
+
+/** `export { A, B } from "from"`, one name per line when it is wider than the formatter allows. */
+const namedExport = (names: ReadonlyArray<string>, from: string): string => {
+  const line = `export { ${names.join(", ")} } from "${from}"`
+  return line.length <= PRINT_WIDTH
+    ? line
+    : `export {\n${names.map((n) => `  ${n},\n`).join("")}} from "${from}"`
+}
 
 const append = (text: string, stmt: string): string => {
   const eol = text.includes("\r\n") ? "\r\n" : "\n"
