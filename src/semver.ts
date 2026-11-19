@@ -71,11 +71,26 @@ const satisfiesOne = (version: string, comparator: string): boolean => {
   }
 }
 
-/** True when `version` is in `range` (`||` of space-separated comparators). */
+/**
+ * True when `version` is in `range`: `||` of space-separated comparators, where an operator may be
+ * followed by a space (`>= 24`) and `a - b` is a hyphen range (`>=a <=b`).
+ */
 export const satisfies = (version: string, range: string): boolean =>
   range.split("||").some((alt) =>
     alt
       .trim()
+      .replace(/^(\S+)\s+-\s+(\S+)$/, (_, a: string, b: string) => {
+        // a partial upper bound takes the whole of it: `24 - 27` is below 28.0.0
+        const p = b.split(".")
+        const upper =
+          p.length >= 3
+            ? `<=${b}`
+            : p.length === 2
+              ? `<${p[0]}.${Number(p[1]) + 1}.0`
+              : `<${Number(p[0]) + 1}.0.0`
+        return `>=${a} ${upper}`
+      })
+      .replace(/(\^|~|>=|<=|>|<|=)\s+/g, "$1")
       .split(/\s+/)
       .every((c) => satisfiesOne(version.replace(/^v/, ""), c)),
   )

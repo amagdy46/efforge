@@ -308,6 +308,28 @@ it("env: with Alchemy and no .env, the fix copies .env.example, which has the sa
   expect(r).toMatchObject({ status: "fail", fix: "cp .env.example .env" })
 })
 
+it("env: a value that is only a comment is empty", async () => {
+  const dir = await project()
+  edit(dir, ".dev.vars", (t) =>
+    t.replace(/^BETTER_AUTH_SECRET=.*$/m, "BETTER_AUTH_SECRET=   # todo"),
+  )
+  const r = get(await doctor(dir), "env")
+  expect(r.status).toBe("fail")
+  expect(r.message).toContain("BETTER_AUTH_SECRET (empty)")
+})
+
+it("pnpm: another package manager is named, not called missing", async () => {
+  const dir = await project()
+  edit(dir, "package.json", (t) => t.replace(`"pnpm@${pnpmVersion}"`, '"yarn@4.5.0"'))
+  expect(get(await doctor(dir), "pnpm").message).toContain("yarn@4.5.0")
+})
+
+it("node: engines with a space after the operator", async () => {
+  const dir = await project()
+  edit(dir, "package.json", (t) => t.replace(/"node": "[^"]*"/, '"node": ">= 24"'))
+  expect(get(await doctor(dir, { nodeVersion: () => "26.13.1" }), "node").status).toBe("ok")
+})
+
 it("env: a production placeholder warns", async () => {
   const dir = await project()
   edit(dir, ".dev.vars", (t) =>

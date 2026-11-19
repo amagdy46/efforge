@@ -145,8 +145,11 @@ export interface NeedsAction {
 /** A file `upgrade` won't change for you, and why. */
 export interface Kept {
   readonly path: string
-  /** `review`: you changed it and so did the template; `held`: efforge's, held back. */
-  readonly status: "review" | "held"
+  /**
+   * `review`: you changed it and so did the template; `held`: efforge's, held back; `dropped`:
+   * efforge no longer generates it, and you changed it.
+   */
+  readonly status: "review" | "held" | "dropped"
   readonly reason: string
   readonly lines?: string
 }
@@ -481,13 +484,18 @@ export const planUpgrade = (
         ...(missingKeys.length === 0 ? {} : { missing: missingKeys }),
       })
     const pmOk = pnpm !== undefined && compareVersions(pnpm, pnpmWildcardOverrides) >= 0
+    // another package manager is the owner's choice: efforge says what it costs, and changes nothing
+    const otherManager =
+      pnpm === undefined && typeof pkg.packageManager === "string" && pkg.packageManager !== ""
     guards.push({
       id: "package-manager",
       ok: pmOk,
       message: pmOk
         ? `packageManager pins pnpm ${pnpm}, which honours the Effect overrides.`
         : pnpm === undefined
-          ? `package.json has no packageManager pin, so whatever pnpm runs installs, and pnpm before ${pnpmWildcardOverrides} ignores the Effect overrides.`
+          ? typeof pkg.packageManager === "string" && pkg.packageManager !== ""
+            ? `packageManager pins ${pkg.packageManager}, not pnpm; efforge projects are pnpm workspaces, and only pnpm ${pnpmWildcardOverrides} or later honours the Effect overrides.`
+            : `package.json has no packageManager pin, so whatever pnpm runs installs, and pnpm before ${pnpmWildcardOverrides} ignores the Effect overrides.`
           : `packageManager pins pnpm ${pnpm}, which accepts the Effect overrides and silently ignores them (they work from pnpm ${pnpmWildcardOverrides}).`,
     })
 
@@ -549,8 +557,21 @@ export const planUpgrade = (
     }
     // files efforge edits in place, judged by what releases wrote
     const inPlace = new Set<string>()
+    // a workspace package a release generated that the project no longer has (removed, renamed):
+    // nothing goes back into it
+    const gone = new Set(
+      releasesSince(made)
+        .flatMap(([, r]) => Object.keys(r.dependencies))
+        .filter((p) => p !== "package.json" && at(p) === undefined)
+        .map((p) => p.slice(0, -"/package.json".length)),
+    )
+    const inGone = (path: string) => [...gone].some((d) => path.startsWith(`${d}/`))
     for (const [path, template] of today) {
       if (path in manifest.files || isComputed(path) || local.has(path)) continue
+      if (inGone(path)) {
+        files.push({ path, status: "deleted" })
+        continue
+      }
       const text = at(path)
       const hashed = typeof todayHashes[path] === "string"
       if (!hashed) inPlace.add(path)
@@ -647,6 +668,7 @@ export const planUpgrade = (
     }
     for (const [path, text] of today) {
       if (path !== "package.json" && !path.endsWith("/package.json")) continue
+      if (inGone(path)) continue
       const before = at(path)
       if (before === undefined) {
         // a workspace package the stack has today and the project doesn't
@@ -717,7 +739,7 @@ export const planUpgrade = (
             next.engines = want.engines
         }
         const pm = pins.find((p) => p.where === "packageManager")
-        if (!pmOk || (pm !== undefined && moves.includes(pm)))
+        if ((!pmOk && !otherManager) || (pm !== undefined && moves.includes(pm)))
           next.packageManager = `pnpm@${pnpmVersion}`
       }
       // exact pins of a package built in its own Docker context
@@ -877,12 +899,21 @@ export const planUpgrade = (
         .map((f): Kept => ({
           path: f.path,
           status: "review",
-          reason: `You changed it, and efforge's template changed too${f.why === undefined ? "" : `: ${f.why}`}. ${f.inPlace === true ? "efforge added what its new files need, if anything; the rest is yours to take or leave" : "efforge leaves it as it is"}.`,
+          reason: `You changed it, and efforge's template changed too${f.why === undefined ? "" : `: ${f.why}`}.${f.inPlace === true && seamNotes.has(f.path) && changes.has(f.path) ? ` upgrade adds only what its new files need here (${(seamNotes.get(f.path) ?? []).join("; ")}).` : ""}`,
+        })),
+      ...filesOut
+        .filter((f) => f.status === "dropped" && at(f.path) !== undefined && !removes.has(f.path))
+        .filter((f) => !consistency.holds.some((h) => h.path === f.path))
+        .map((f): Kept => ({
+          path: f.path,
+          status: "dropped",
+          reason:
+            "efforge no longer generates it, and you changed it, so it stays. Delete it when nothing of yours uses it.",
         })),
       ...consistency.holds.map((h): Kept => ({
         path: h.path,
         status: "held",
-        reason: `efforge keeps it as it is: ${h.reason}.`,
+        reason: `Kept as it is: ${h.reason}.`,
         ...(h.lines === undefined ? {} : { lines: h.lines }),
       })),
     ].toSorted((a, b) => byName(a.path, b.path))
@@ -891,7 +922,17 @@ export const planUpgrade = (
     const needsAction: NeedsAction[] = []
     const upgradeCmd = opts.bin("upgrade")
     for (const g of guards)
-      if (!g.ok) needsAction.push({ id: g.id, message: g.message, fix: upgradeCmd })
+      if (!g.ok)
+        needsAction.push(
+          g.id === "package-manager" && otherManager
+            ? {
+                id: g.id,
+                message: g.message,
+                fix: null,
+                lines: `"packageManager": "pnpm@${pnpmVersion}"`,
+              }
+            : { id: g.id, message: g.message, fix: upgradeCmd },
+        )
     for (const s of sets)
       if (s.split)
         needsAction.push({
@@ -926,7 +967,7 @@ export const planUpgrade = (
 
     const covers = [
       ...(fixGuard ? ["effect-overrides"] : []),
-      ...(!pmOk ? ["package-manager"] : []),
+      ...(!pmOk && !otherManager ? ["package-manager"] : []),
       ...(moves.length > 0 ? ["pins"] : []),
       ...(scripts.some((s) => s.status === "behind") ? ["scripts"] : []),
       ...(seams.length > 0 ? ["seams"] : []),
@@ -935,8 +976,24 @@ export const planUpgrade = (
       ...(removes.size > 0 ? ["remove"] : []),
       ...(changes.has("efforge.jsonc") ? ["manifest"] : []),
     ]
-    const depsChange = [...changes.keys()].some(
-      (f) => f.endsWith("package.json") || f === "pnpm-workspace.yaml",
+    // only what pnpm installs from: dependencies, the catalog and overrides, packageManager
+    const installs = (text: string | undefined) => {
+      try {
+        const j = record(JSON.parse(text ?? "{}"))
+        return JSON.stringify([
+          j.dependencies,
+          j.devDependencies,
+          j.optionalDependencies,
+          j.packageManager,
+        ])
+      } catch {
+        return text
+      }
+    }
+    const depsChange = [...changes].some(([f, after]) =>
+      f === "pnpm-workspace.yaml"
+        ? true
+        : f.endsWith("package.json") && installs(at(f)) !== installs(after),
     )
     const installAfter = depsChange || owed
     const behind = changes.size > 0 || removes.size > 0
@@ -969,7 +1026,7 @@ export const planUpgrade = (
     if (kept.length > 0)
       steps.push({
         id: "review",
-        description: `${plural(kept.length, "file")} efforge won't change for you: ${kept.some((k) => k.status === "review") ? "you changed them and so did its templates" : "held back to keep the project consistent"}. Each has the reason; the diff shows efforge's version against yours.`,
+        description: `${plural(kept.length, "file")} upgrade leaves as ${kept.length === 1 ? "it is" : "they are"}, each with why. To take efforge's version of one, read it with --diff --file <path> and merge it by hand; then run upgrade again for what waits on it.`,
         command: `${BIN} upgrade --check --diff`,
         cwd: dir,
         files: kept.map((k) => k.path),

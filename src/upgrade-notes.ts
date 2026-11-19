@@ -32,6 +32,10 @@ const notes: ReadonlyArray<readonly [RegExp, string]> = [
     "each capability's service and a test that swaps in a test layer and checks a tagged error",
   ],
   [
+    /^apps\/web\/src\/server\/layers\.ts$/,
+    "AppLayer sits in a `// #region card` block, which the dashboard's runtime card shows",
+  ],
+  [
     /^AGENTS\.md$/,
     "AGENTS.md describes capability cards, tests with test layers and the add command",
   ],

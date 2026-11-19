@@ -154,9 +154,9 @@ const NeedsAction = Schema.Array(
 const Kept = Schema.Array(
   Schema.Struct({
     path: Schema.String,
-    status: Schema.Literals(["review", "held"]).annotate({
+    status: Schema.Literals(["review", "held", "dropped"]).annotate({
       description:
-        "review: you changed it and so did efforge's template; held: efforge's, held back to keep the project consistent.",
+        "review: you changed it and so did efforge's template; held: efforge's, held back to keep the project consistent; dropped: efforge no longer generates it, and you changed it.",
     }),
     reason: Schema.String,
     lines: Schema.optionalKey(

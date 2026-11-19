@@ -150,13 +150,7 @@ export const renderUpgrade = (
       out.push(`  ${n + 1}. ${s.description}`)
       const cmd = commandLineOf(s)
       if (cmd !== undefined) out.push(`     ${pc.cyan(cmd)}`)
-      if (s.id === "review")
-        for (const k of r.kept) {
-          out.push(`     ${pc.dim(k.status === "held" ? "held  " : "review")}  ${k.path}`)
-          out.push(`             ${pc.dim(k.reason)}`)
-          if (k.lines !== undefined && verbose)
-            out.push(...k.lines.split("\n").map((l) => `               ${pc.dim(l)}`))
-        }
+      if (s.id === "review") out.push(...renderKept(r, verbose))
       else if (s.files !== undefined)
         out.push(`     ${pc.dim(verbose ? s.files.join(", ") : some(s.files, 4))}`)
       if (s.lines !== undefined) {
@@ -218,6 +212,42 @@ export const renderUpgrade = (
     for (const s of r.seams.filter((x) => want(x.file))) out.push("", s.diff.trimEnd())
   }
   return out.join("\n")
+}
+
+/** What a held file waits on: `it needs efforge's new X, which is held back too` names X. */
+const waitsOn = (reason: string) =>
+  /needs efforge's new (\S+), which is held back too/.exec(reason)?.[1]
+
+/**
+ * The files upgrade leaves: each one of yours, or held for a reason of its own, with that reason;
+ * files held only because they need one of those, in one line under it.
+ */
+const renderKept = (r: UpgradeReport, verbose: boolean): string[] => {
+  const byPath = new Map(r.kept.map((k) => [k.path, k]))
+  const rootOf = (path: string, seen = new Set<string>()): string => {
+    const on = waitsOn(byPath.get(path)?.reason ?? "")
+    return on === undefined || seen.has(on) || !byPath.has(on) ? path : rootOf(on, seen.add(path))
+  }
+  const followers = new Map<string, string[]>()
+  for (const k of r.kept) {
+    const root = rootOf(k.path)
+    if (root !== k.path) followers.set(root, [...(followers.get(root) ?? []), k.path])
+  }
+  const out: string[] = []
+  for (const k of r.kept) {
+    if (rootOf(k.path) !== k.path) continue
+    const label = k.status === "held" ? "held   " : k.status === "dropped" ? "dropped" : "yours  "
+    out.push(`     ${pc.dim(label)}  ${k.path}`)
+    out.push(`              ${pc.dim(k.reason)}`)
+    if (k.lines !== undefined && verbose)
+      out.push(...k.lines.split("\n").map((l) => `                ${pc.dim(l)}`))
+    const f = followers.get(k.path)
+    if (f !== undefined)
+      out.push(
+        `              ${pc.dim(`Held with it, because they need it: ${verbose ? f.join(", ") : some(f, 3)}.`)}`,
+      )
+  }
+  return out
 }
 
 /** The `--check` document. */

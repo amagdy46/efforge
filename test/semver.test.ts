@@ -24,3 +24,12 @@ it("pins compare numerically, and a release outranks its pre-releases", () => {
   expect(exactVersion("^4.1.4")).toBeUndefined()
   expect(exactVersion("catalog:")).toBeUndefined()
 })
+
+it("ranges with a space after the operator, and hyphen ranges", () => {
+  expect(satisfies("26.13.1", ">= 24")).toBe(true)
+  expect(satisfies("22.0.0", ">= 24")).toBe(false)
+  expect(satisfies("26.13.1", "24 - 27")).toBe(true)
+  expect(satisfies("27.5.0", "24 - 27")).toBe(true)
+  expect(satisfies("28.0.0", "24 - 27")).toBe(false)
+  expect(satisfies("26.13.1", "^24.11.0 || >= 26.0.0")).toBe(true)
+})

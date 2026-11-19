@@ -277,10 +277,14 @@ const pnpmCheck: Check = {
           message: "pnpm isn't on your PATH, and efforge projects use it.",
           fix: "npm install --global pnpm",
         }
+      const declared = json(ctx.read("package.json"))?.packageManager
       if (pin === undefined)
         return {
           status: "warn" as const,
-          message: `pnpm ${global}; package.json has no packageManager, so every machine installs with whatever pnpm it has. efforge pins pnpm@${pnpmVersion}.`,
+          message:
+            typeof declared === "string" && declared !== ""
+              ? `package.json pins ${declared} in packageManager, and efforge projects are pnpm workspaces (pnpm-workspace.yaml, catalog:, the Effect overrides). efforge pins pnpm@${pnpmVersion}.`
+              : `pnpm ${global}; package.json has no packageManager, so every machine installs with whatever pnpm it has. efforge pins pnpm@${pnpmVersion}.`,
           fix: ctx.here(`npm pkg set packageManager=pnpm@${pnpmVersion}`),
           details: { pnpm: global },
         }
@@ -547,7 +551,10 @@ const envValues = (text: string | undefined): Map<string, string> => {
   for (const line of (text ?? "").split("\n")) {
     const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/.exec(line)
     if (m === null) continue
-    out.set(m[1] as string, (m[2] as string).trim().replace(/^(['"])(.*)\1$/, "$2"))
+    // `NAME=   # todo`: a comment is not a value
+    const raw = (m[2] as string).trim()
+    const value = /^['"]/.test(raw) ? raw : raw.replace(/(^|\s)#.*$/, "").trim()
+    out.set(m[1] as string, value.replace(/^(['"])(.*)\1$/, "$2"))
   }
   return out
 }
@@ -687,7 +694,7 @@ const envCheck: Check = {
       if (soft.length > 0)
         return {
           status: "warn" as const,
-          message: `${describe(soft)}. A placeholder works until the feature that reads it is used; set real values before you deploy (wrangler secret put NAME, or your deploy workflow's secrets).`,
+          message: `${describe(soft)}. A placeholder works until the feature that reads it is used; set real values before you deploy (${stack.infra === "alchemy" ? "your deploy environment's variables, which Alchemy reads" : "wrangler secret put NAME, or your deploy workflow's secrets"}).`,
           fix: null,
           details,
         }

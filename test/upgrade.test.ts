@@ -715,3 +715,45 @@ it("efforge.jsonc keeps its comments when upgrade records the version", async ()
   expect(text).toContain(`"efforgeVersion": "${efforgeVersion}"`)
   expect(existsSync(join(dir, "efforge.jsonc"))).toBe(true)
 })
+
+// review nits
+it("a workspace package you renamed isn't put back beside the new name", async () => {
+  const dir = await project()
+  cpSync(join(dir, "apps/web"), join(dir, "apps/site"), { recursive: true })
+  rmSync(join(dir, "apps/web"), { recursive: true })
+  edit(dir, "efforge.jsonc", (t) =>
+    t.replace(/"efforgeVersion": "[^"]*"/, '"efforgeVersion": "0.2.0"'),
+  )
+  const r = await check(dir)
+  expect([...r.changes.keys()].filter((f) => f.startsWith("apps/web/"))).toEqual([])
+})
+
+it("another package manager is yours: needs action with the line, and upgrade leaves it", async () => {
+  const dir = await project()
+  edit(dir, "package.json", (t) => t.replace(`"pnpm@${pnpmVersion}"`, '"yarn@4.5.0"'))
+  const r = await check(dir)
+  const pm = r.needsAction.find((n) => n.id === "package-manager")
+  expect(pm).toMatchObject({ fix: null, lines: `"packageManager": "pnpm@${pnpmVersion}"` })
+  expect(pm?.message).toContain("yarn@4.5.0")
+  expect(r.changes.get("package.json") ?? "").not.toContain("pnpm@")
+})
+
+it("an install is a step only when what pnpm installs from changed", async () => {
+  const dir = await project()
+  edit(dir, "package.json", (t) => t.replace(/,\n {2}"engines": \{[^}]*\}/, ""))
+  edit(dir, "efforge.jsonc", (t) =>
+    t.replace(/"efforgeVersion": "[^"]*"/, '"efforgeVersion": "0.2.0"'),
+  )
+  const r = await check(dir)
+  expect(r.changes.get("package.json")).toContain('"engines"')
+  expect(r.steps.find((s) => s.id === "upgrade")?.covers).not.toContain("install")
+})
+
+it("a file efforge no longer generates that you changed is kept, and says so", async () => {
+  const dir = await project()
+  olderTemplate(dir, "apps/web/src/lib/old.ts", "export const old = 1\n")
+  edit(dir, "apps/web/src/lib/old.ts", (t) => `${t}// mine\n`)
+  const r = await check(dir)
+  expect(r.removes.has("apps/web/src/lib/old.ts")).toBe(false)
+  expect(r.kept.find((k) => k.path === "apps/web/src/lib/old.ts")?.status).toBe("dropped")
+})

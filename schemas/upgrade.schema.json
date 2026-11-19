@@ -440,9 +440,10 @@
                 "type": "string",
                 "enum": [
                   "review",
-                  "held"
+                  "held",
+                  "dropped"
                 ],
-                "description": "review: you changed it and so did efforge's template; held: efforge's, held back to keep the project consistent."
+                "description": "review: you changed it and so did efforge's template; held: efforge's, held back to keep the project consistent; dropped: efforge no longer generates it, and you changed it."
               },
               "reason": {
                 "type": "string"
@@ -708,9 +709,10 @@
                 "type": "string",
                 "enum": [
                   "review",
-                  "held"
+                  "held",
+                  "dropped"
                 ],
-                "description": "review: you changed it and so did efforge's template; held: efforge's, held back to keep the project consistent."
+                "description": "review: you changed it and so did efforge's template; held: efforge's, held back to keep the project consistent; dropped: efforge no longer generates it, and you changed it."
               },
               "reason": {
                 "type": "string"

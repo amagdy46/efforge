@@ -583,8 +583,10 @@ const check = async (c: Case, n: number): Promise<string[]> => {
           break
         }
         if (typeof doc?.ok !== "boolean") say(`hop ${hop}: no ok field`)
-        // 2 and 3 are a check that ran and found something (upgrade, doctor): ok, with a finding
-        if ((r.status === 0 || r.status === 2 || r.status === 3) !== (doc?.ok === true))
+        // 2 and 3 are a check that ran and found something: upgrade and doctor only, with ok
+        const checks = ["upgrade", "doctor"].includes(words(step.args)[0]?.toLowerCase() ?? "")
+        const found = checks && (r.status === 2 || r.status === 3)
+        if ((r.status === 0 || found) !== (doc?.ok === true))
           say(`hop ${hop}: exit ${r.status}, ok ${doc?.ok}`)
         fix = doc?.error?.fix ?? null
         code = doc?.error?.code ?? ""
