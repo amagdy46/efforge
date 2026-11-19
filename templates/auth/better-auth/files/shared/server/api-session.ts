@@ -18,7 +18,7 @@ const publicPaths = ((): ReadonlyArray<string> => {
     Array.isArray(list) &&
     list.every((p) => typeof p === "string" && p.startsWith("/api/") && p.endsWith("/"))
   )
-    return list as ReadonlyArray<string>
+    return listed
   console.error(
     'apps/web/src/server/public-api-paths.json must be ["/api/<prefix>/", ...]. Every request under /api/ requires a session until it is.',
   )

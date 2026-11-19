@@ -5,8 +5,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useServerCall } from "@/lib/use-server-call"
-import { FileTooLarge, NotAnUpload, StorageError } from "@repo/core/storage"
-import { deleteFile, listFiles, uploadFile } from "@/server/storage-demo"
+import {
+  deleteFile,
+  DeleteFileErrors,
+  listFiles,
+  ListFilesErrors,
+  uploadFile,
+  UploadFileErrors,
+} from "@/server/storage-demo"
 import program from "../../../../packages/core/src/storage.ts?region=card"
 import serverFn from "../server/storage-demo.ts?region=card"
 import layer from "../server/storage.ts?region=card"
@@ -24,9 +30,9 @@ const formatSize = (bytes: number) =>
 
 /** Upload a file to R2, list the bucket, open a file through a signed link, delete it. */
 function StorageDemo() {
-  const files = useServerCall(listFiles, StorageError)
-  const adding = useServerCall(uploadFile, FileTooLarge, StorageError)
-  const removing = useServerCall(deleteFile, NotAnUpload, StorageError)
+  const files = useServerCall(listFiles, ...ListFilesErrors)
+  const adding = useServerCall(uploadFile, ...UploadFileErrors)
+  const removing = useServerCall(deleteFile, ...DeleteFileErrors)
   const [file, setFile] = useState<File | undefined>()
   const input = useRef<HTMLInputElement>(null)
   const load = files.run

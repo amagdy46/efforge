@@ -4,8 +4,8 @@ import { asFailure } from "./failure"
 import {
   decodeOutcome,
   type EarlierOutcome,
-  type ErrorSchema,
   type Errors,
+  type ErrorsFor,
   type Failure,
   type Outcome,
 } from "./outcome"
@@ -43,9 +43,14 @@ const resultOf = <A, E>(exit: Exit.Exit<A, E>): CallResult<A, E> => {
 /**
  * One call's result, outside a hook: the outcome decoded with `errors` (what
  * `useServerCall` runs), or `asFailure(error)` for a call the server rejected.
+ * `errors` are the ones the server function lists, in its order.
  */
-export const settleCall = <A, const S extends ReadonlyArray<ErrorSchema> = []>(
-  call: Promise<Outcome<A, unknown> | EarlierOutcome<A>>,
+export const settleCall = <
+  A,
+  T extends ReadonlyArray<string> = ReadonlyArray<string>,
+  const S extends ErrorsFor<T> = ErrorsFor<T>,
+>(
+  call: Promise<Outcome<A, unknown, T> | EarlierOutcome<A>>,
   ...errors: S
 ): Promise<CallResult<A, Errors<S>>> =>
   call.then(
@@ -56,15 +61,17 @@ export const settleCall = <A, const S extends ReadonlyArray<ErrorSchema> = []>(
 /**
  * Calls a server function that returns an `Outcome` (server/outcome.ts) and
  * tracks it as idle, running, done or failed. Pass the error classes the
- * server function lists: a failure is then an instance of its class, with its
- * fields, so `state.error instanceof InvalidName` works. A call the server
- * rejects fails with `asFailure(error)` and `rejected: true`.
+ * server function lists, in its order (the types check it; spread the list
+ * declared beside the server function): a failure is then an instance of its
+ * class, with its fields, so `state.error instanceof InvalidName` works. A
+ * call the server rejects fails with `asFailure(error)` and `rejected: true`.
  */
 export function useServerCall<
   A,
   I extends ReadonlyArray<unknown>,
-  const S extends ReadonlyArray<ErrorSchema> = [],
->(call: (...input: I) => Promise<Outcome<A, unknown> | EarlierOutcome<A>>, ...errors: S) {
+  T extends ReadonlyArray<string> = ReadonlyArray<string>,
+  const S extends ErrorsFor<T> = ErrorsFor<T>,
+>(call: (...input: I) => Promise<Outcome<A, unknown, T> | EarlierOutcome<A>>, ...errors: S) {
   const [state, setState] = useState<CallState<A, Errors<S>>>({ status: "idle" })
   // the classes to decode into; the same on every render
   const [listed] = useState(errors)

@@ -5,6 +5,7 @@ import {
   type Failure,
   failureCodec,
   type Outcome,
+  type TagsOf,
   type WireCause,
 } from "../lib/outcome"
 import type { AppLayer } from "./layers"
@@ -25,16 +26,21 @@ const shown = <E>(error: E) => asNotConfigured(error) ?? error
  * the function, and returns its `Exit` encoded for the wire. List the schemas
  * of the tagged errors it can fail with (`Schema.TaggedError` classes): they
  * reach the browser as those classes, with their fields, through
- * `useServerCall(fn, ...errors)`. An error not listed arrives as its tag and
+ * `useServerCall(fn, ...errors)`, which must list the same ones (the types
+ * check it). Declare the list once, beside the server function, and spread it
+ * on both sides. An error not listed arrives as its tag and
  * message. Typed failures are logged here; a defect or a runtime that cannot
  * start (other than a missing setting, which is `NotConfigured`) rejects the
  * call, a 500.
  */
-export function runOutcome<A, E extends Failure, R extends Layer.Success<typeof AppLayer>>(
-  effect: Effect.Effect<A, E, R>,
-  ...errors: ReadonlyArray<ErrorSchema>
-): Promise<Outcome<A, WireCause>> {
-  const encode = Schema.encodeSync(failureCodec(errors))
+export function runOutcome<
+  A,
+  E extends Failure,
+  R extends Layer.Success<typeof AppLayer>,
+  const S extends ReadonlyArray<ErrorSchema> = [],
+>(effect: Effect.Effect<A, E, R>, ...errors: S): Promise<Outcome<A, WireCause, TagsOf<S>>> {
+  const listed: ReadonlyArray<ErrorSchema> = errors
+  const encode = Schema.encodeSync(failureCodec(listed))
   return runtime
     .runPromise(
       effect.pipe(

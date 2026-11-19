@@ -4,16 +4,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useServerCall } from "@/lib/use-server-call"
-import { InvalidNote, NotesUnavailable } from "@repo/core/notes"
-import { addNote, listNotes } from "@/server/notes"
+import { addNote, AddNoteErrors, listNotes, ListNotesErrors } from "@/server/notes"
 import program from "../../../../packages/core/src/notes.ts?region=card"
 import store from "../../../../packages/db/src/notes.ts?region=card"
 import serverFns from "../server/notes.ts?region=card"
 import type { Capability } from "./types"
 
 function DatabaseDemo() {
-  const notes = useServerCall(listNotes, NotesUnavailable)
-  const adding = useServerCall(addNote, InvalidNote, NotesUnavailable)
+  const notes = useServerCall(listNotes, ...ListNotesErrors)
+  const adding = useServerCall(addNote, ...AddNoteErrors)
   const [title, setTitle] = useState("")
   const load = notes.run
 

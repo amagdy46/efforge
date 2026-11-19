@@ -23,6 +23,11 @@ emit no spans, so a trace would show nothing by name.
   codec is.
 - The client decodes with the same classes: `useServerCall(fn, ...errors)` and `settleCall`
   (`lib/use-server-call.ts`), through `decodeOutcome` (`lib/outcome.ts`, shared by both sides).
+  The list is declared once, exported beside the server function (`AnnounceErrors`), and both
+  sides spread it. The types hold them to it: `Outcome` carries the tags of the listed errors as
+  a type-only field (tags, because TanStack Start's serializer types drop a field holding
+  classes), and the client accepts only error classes with those tags, in that order. Before,
+  the two lists were written twice with nothing linking them.
   A failure is an instance of its class again, fields included. `run` still resolves to
   `{ ok, value }` or `{ ok: false, error, rejected }`, so code written against the old shape keeps
   working.

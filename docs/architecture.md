@@ -223,14 +223,14 @@ The server function, from `apps/web/src/server/notes.ts`:
 ```ts
 export const listNotes = createServerFn({ method: "GET" })
   .middleware([requireSession])
-  .handler(() => runOutcome(newestFirst, NotesUnavailable))
+  .handler(() => runOutcome(newestFirst, ...ListNotesErrors))
 ```
 
-`requireSession` gives the handler the session (`sessionGate`, which runs before every server function, has already refused a call without one). `newestFirst` is `Notes.use((notes) => notes.list)`: it asks for `Notes` and runs `list`. `runOutcome` runs the Effect through `runtime.runPromise`, as a span named after the function (`serverFn.listNotes`), and returns its `Exit`, encoded for the wire: the value, or the tagged errors it failed with. The classes after the program are the errors to keep as classes; the card names the same ones:
+`requireSession` gives the handler the session (`sessionGate`, which runs before every server function, has already refused a call without one). `newestFirst` is `Notes.use((notes) => notes.list)`: it asks for `Notes` and runs `list`. `runOutcome` runs the Effect through `runtime.runPromise`, as a span named after the function (`serverFn.listNotes`), and returns its `Exit`, encoded for the wire: the value, or the tagged errors it failed with. The classes after the program (`ListNotesErrors`, `[NotesUnavailable]`, declared beside the function) are the errors to keep as classes; the card spreads the same list, and the types refuse any other:
 
 <!-- sample: apps/web/src/capabilities/database.tsx -->
 ```tsx
-  const notes = useServerCall(listNotes, NotesUnavailable)
+  const notes = useServerCall(listNotes, ...ListNotesErrors)
 ```
 
 `useServerCall` decodes the `Exit`, so `notes.state.error` is a `NotesUnavailable` again, with its `reason`, and `instanceof` works on it. An error the function did not list (a `Data.TaggedError`, say) arrives with its tag and message only. Three things never become a value:

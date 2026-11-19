@@ -212,6 +212,41 @@ const checkDbGenerate = (dir: string) => {
   if (files() !== before) throw new Error("pnpm db:generate changed files in packages/db")
 }
 
+/**
+ * A server function's errors and the list its caller passes are one definition, held by types:
+ * the runtime card's `greet` lists `GreetErrors`, and a caller that lists anything else (one
+ * missing, none, another error) does not typecheck, while the same classes written out do.
+ */
+const checkErrorLists = (dir: string) => {
+  const probe = join(dir, "apps/web/src/error-list-probe.tsx")
+  writeFileSync(
+    probe,
+    [
+      'import { InvalidName } from "@repo/core/greeting"',
+      'import { settleCall, useServerCall } from "@/lib/use-server-call"',
+      'import { greet, GreetErrors } from "@/server/greeting"',
+      "",
+      "export function Probe() {",
+      "  const spread = useServerCall(greet, ...GreetErrors)",
+      "  const written = useServerCall(greet, InvalidName)",
+      "  // @ts-expect-error greet lists an error, so the caller must too",
+      "  const none = useServerCall(greet)",
+      "  // @ts-expect-error not the list greet has",
+      "  const more = useServerCall(greet, InvalidName, InvalidName)",
+      "  // @ts-expect-error settleCall is held to it too",
+      '  void settleCall(greet({ data: { name: "x" } }))',
+      "  return [spread, written, none, more].length",
+      "}",
+      "",
+    ].join("\n"),
+  )
+  try {
+    sh(join(dir, "apps/web"), "pnpm exec tsc --noEmit")
+  } finally {
+    rmSync(probe, { force: true })
+  }
+}
+
 /** Generates `config` into a tmp dir, installs, then runs the generated project's full gate: typecheck, check, test, build. */
 const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
   Effect.gen(function* () {
@@ -219,6 +254,7 @@ const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
     yield* checkDoctor(dir)
     if (config.orm === "drizzle") yield* Effect.try(() => checkDbGenerate(dir))
     yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
+    yield* Effect.try(() => checkErrorLists(dir))
     // a minimal stack's card files may have nothing outside their regions; auth and database ones do
     const checked = yield* Effect.try(() => checkRegionsOnly(dir))
     if (checked === 0 && (config.auth !== "none" || config.database !== "none"))

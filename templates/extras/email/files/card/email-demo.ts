@@ -18,11 +18,13 @@ const SendInput = Schema.Struct({
   to: Schema.String.check(Schema.isMaxLength(320)),
 })
 
-/** `InvalidAddress` and `MailerError` reach the browser as themselves. */
+/** What `sendTestEmail` can fail with; each reaches the browser as itself. */
+export const SendTestEmailErrors = [InvalidAddress, MailerError] as const
+
 export const sendTestEmail = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(SendInput))
   .handler(({ data }) => {
     const program = sendTestEmailProgram(data.to)
-    return runOutcome(program, InvalidAddress, MailerError)
+    return runOutcome(program, ...SendTestEmailErrors)
   })
 // #endregion

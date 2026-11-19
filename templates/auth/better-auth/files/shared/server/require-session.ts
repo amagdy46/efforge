@@ -22,7 +22,7 @@ const publicNames = ((): ReadonlyMap<string, ReadonlyArray<string>> => {
     Object.values(list).every(
       (names) => Array.isArray(names) && names.every((n) => typeof n === "string"),
     )
-  if (valid) return new Map(Object.entries(list as typeof listed))
+  if (valid) return new Map(Object.entries(listed))
   console.error(
     'apps/web/src/server/public-server-fns.json must be { "<file>": ["<name>", ...] }. Every server function requires a session until it is.',
   )

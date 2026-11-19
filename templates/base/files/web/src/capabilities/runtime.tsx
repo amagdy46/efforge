@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useServerCall } from "@/lib/use-server-call"
-import { greet } from "@/server/greeting"
+import { greet, GreetErrors } from "@/server/greeting"
 import { InvalidName } from "@repo/core/greeting"
 import program from "../../../../packages/core/src/greeting.ts?region=card"
 import serverFn from "../server/greeting.ts?region=card"
@@ -15,8 +15,8 @@ import type { Capability } from "./types"
 function RuntimeDemo() {
   const [name, setName] = useState("Ada")
   // #region card
-  // a failure arrives as an InvalidName again, with its fields
-  const { state, run } = useServerCall(greet, InvalidName)
+  // the errors greet lists; a failure arrives as an InvalidName again
+  const { state, run } = useServerCall(greet, ...GreetErrors)
   const failed = state.status === "failed" ? state.error : undefined
   const invalid = failed instanceof InvalidName ? failed : undefined
   // #endregion

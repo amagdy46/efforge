@@ -102,25 +102,29 @@ When the user edits the file, the card shows their edit (`pnpm dev` watches it).
 
 ### 2. Server functions
 
-Put each server function the card calls in a card file under `apps/web/src/server/` (step 3), and only there: `loadAddons` refuses a card file elsewhere that calls `createServerFn`, and a card file there that does not. Run the Effect with `runOutcome` (from `./outcome`), not `runtime.runPromise`, and list the tagged errors it can fail with:
+Put each server function the card calls in a card file under `apps/web/src/server/` (step 3), and only there: `loadAddons` refuses a card file elsewhere that calls `createServerFn`, and a card file there that does not. Run the Effect with `runOutcome` (from `./outcome`), not `runtime.runPromise`, and list the tagged errors it can fail with. Declare the list once, exported beside the server function as `<Name>Errors`, and spread it:
 
 ```ts
 const AnnounceInput = Schema.Struct({ text: Schema.String })
+
+export const AnnounceErrors = [MessageTooLarge, RealtimeError] as const
 
 export const announce = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(AnnounceInput))
   .handler(({ data }) => {
     const program = announceProgram("demo", data.text)
-    return runOutcome(program, MessageTooLarge, RealtimeError)
+    return runOutcome(program, ...AnnounceErrors)
   })
 ```
 
-The demo names the same classes, and gets each failure back as an instance of its class, with its fields:
+The demo imports the same list, and gets each failure back as an instance of its class, with its fields:
 
 ```tsx
-const server = useServerCall(announce, MessageTooLarge, RealtimeError)
+const server = useServerCall(announce, ...AnnounceErrors)
 // server.state.error instanceof MessageTooLarge, server.state.error.limit
 ```
+
+The types hold the two sides to one list: `runOutcome` records the tags of the errors it lists in the `Outcome` it returns, and `useServerCall` and `settleCall` accept only error classes with those tags, in that order. A client that lists one too few, none, or another error does not typecheck, so the lists cannot drift. A server function with no errors to list takes none on either side. The error classes come from `packages/core`, which the browser loads anyway; importing the list from the server file adds nothing else to the browser, since the compiler strips the handler and what only it uses.
 
 - Do not add `requireSession`. On auth stacks efforge chains `.middleware([requireSession])` on every `createServerFn` in the add-on's files under `apps/web/src/`, GET and POST alike, so an anonymous request gets `Unauthorized` and never reaches the handler. It does this when the file is written and again when auth is added later. A function that already has `.middleware([timing])` gets `[requireSession, timing]`; one whose `.middleware(...)` is not a written-out list cannot be edited, so `add` names it in a note with the fix and the project's `pnpm check` fails until it is guarded.
 - A server function that must answer signed-out visitors is rare (the route guard's `getSession`, the landing page's `getStack`). It needs its name on the `public` list of `efforge/server-fn-session` in the base `vite.config.ts` and in `PUBLIC_SERVER_FNS` (`src/cards.ts`); a test checks the two agree. Ask before adding one.
