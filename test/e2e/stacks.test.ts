@@ -431,6 +431,17 @@ const stacks: Array<[string, Parameters<typeof withDefaults>[0]]> = [
       extras: ["storage", "workflows", "realtime", "browser"],
     },
   ],
+  [
+    "d1-cluster-extras",
+    {
+      name: "d1-cluster-extras",
+      database: "d1",
+      orm: "effect-sql",
+      auth: "better-auth",
+      infra: "none",
+      extras: ["workflows", "realtime", "cluster"],
+    },
+  ],
 ]
 
 describe("stacks build", () => {
