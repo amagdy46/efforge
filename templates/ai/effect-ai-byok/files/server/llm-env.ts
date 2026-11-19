@@ -12,13 +12,12 @@ const notConfigured = (message: string, setting?: string) =>
 /** Reads LLM_PROVIDER, LLM_MODEL, LLM_API_KEY and LLM_BASE_URL on each call, so a missing one fails that call only. */
 const loadSettings = (provider: ConfigProvider.ConfigProvider) =>
   Effect.gen(function* () {
-    const required = (name: string) =>
-      Config.String(name)
-        .parse(provider)
-        .pipe(Effect.mapError(() => notConfigured(`${name} is not set.`, name)))
+    const unset = (name: string) => () => notConfigured(`${name} is not set.`, name)
     const config = yield* Effect.all({
-      provider: required("LLM_PROVIDER"),
-      model: required("LLM_MODEL"),
+      provider: Config.String("LLM_PROVIDER")
+        .parse(provider)
+        .pipe(Effect.mapError(unset("LLM_PROVIDER"))),
+      model: Config.String("LLM_MODEL").parse(provider).pipe(Effect.mapError(unset("LLM_MODEL"))),
       // an empty key is no key (Alchemy binds an empty one until you set it)
       apiKey: Config.option(Config.Redacted("LLM_API_KEY"))
         .parse(provider)
@@ -30,7 +29,7 @@ const loadSettings = (provider: ConfigProvider.ConfigProvider) =>
     })
     const name: LlmProvider = yield* decodeProvider(config.provider).pipe(
       Effect.mapError(() =>
-        notConfigured(`LLM_PROVIDER must be one of: ${llmProviders.join(", ")}.`),
+        notConfigured(`LLM_PROVIDER must be one of: ${llmProviders.join(", ")}.`, "LLM_PROVIDER"),
       ),
     )
     if (name !== "ollama" && Option.isNone(config.apiKey))

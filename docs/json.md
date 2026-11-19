@@ -220,6 +220,7 @@ npx -y create-efforge add email --json --cwd my-app
       "id": "extras/email",
       "title": "Email",
       "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-email.md",
+      "card": "apps/web/src/capabilities/email.tsx",
       "agents": [
         "Email"
       ]
@@ -227,14 +228,19 @@ npx -y create-efforge add email --json --cwd my-app
   ],
   "skipped": [],
   "created": [
+    "apps/web/src/capabilities/email.tsx",
+    "apps/web/src/server/email-demo.ts",
     "apps/web/src/server/mailer.ts",
-    "packages/core/src/mailer.ts"
+    "packages/core/src/mailer.ts",
+    "packages/core/test/mailer-in-memory.ts",
+    "packages/core/test/mailer.test.ts"
   ],
   "changed": [
     ".dev.vars",
     ".env.example",
     "AGENTS.md",
     "README.md",
+    "apps/web/src/capabilities/registry.ts",
     "apps/web/src/server/layers.ts",
     "efforge.jsonc",
     "packages/core/src/index.ts",
@@ -301,6 +307,7 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
       "id": "ai/effect-ai-byok",
       "title": "Effect AI (bring your own key)",
       "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/ai-effect-ai-byok.md",
+      "card": "apps/web/src/capabilities/ai.tsx",
       "agents": [
         "AI (Effect AI, bring your own key)"
       ]
@@ -309,6 +316,7 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
       "id": "extras/storage",
       "title": "Storage",
       "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-storage.md",
+      "card": "apps/web/src/capabilities/storage.tsx",
       "agents": [
         "Storage"
       ]
@@ -316,15 +324,23 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
   ],
   "skipped": [],
   "created": [
+    "apps/web/src/capabilities/ai.tsx",
+    "apps/web/src/capabilities/storage.tsx",
+    "apps/web/src/server/ai-demo.ts",
     "apps/web/src/server/ai.ts",
     "apps/web/src/server/llm-provider.ts",
     "apps/web/src/server/llm.ts",
+    "apps/web/src/server/storage-demo.ts",
     "apps/web/src/server/storage-route.ts",
     "apps/web/src/server/storage.ts",
     "packages/core/src/llm.ts",
     "packages/core/src/storage-security.ts",
     "packages/core/src/storage.ts",
-    "packages/core/test/storage-security.test.ts"
+    "packages/core/test/llm-fixed.ts",
+    "packages/core/test/llm.test.ts",
+    "packages/core/test/storage-in-memory.ts",
+    "packages/core/test/storage-security.test.ts",
+    "packages/core/test/storage.test.ts"
   ],
   "changed": [
     ".dev.vars",
@@ -332,6 +348,7 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
     "AGENTS.md",
     "README.md",
     "apps/web/package.json",
+    "apps/web/src/capabilities/registry.ts",
     "apps/web/src/server/layers.ts",
     "apps/web/src/server/routes.ts",
     "efforge.jsonc",
@@ -1418,6 +1435,7 @@ npx -y create-efforge add ai --json --cwd my-app
         "id": "ai/effect-ai-byok",
         "title": "Effect AI (bring your own key)",
         "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/ai-effect-ai-byok.md",
+        "card": "apps/web/src/capabilities/ai.tsx",
         "agents": [
           "AI (Effect AI, bring your own key)"
         ]
@@ -1425,10 +1443,14 @@ npx -y create-efforge add ai --json --cwd my-app
     ],
     "skipped": [],
     "created": [
+      "apps/web/src/capabilities/ai.tsx",
+      "apps/web/src/server/ai-demo.ts",
       "apps/web/src/server/ai.ts",
       "apps/web/src/server/llm-provider.ts",
       "apps/web/src/server/llm.ts",
-      "packages/core/src/llm.ts"
+      "packages/core/src/llm.ts",
+      "packages/core/test/llm-fixed.ts",
+      "packages/core/test/llm.test.ts"
     ],
     "changed": [
       ".dev.vars",
@@ -1436,6 +1458,7 @@ npx -y create-efforge add ai --json --cwd my-app
       "AGENTS.md",
       "README.md",
       "apps/web/package.json",
+      "apps/web/src/capabilities/registry.ts",
       "apps/web/src/server/layers.ts",
       "efforge.jsonc",
       "packages/core/src/index.ts",
