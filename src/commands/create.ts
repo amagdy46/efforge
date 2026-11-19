@@ -291,6 +291,9 @@ export const create = (opts: CreateOptions) =>
     const inPlace = opts.flags.name === "."
     const flags = inPlace ? { ...opts.flags, name: path.basename(process.cwd()) } : opts.flags
 
+    if (opts.verbose === true && !opts.dryRun)
+      yield* io.warn("--verbose only changes what --dry-run prints, so it does nothing here.")
+
     let git = opts.git
     if (!opts.dryRun) {
       if (!nodeSupported(process.version))
@@ -639,7 +642,7 @@ export const createConfig = {
     Argument.optional,
   ),
   preset: Flag.Literals("preset", presetIds).pipe(
-    Flag.withDescription("Start from a preset (list shows them); a stack flag overrides its slot"),
+    Flag.withDescription("A whole stack in one choice; a stack flag wins"),
     Flag.optional,
   ),
   runtime: slotFlag("runtime"),
@@ -832,7 +835,8 @@ export const createFailure = (
       }
       // an unknown value gets a fix only when it is a clear typo of one allowed value (the typo
       // rule in contract.ts); never a different choice
-      const near = typoOf(value, allowed)
+      // a value in other case (`--database=D1`) is that value, as add-on ids are
+      const near = allowed.find((a) => a === value.toLowerCase()) ?? typoOf(value, allowed)
       const to =
         near === undefined
           ? undefined
@@ -849,7 +853,7 @@ export const createFailure = (
     }
     case "UnknownPreset": {
       const value = String(e.value)
-      const near = typoOf(value, presetIds)
+      const near = presetIds.find((p) => p === value.toLowerCase()) ?? typoOf(value, presetIds)
       const fixed = near === undefined ? null : fix(args, (i) => withFlag(i, "preset", near))
       return {
         code: "UnknownValue",

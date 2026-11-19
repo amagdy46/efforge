@@ -968,16 +968,17 @@ export const pickAddons = (
         const blocked = current !== undefined && current !== "none"
         const needs =
           s.id === "auth" && stack.database === "none"
-            ? "needs a database: pick one too"
+            ? "needs a database too"
             : s.id === "database"
-              ? "needs an ORM: pick one too"
+              ? "needs an ORM too"
               : s.id === "orm" && stack.database === "none"
-                ? "needs a database: pick one too"
+                ? "needs a database too"
                 : undefined
         // the hint shows beside the line under the cursor (always, for a disabled one), cut so
-        // the line fits 80 columns: "│  ◻ " before the label, " (" and ")" around the hint
+        // the line fits 80 columns. clack wraps an option at 67 there (it counts the guide's
+        // colour codes as columns); "◻ " comes before the label, " (" and ")" around the hint
         const label = `${s.id.padEnd(width)}  ${m?.title ?? o.label}`
-        const room = 80 - 5 - label.length - 3
+        const room = 67 - 2 - label.length - 3
         const hint = blocked
           ? `this project has ${current}; add can't swap it`
           : needs === undefined

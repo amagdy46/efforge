@@ -341,3 +341,46 @@ it("an env var has the same fields in create, add and info: secret is a secret, 
   expect(fromInfo.get("LLM_API_KEY")).toMatchObject({ secret: true, set: false })
   expect(fromInfo.get("MAIL_FROM")).toMatchObject({ secret: false, set: true })
 })
+
+it("review nits: edits carry when, flags name their commands, case gets a fix, --verbose says it did nothing", async () => {
+  // outside a project an edit only some stacks get says which
+  const email = json((await cli(["info", "email", "--json"])).out) as {
+    edits: { file: string; when?: Record<string, string[]> }[]
+  }
+  expect(email.edits.find((e) => e.file === "wrangler.jsonc")?.when).toEqual({ infra: ["none"] })
+  // a flag of another command names the commands that take it
+  const write = await cli(["x1", "--write", "--json"])
+  expect((json(write.out).error as { message: string }).message).toContain(
+    "--write belongs to graph,",
+  )
+  const cwdFlag = await cli(["x1", "--cwd", "app", "--json"])
+  expect((json(cwdFlag.out).error as { message: string }).message).toContain(
+    "--cwd belongs to add, list, info and graph,",
+  )
+  // a preset or a value in other case is that one
+  const preset = await cli(["create", "app", "--json", "--dry-run", "--preset=SaaS"])
+  expect(json(preset.out).error).toMatchObject({
+    code: "UnknownValue",
+    fix: "npx -y create-efforge create app --json --dry-run --preset=saas",
+  })
+  const d1 = await cli(["create", "app", "--json", "--dry-run", "--database=D1"])
+  expect((json(d1.out).error as { fix: string }).fix).toContain("--database=d1")
+  // --verbose without --dry-run
+  const verbose = await cli(["create", "app", "--json", "--verbose", "--no-install", "--no-git"])
+  expect(json(verbose.out).warnings).toContain(
+    "--verbose only changes what --dry-run prints, so it does nothing here.",
+  )
+  // a layer you added has no stray fields
+  const graph = json((await cli(["graph", "--json", "--cwd", "app"])).out) as {
+    layers: Record<string, unknown>[]
+  }
+  for (const l of graph.layers)
+    expect(Object.keys(l).toSorted()).toEqual([
+      "addon",
+      "color",
+      "expression",
+      "name",
+      "needs",
+      "provides",
+    ])
+})

@@ -54,7 +54,7 @@ A signal in the first fraction of a second, before efforge has started, can end 
 
 ## `create`
 
-`directory` is absolute. `files` lists everything written, sorted. With `--preset`, `stack` is what the preset chose (with any stack flag you gave over it), and `command` gives it flag by flag: a preset's contents can change between versions, so nothing records its name. `installed` says whether `pnpm install` ran; `git` is `committed`, `initialized` (git init worked, the commit didn't) or `skipped`. `command` recreates the same stack without prompts.
+`directory` is absolute. `files` lists everything written, sorted. With `--preset`, `stack` is what the preset chose (with any stack flag you gave over it), and `command` gives it as flags, one for each part that differs from the default: a preset's contents can change between versions, so nothing records its name. `installed` says whether `pnpm install` ran; `git` is `committed`, `initialized` (git init worked, the commit didn't) or `skipped`. `command` recreates the same stack without prompts.
 
 `env` lists every env var the project reads: `file` is where the local value lives (`.dev.vars`, or `.env` with Alchemy) and `set` says whether efforge wrote a value there that works locally. When `set` is false (an API key only you have), efforge wrote it empty, in `file` and in `.env.example`, and the feature that reads it fails until it is filled in. `secret` says the value is a secret (a key, a password, a signing secret): the deployed value is set with `wrangler secret put` or the deploy env, and is never printed or committed. A secret can still have a local value (`BETTER_AUTH_SECRET` does: `secret: true`, `set: true`). These two fields mean the same in `create`, `add` and `info`.
 
@@ -441,7 +441,7 @@ npx -y create-efforge list --json
     {
       "id": "saas",
       "title": "SaaS",
-      "description": "Postgres, Drizzle, auth with orgs, email, storage",
+      "description": "Postgres, Drizzle, auth + orgs, email, storage",
       "stack": {
         "runtime": "cloudflare",
         "database": "postgres",
@@ -458,7 +458,7 @@ npx -y create-efforge list --json
     {
       "id": "ai",
       "title": "AI",
-      "description": "D1, Effect SQL, auth, AI with your own key, realtime",
+      "description": "D1, Effect SQL, auth, AI (your key), realtime",
       "stack": {
         "runtime": "cloudflare",
         "database": "d1",
@@ -474,7 +474,7 @@ npx -y create-efforge list --json
     {
       "id": "minimal",
       "title": "Minimal",
-      "description": "No database, no auth: the app and its dashboard",
+      "description": "No database or auth: the app and its dashboard",
       "stack": {
         "runtime": "cloudflare",
         "database": "none",
@@ -542,7 +542,7 @@ npx -y create-efforge list --json --cwd my-app
     {
       "id": "saas",
       "title": "SaaS",
-      "description": "Postgres, Drizzle, auth with orgs, email, storage",
+      "description": "Postgres, Drizzle, auth + orgs, email, storage",
       "stack": {
         "runtime": "cloudflare",
         "database": "postgres",
@@ -559,7 +559,7 @@ npx -y create-efforge list --json --cwd my-app
     {
       "id": "ai",
       "title": "AI",
-      "description": "D1, Effect SQL, auth, AI with your own key, realtime",
+      "description": "D1, Effect SQL, auth, AI (your key), realtime",
       "stack": {
         "runtime": "cloudflare",
         "database": "d1",
@@ -575,7 +575,7 @@ npx -y create-efforge list --json --cwd my-app
     {
       "id": "minimal",
       "title": "Minimal",
-      "description": "No database, no auth: the app and its dashboard",
+      "description": "No database or auth: the app and its dashboard",
       "stack": {
         "runtime": "cloudflare",
         "database": "none",
@@ -592,7 +592,7 @@ npx -y create-efforge list --json --cwd my-app
 
 ## `info`
 
-Describes one add-on from its manifest. The id resolves the way `add` resolves it (`email`, `extras/email`, `ai`, a clear typo), and an unknown one is [`UnknownAddon`](#unknownaddon). `files` are what it writes and `edits` the files it edits in place (the seams), each with the transforms that edit it. `requires` says what a project needs first (one of `options` for each), `conflicts` the add-ons it can't be with. `card` is its dashboard card module and `agents` the `AGENTS.md` sections it adds, by heading. `docs.page` is its page in efforge's repo. Outside a project, a file, env var or section that only some stacks get carries `when`.
+Describes one add-on from its manifest. The id resolves the way `add` resolves it (`email`, `extras/email`, `ai`, a clear typo), and an unknown one is [`UnknownAddon`](#unknownaddon). `files` are what it writes and `edits` the files it edits in place (the seams), each with the transforms that edit it. `requires` says what a project needs first (one of `options` for each), `conflicts` the add-ons it can't be with. `card` is its dashboard card module and `agents` the `AGENTS.md` sections it adds, by heading. `docs.page` is its page in efforge's repo. Outside a project, a file, edit, env var or section that only some stacks get carries `when`.
 
 In an efforge project (`--cwd`, default the current directory), the lists hold only what this project gets, and `project` says whether it has the add-on: `add` is the command that adds it, or `null` when it is there already or can't be added alone; then `reason` says why and `alternatives` are the commands that add it with what it needs.
 
@@ -1042,7 +1042,7 @@ npx -y create-efforge create my-app --json --database=mysql
 
 Each way out drops or swaps a choice you made, or makes one you didn't (which database, which ORM: `add` can't swap them later). So `fix` is `null`, and the error lists the ways out for you to choose from.
 
-Fields: `flag` and `value` (create) or `slot` and `value` (add), `allowed` (the values that slot can take as things stand), `reason`, and `alternatives`: every way out, each `{ command, description }`, where `command` is your command with one change, complete and non-interactive. For `create`, a way out is one flag changed (another value for either side of the conflict, or an extra left out). For `add`, it is your command with the smallest set of add-ons added that satisfies the rules. `add` also has `needs`: the slots that must be filled in the same command, each `{ slot, options }` with the ids that can fill it. `fix`: None. Pick one of `alternatives` (or ask the user which), and run it.
+Fields: `flag` and `value` (create) or `slot` and `value` (add), `allowed` (the values that slot can take as things stand), `reason`, and `alternatives`: every way out, each `{ command, description }`, where `command` is your command with one change, complete and non-interactive. For `create`, a way out is one flag changed (another value for either side of the conflict, another preset, or an extra left out), or two changed where neither alone is enough (auth on the minimal preset needs `--database` and `--orm`). For `add`, it is your command with the smallest set of add-ons added that satisfies the rules. `add` also has `needs`: the slots that must be filled in the same command, each `{ slot, options }` with the ids that can fill it. `fix`: None. Pick one of `alternatives` (or ask the user which), and run it.
 
 <!-- example: IncompatibleStack -->
 

@@ -13,7 +13,7 @@ import { availableParallelism, tmpdir } from "node:os"
 import { delimiter, join, relative, resolve } from "node:path"
 import { afterAll, beforeAll, expect, it } from "vitest"
 import { Completions } from "effect/cli"
-import { root as efforge } from "../src/cli.ts"
+import { root as cliRoot } from "../src/cli.ts"
 import { isTypo } from "../src/contract.ts"
 import { commands, reservedWords } from "../src/fix.ts"
 import { slots } from "../src/slots.ts"
@@ -104,7 +104,7 @@ type CommandDef = {
   readonly flags: ReadonlyArray<FlagDef>
   readonly subcommands: ReadonlyArray<CommandDef>
 }
-const cli = Completions.fromCommand(efforge) as unknown as CommandDef
+const cli = Completions.fromCommand(cliRoot) as unknown as CommandDef
 const defs = new Map<string, CommandDef>(cli.subcommands.map((c) => [c.name, c]))
 
 /** Near misses people and agents type: a letter dropped, two swapped, one doubled, an s. */
@@ -193,26 +193,26 @@ const valuesOf = (flag: string): ReadonlyArray<string> => {
 
 /** Every way to pass `f`: good and bad values, none, a typo of its name, its alias. */
 const formsOf = (f: FlagDef): string[][] => {
-  const out: string[][] = []
+  const forms: string[][] = []
   const n = f.name
   if (f.type._tag === "Boolean")
-    out.push([`--${n}`], [`--no-${n}`], [`--${n}=maybe`], [`--${n}=false`])
+    forms.push([`--${n}`], [`--no-${n}`], [`--${n}=maybe`], [`--${n}=false`])
   else {
     const values = f.type.values ?? valuesOf(n)
-    for (const v of values) out.push([`--${n}=${v}`], [`--${n}`, v])
+    for (const v of values) forms.push([`--${n}=${v}`], [`--${n}`, v])
     for (const v of f.type.values ?? [])
-      out.push([`--${n}=${v.toUpperCase()}`], [`--${n}=${typosOf(v)[0]}`])
-    out.push([`--${n}`], [`--${n}=nope`])
+      forms.push([`--${n}=${v.toUpperCase()}`], [`--${n}=${typosOf(v)[0]}`])
+    forms.push([`--${n}`], [`--${n}=nope`])
   }
-  for (const t of typosOf(n).slice(0, 2)) out.push([`--${t}`])
-  for (const a of f.aliases) out.push([`-${a}`])
-  return out
+  for (const t of typosOf(n).slice(0, 2)) forms.push([`--${t}`])
+  for (const a of f.aliases) forms.push([`-${a}`])
+  return forms
 }
 /** Each command's flags, in every form; and flags that belong to no command. */
 const flagsOf: Record<string, ReadonlyArray<ReadonlyArray<string>>> = Object.fromEntries(
   [...defs].map(([c, d]) => [c, d.flags.flatMap(formsOf)]),
 )
-const stray: ReadonlyArray<ReadonlyArray<string>> = [
+const strayFlags: ReadonlyArray<ReadonlyArray<string>> = [
   ["--completions=nushell"],
   ["--completions"],
   ["--log-level=nope"],
@@ -248,7 +248,7 @@ const generate = (seed: number, count: number): Case[] => {
       const r = next()
       const own = flagsOf[kind] ?? flagsOf.create ?? []
       const any = flagsOf[pick([...defs.keys()])] ?? []
-      opts.push(...pick(r < 0.7 ? own : r < 0.9 ? any : stray))
+      opts.push(...pick(r < 0.7 ? own : r < 0.9 ? any : strayFlags))
     }
     if (kind === "create" && next() < 0.6 && !opts.includes("--dry-run")) opts.push("--dry-run")
     // the command word usually comes first, sometimes after the flags
@@ -415,6 +415,10 @@ const reviewed: Case[] = [
     ["grap", "--json", "--cwd", "my-app"],
     ["graph", "extra", "--json", "--cwd", "my-app"],
     ["add", "--json", "--cwd", "my-app"],
+    // after --, a command's name is an argument (seed 4242 found `-- create` making ./create)
+    ["--json", "--", "create"],
+    ["--json", "--dry-run", "--", "add"],
+    ["--json", "--no-install", "--", "graph"],
   ].map((args) => ({ args, cwd: "" })),
   { args: ["graph", "--json", "--format=text"], cwd: "my-app/apps/web" },
   { args: ["update", "--json", "--no-install", "--no-git"], cwd: "my-app" },

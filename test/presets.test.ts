@@ -11,7 +11,7 @@ import { GoBack, PromptIO, scriptedPromptIO } from "../src/prompts/navigable.ts"
 import { presets } from "../src/presets.ts"
 import { validate } from "../src/rules.ts"
 import { slots } from "../src/slots.ts"
-import { type StackConfig, toCommand } from "../src/stack.ts"
+import { toCommand } from "../src/stack.ts"
 
 const run = (
   flags: Parameters<typeof askStack>[0],
@@ -140,6 +140,7 @@ const createJson = async (...flags: string[]) => {
     Effect.runPromise,
   )
   process.exitCode = undefined
+  // oxlint-disable-next-line typescript/no-explicit-any -- a JSON document, read in assertions
   return JSON.parse(logs.join("\n")) as Record<string, any>
 }
 
@@ -163,7 +164,7 @@ it("a flag beside --preset always wins; a preset's choice it leaves no room for 
           expect(dropped, what).toEqual([])
           continue
         }
-        const stack = exit.value as StackConfig
+        const stack = exit.value
         expect(stack[slot.id], what).toEqual(value)
         for (const other of slots) {
           if (other.id === slot.id) continue
@@ -272,4 +273,8 @@ it("a preset picked at the prompt can be changed part by part, with its parts as
   expect(notes[1]).toMatch(/flags +--preset=saas --database=d1$/)
   expect(s.output.at(-1)).toBe("outro: Nothing written.")
   expect(process.exitCode ?? 0).toBe(0)
+})
+
+it("each preset's description fits the prompt at 80 columns", () => {
+  for (const p of presets) expect(p.description.length, p.id).toBeLessThanOrEqual(47)
 })

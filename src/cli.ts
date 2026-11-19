@@ -178,8 +178,30 @@ const reportParseError = (args: ReadonlyArray<string>, error: CliError.ShowHelp)
 // (`reservedWords`, src/fix.ts) or a typo of one, and it doesn't run inside a project, where `add`
 // and `list` are meant. `create <name>` always creates.
 
-/** Flags only `add` or `list` take: with them, the root form was never meant as a create. */
-const notCreateFlags = new Set(["cwd", "overwrite", "format", "write"])
+/** Each command's flags, from the definitions (what completions are made from). */
+const flagsByCommand = (): ReadonlyArray<{ name: string; flags: ReadonlyArray<string> }> =>
+  (
+    Completions.fromCommand(root) as unknown as {
+      subcommands: ReadonlyArray<{ name: string; flags: ReadonlyArray<{ name: string }> }>
+    }
+  ).subcommands.map((c) => ({ name: c.name, flags: c.flags.map((f) => f.name) }))
+
+/** The commands that take `--flag`, as "add, list and graph". */
+const owners = (flag: string): string => {
+  const names = flagsByCommand()
+    .filter((c) => c.flags.includes(flag))
+    .map((c) => c.name)
+  return names.length <= 1
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`
+}
+
+/** Flags only other commands take: with one, the root form was never meant as a create. */
+const notCreateFlags = (): ReadonlySet<string> => {
+  const all = flagsByCommand()
+  const create = new Set(all.find((c) => c.name === "create")?.flags ?? [])
+  return new Set(all.flatMap((c) => c.flags).filter((f) => !create.has(f)))
+}
 
 /** Why the arguments aren't a create or a command, as the contract reports it; or undefined. */
 export const notACreate = (args: ReadonlyArray<string>): Failure | undefined => {
@@ -199,8 +221,10 @@ export const notACreate = (args: ReadonlyArray<string>): Failure | undefined => 
   const [typed] = i.operands
   if (typed !== undefined && i.verb === undefined) {
     const lower = typed.toLowerCase()
-    const hint =
-      lower === "help"
+    const dashed = (commands as ReadonlyArray<string>).includes(lower)
+    const hint = dashed
+      ? ` To run ${lower}, put it before --.`
+      : lower === "help"
         ? ` For help, run ${BIN} --help.`
         : lower === "version"
           ? ` For the version, run ${BIN} --version.`
@@ -209,7 +233,7 @@ export const notACreate = (args: ReadonlyArray<string>): Failure | undefined => 
             : ""
     return {
       code: "UnknownCommand",
-      message: `${typed} isn't a command, and efforge doesn't take it as a project name.${hint} ${list} To name a project ${typed}, run ${BIN} create ${typed}.`,
+      message: `${dashed ? `${typed} after -- is an argument, not the command,` : `${typed} isn't a command,`} and efforge doesn't take it as a project name.${hint} ${list} To name a project ${typed}, run ${BIN} create ${typed}.`,
       fix: null,
       details: { command: typed, commands },
     }
@@ -221,11 +245,12 @@ export const notACreate = (args: ReadonlyArray<string>): Failure | undefined => 
       fix: null,
       details: { command: typed, arguments: i.operands.slice(1), commands },
     }
-  const other = i.flags.find((f) => notCreateFlags.has(f.name))
+  const notCreate = notCreateFlags()
+  const other = i.flags.find((f) => notCreate.has(f.name))
   if (other !== undefined && typed !== undefined)
     return {
       code: "UnknownCommand",
-      message: `--${other.name} belongs to add and list, so ${typed} isn't a project name here, and it isn't a command. ${list}`,
+      message: `--${other.name} belongs to ${owners(other.name)}, so ${typed} isn't a project name here, and it isn't a command. ${list}`,
       fix: null,
       details: { command: typed, flag: `--${other.name}`, commands },
     }

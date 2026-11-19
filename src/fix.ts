@@ -176,9 +176,12 @@ const takesValue = (name: string) =>
 export const intentOf = (args: ReadonlyArray<string>): Intent => {
   const words: string[] = []
   const flags: Flag[] = []
+  /** Words before `--`: only one of those can be the command. */
+  let beforeDashes = Number.POSITIVE_INFINITY
   for (let i = 0; i < args.length; i++) {
     const t = args[i] as string
     if (t === "--") {
+      beforeDashes = words.length
       words.push(...args.slice(i + 1))
       break
     }
@@ -215,6 +218,13 @@ export const intentOf = (args: ReadonlyArray<string>): Intent => {
     else flags.push({ name, value: true, raw: [t] })
   }
   const [first, ...rest] = words
+  // after `--` a word is an argument, never the command: `-- add` would be a project named add
+  if (
+    first !== undefined &&
+    beforeDashes === 0 &&
+    (commandOf(first) !== undefined || looksLikeCommand(first))
+  )
+    return { verb: undefined, word: undefined, operands: words, flags }
   const verb = first === undefined ? undefined : commandOf(first)
   if (first !== undefined && verb !== undefined) return { verb, word: first, operands: rest, flags }
   // the bare root form: a create, unless its word is one people guess as a command
@@ -362,7 +372,11 @@ const sameChoice = (slot: string, o: unknown, c: unknown): boolean => {
   if (o === c) return true
   if (typeof o !== "string" || typeof c !== "string") return false
   const options = choicesOf(slot) ?? []
-  const meant = (x: string) => (options.includes(x) ? x : (typoOf(x, options) ?? x))
+  // the same value in other case (`D1`, `SaaS`) is that value, as add-on ids are
+  const meant = (x: string) =>
+    options.includes(x)
+      ? x
+      : (options.find((v) => v === x.toLowerCase()) ?? typoOf(x, options) ?? x)
   if (slot !== "extras") return meant(o) === c
   const list = (s: string) => s.split(",").filter((x) => x !== "")
   return [...new Set(list(o).map(meant))].join(",") === list(c).join(",")

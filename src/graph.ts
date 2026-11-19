@@ -163,7 +163,14 @@ export const layerGraph = (o: {
       const owner = owners.get(l.name)
       const addon = owner?.manifest.id ?? (card === undefined ? null : "base")
       if (card === undefined && owner === undefined)
-        return { ...l, addon: null, provides: null, needs: null, color }
+        return {
+          name: l.name,
+          expression: l.expression,
+          addon: null,
+          provides: null,
+          needs: null,
+          color,
+        }
       const service = owner?.manifest.guide?.service?.name
       const provides = card?.provides ?? (service === undefined ? [] : [service])
       const needs = card?.needs ?? (owner === undefined ? [] : manifestNeeds(owner, o.stack))

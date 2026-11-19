@@ -152,6 +152,16 @@
             "items": {
               "type": "string"
             }
+          },
+          "when": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Only on stacks where every listed slot has one of the listed values (extras: any of them). Absent: on every stack. Inside a project, `info` lists only what that project gets, without it."
           }
         },
         "required": [

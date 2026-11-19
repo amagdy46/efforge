@@ -189,7 +189,9 @@ export const InfoOutput = Schema.Struct({
     description:
       "The files it writes. A path can appear once per stack it is written differently on.",
   }),
-  edits: Schema.Array(Schema.Struct({ file: Schema.String, transforms: Strings })).annotate({
+  edits: Schema.Array(
+    Schema.Struct({ file: Schema.String, transforms: Strings, when: Schema.optionalKey(When) }),
+  ).annotate({
     description: "The files it edits in place (the seams), with the transforms that edit each.",
   }),
   dependencies: Schema.Array(

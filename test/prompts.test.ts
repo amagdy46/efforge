@@ -206,7 +206,7 @@ it("finds the prompts in the source", () => {
     expect(ids).toContain(id)
 })
 
-/** What clack prints for `draw`, without colours, on a terminal `columns` wide. */
+/** What clack prints for `draw`, colours removed, on a terminal `columns` wide. */
 const drawn = async (
   draw: (c: ReturnType<typeof clack>) => unknown,
   columns: number,
@@ -232,17 +232,25 @@ const drawn = async (
 
 it("every prompt, and the output around it, fits 80 columns", async () => {
   const COLUMNS = 80
+  // in colour, as a terminal shows it: clack counts the guide's colour codes against the width,
+  // so an option wraps sooner than its visible length says (at 67 columns of 80)
+  const colour = process.env.FORCE_COLOR
+  process.env.FORCE_COLOR = "1"
   const wide: string[] = []
   const frames: Array<Promise<void>> = []
-  // Prompts and notes are drawn on a wide terminal, so clack wraps nothing for us: a line past 80
-  // would wrap on an 80-column one. Log lines and the outro are drawn at 80: clack never wraps
-  // them, efforge does. A command alone on its line is the one exception: it is never broken.
-  const check = (what: string, draw: (c: ReturnType<typeof clack>) => unknown, columns = 400) =>
+  const tooWide = (l: string) =>
+    Array.from(l).length > COLUMNS && !isCommandLine(l.replace(/^[│└●▲◇■]?\s*/, ""))
+  // A prompt or note is drawn at 80 columns and on a wide terminal: more lines at 80 means clack
+  // wrapped one. Log lines and the outro clack never wraps, so they are drawn at 80 and must fit;
+  // efforge wraps them. A command alone on its line is the one exception: it is never broken.
+  const check = (what: string, draw: (c: ReturnType<typeof clack>) => unknown, wraps = true) =>
     frames.push(
-      drawn(draw, columns).then((lines) => {
-        for (const l of lines)
-          if ([...l].length > COLUMNS && !isCommandLine(l.replace(/^[│└●▲◇■]?\s*/, "")))
-            wide.push(`${what}: ${l}`)
+      Promise.all([drawn(draw, COLUMNS), drawn(draw, 1000)]).then(([narrow, unwrapped]) => {
+        for (const l of wraps ? unwrapped : narrow) if (tooWide(l)) wide.push(`${what}: ${l}`)
+        if (wraps && narrow.length > unwrapped.length)
+          wide.push(
+            `${what} wraps at ${COLUMNS}: ${narrow.find((l, k) => l !== unwrapped[k]) ?? ""}`,
+          )
       }),
     )
   const drawing = (io: PromptIOShape): PromptIOShape => ({
@@ -266,15 +274,15 @@ it("every prompt, and the output around it, fits 80 columns", async () => {
       return io.confirm(o)
     },
     intro: (t) => {
-      check("intro", (x) => x.intro(t), COLUMNS)
+      check("intro", (x) => x.intro(t), false)
       return io.intro(t)
     },
     info: (m) => {
-      check("info", (x) => x.info(m), COLUMNS)
+      check("info", (x) => x.info(m), false)
       return io.info(m)
     },
     warn: (m) => {
-      check("warn", (x) => x.warn(m), COLUMNS)
+      check("warn", (x) => x.warn(m), false)
       return io.warn(m)
     },
     note: (b, t) => {
@@ -282,7 +290,7 @@ it("every prompt, and the output around it, fits 80 columns", async () => {
       return io.note(b, t)
     },
     outro: (m) => {
-      check("outro", (x) => x.outro(m), COLUMNS)
+      check("outro", (x) => x.outro(m), false)
       return io.outro(m)
     },
   })
@@ -326,6 +334,8 @@ it("every prompt, and the output around it, fits 80 columns", async () => {
     process.chdir(tmp)
   }
   await Promise.all(frames)
+  if (colour === undefined) delete process.env.FORCE_COLOR
+  else process.env.FORCE_COLOR = colour
   expect(frames.length).toBeGreaterThan(20)
   expect([...kinds]).toEqual(expect.arrayContaining(["name", "preset", "confirm", "addons"]))
   expect(wide).toEqual([])

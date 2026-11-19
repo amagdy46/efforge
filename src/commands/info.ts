@@ -46,6 +46,7 @@ export interface AddonInfo {
   readonly edits: ReadonlyArray<{
     readonly file: string
     readonly transforms: ReadonlyArray<string>
+    readonly when?: When
   }>
   readonly dependencies: ReadonlyArray<{
     readonly name: string
@@ -115,12 +116,15 @@ export const describeAddon = (m: AddonManifest, stack?: StackConfig): AddonInfo 
   const [slot, option] = m.id.split("/") as [SlotId, string]
   const def = slots.find((s) => s.id === slot)
   const addLayer = m.transforms.find((t) => t.name === "addLayer")
-  const edits = new Map<string, string[]>()
+  // by file and, outside a project, by the stacks that get the edit
+  const edits = new Map<string, { file: string; transforms: string[]; when?: When }>()
   for (const t of on([...m.transforms, ...cardTransforms(m)]))
     for (const file of transformTargets(t)) {
-      const names = edits.get(file) ?? []
-      if (!names.includes(t.name)) names.push(t.name)
-      edits.set(file, names)
+      const when = cond(t.when)
+      const key = `${file}\0${JSON.stringify(when ?? null)}`
+      const e = edits.get(key) ?? withWhen({ file, transforms: [] as string[] }, when)
+      if (!e.transforms.includes(t.name)) e.transforms.push(t.name)
+      edits.set(key, e)
     }
   const deps = (section: AddonManifest["dependencies"], dev: boolean) =>
     Object.entries(section).flatMap(([pkg, names]) =>
@@ -145,9 +149,7 @@ export const describeAddon = (m: AddonManifest, stack?: StackConfig): AddonInfo 
       .map((f) => withWhen({ path: f.target }, cond(f.when)))
       .filter((f, i, all) => f.when !== undefined || all.findIndex((g) => g.path === f.path) === i)
       .toSorted((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)),
-    edits: [...edits]
-      .map(([file, transforms]) => ({ file, transforms }))
-      .toSorted((a, b) => (a.file < b.file ? -1 : 1)),
+    edits: [...edits.values()].toSorted((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0)),
     dependencies: [...deps(m.dependencies, false), ...deps(m.devDependencies, true)],
     scripts: Object.entries(m.scripts ?? {}).flatMap(([pkg, scripts]) =>
       Object.entries(scripts).map(([name, command]) => ({ package: pkg, name, command })),
@@ -304,7 +306,7 @@ export const renderInfo = (
   )
   row(
     "edits",
-    a.edits.map((e) => `${e.file} ${pc.dim(`(${e.transforms.join(", ")})`)}`),
+    a.edits.map((e) => `${e.file} ${pc.dim(`(${e.transforms.join(", ")})`)}${whenText(e.when)}`),
   )
   row(
     "packages",

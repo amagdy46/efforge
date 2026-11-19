@@ -125,7 +125,7 @@ export const presetWithFlags = (
       if (Exit.isSuccess(exit)) return { draft, dropped }
       const e = exit.cause.reasons.find((r) => r._tag === "Fail")?.error as IncompatibleStack
       const slot = e.slot
-      const why = whyUnavailable(slot, e.value, draft as Partial<StackConfig>) ?? "it doesn't fit"
+      const why = whyUnavailable(slot, e.value, draft) ?? "it doesn't fit"
       const by = decidedBy(slot, e.value)
       if (!explicit.has(slot)) {
         const cause = by === undefined ? "your flags" : flagOf(by)
@@ -158,7 +158,7 @@ export const presetWithFlags = (
       // a flag that can't stand: against another flag, or against the preset's choice
       const reason =
         by !== undefined && !explicit.has(by) ? `${why} (the ${preset.id} preset's ${by})` : why
-      return yield* new IncompatibleStack({ ...e, slot, reason })
+      return yield* new IncompatibleStack({ slot, value: e.value, allowed: e.allowed, reason })
     }
   })
 
@@ -184,7 +184,7 @@ export const presetFlags = (preset: Preset, stack: StackConfig): string => {
   const flags: Record<string, unknown> = { ...differ }
   for (const id of Object.keys(differ).toReversed()) {
     const { [id]: _, ...rest } = flags
-    if (makes(rest as StackFlags)) delete flags[id]
+    if (makes(rest)) delete flags[id]
   }
   return [
     `--preset=${preset.id}`,

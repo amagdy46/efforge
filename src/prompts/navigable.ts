@@ -180,7 +180,8 @@ export const wrapProse = (text: string, width: number): string =>
           current = word
         } else current = next
       }
-      return [...out, current]
+      out.push(current)
+      return out
     })
     .join("\n")
 
