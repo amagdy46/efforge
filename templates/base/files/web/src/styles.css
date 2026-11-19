@@ -5,7 +5,7 @@
 
 /*
  * The default theme is efforge's palette: Paper and Iron, Blued steel for actions, and the
- * tempering colours (Straw, Bronze, Temper purple, Blued steel, then four more) for the layer graph. Change the
+ * tempering colours (Straw, Bronze, Temper purple, Blued steel, then five more) for the layer graph. Change the
  * values here to make it yours; every component reads these tokens.
  */
 :root {
@@ -48,6 +48,7 @@
   --temper-6: #b8902f;
   --temper-7: #8a4f6e;
   --temper-8: #6b7078;
+  --temper-9: #3d7f73;
 }
 
 .dark {
@@ -87,6 +88,7 @@
   --temper-6: #d6b25a;
   --temper-7: #c58aa8;
   --temper-8: #a3a7ae;
+  --temper-9: #7fbfb2;
 }
 
 @theme inline {
@@ -128,6 +130,7 @@
   --color-temper-6: var(--temper-6);
   --color-temper-7: var(--temper-7);
   --color-temper-8: var(--temper-8);
+  --color-temper-9: var(--temper-9);
 }
 
 @layer base {

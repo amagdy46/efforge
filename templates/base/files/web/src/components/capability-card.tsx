@@ -4,8 +4,8 @@ import { CodeBlock } from "@/components/code-block"
 import { cn } from "@/lib/utils"
 
 /**
- * The tempering colours, in order: one per layer, repeating only past the eighth. A card takes the
- * colour of its layer in the layer graph.
+ * The tempering colours, in order: one per layer, nine so that a project with every add-on (nine
+ * layers) repeats none. A card takes the colour of its layer in the layer graph.
  */
 export const temperClasses = [
   "bg-temper-1",
@@ -16,6 +16,7 @@ export const temperClasses = [
   "bg-temper-6",
   "bg-temper-7",
   "bg-temper-8",
+  "bg-temper-9",
 ] as const
 
 /** A file path that wraps after a `/`, not in the middle of a name. */
