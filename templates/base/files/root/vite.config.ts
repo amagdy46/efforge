@@ -33,8 +33,10 @@ export default defineConfig({
       "react/react-in-jsx-scope": "off",
       // Effect's tagged values are matched on `_tag` (Data.TaggedEnum, Data.TaggedError)
       "no-underscore-dangle": ["error", { allow: ["_tag"] }],
-      // exact pins make "unstable" Effect APIs safe; this flags it.effect itself
+      // exact pins make "unstable" and "experimental" Effect APIs safe (an upgrade is
+      // a deliberate step); the first flags it.effect itself
       "effecttsgo/unstable-api-usage": "off",
+      "effecttsgo/experimental-api-usage": "off",
       // bindings reach code through effect-cf layers; cloudflare.ts is the one file that reads env
       "no-restricted-imports": [
         "error",

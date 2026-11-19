@@ -72,6 +72,11 @@ task's decision rule we keep Turborepo and revisit only if it hurts.
 
 - `tsconfig.base.json` sets `diagnosticSeverity.unstableApiUsage: "off"`: stock
   `tsc` exits 1 on that warning (e.g. `@effect/vitest`), unlike plain suggestions.
+  `experimentalApiUsage` (APIs marked `@stability experimental`, such as
+  `Schema.DomainName` or Effect Cluster) is off for the same reason, in
+  `tsconfig.base.json` and as `effecttsgo/experimental-api-usage` in the lint config: the
+  pins are exact, so an experimental API changes only when someone moves the pin on purpose.
+  Added 2026-11-19 for the add-ons that build on such APIs.
 - The root `vite.config.ts` turns `effecttsgo/strict-effect-provide` off only for
   entry points (`server/runtime.ts`, `packages/*/scripts/**`).
 - `AGENTS.md` carries an `<!-- efforge:agents -->` footer; add-ons insert sections
