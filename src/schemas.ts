@@ -150,6 +150,152 @@ export const ListOutput = Schema.Struct({
   }),
 }).annotate({ title: "efforge list --json" })
 
+const When = Schema.Record(Schema.String, Strings).annotate({
+  description:
+    "Only on stacks where every listed slot has one of the listed values (extras: any of them). Absent: on every stack. Inside a project, `info` lists only what that project gets, without it.",
+})
+
+export const InfoOutput = Schema.Struct({
+  ...Envelope,
+  ok: Schema.Literal(true),
+  id: Schema.String.annotate({ description: "The add-on's full id, what `add` takes." }),
+  slot: Schema.String,
+  option: Schema.String,
+  title: Schema.String,
+  description: Schema.String,
+  purpose: Schema.NullOr(Schema.String).annotate({
+    description: "What it is for, in a paragraph.",
+  }),
+  docs: Schema.Struct({
+    page: Schema.String.annotate({
+      description: "Its page in efforge's repo: docs/addons/<slot>-<option>.md.",
+    }),
+    url: Schema.NullOr(Schema.String),
+  }),
+  service: Schema.NullOr(
+    Schema.Struct({ name: Schema.String, file: Schema.String, errors: Strings }),
+  ).annotate({
+    description: "The Effect service it adds, the file that declares it, its tagged errors.",
+  }),
+  layer: Schema.NullOr(Schema.String).annotate({
+    description: "What it adds to AppLayer in apps/web/src/server/layers.ts.",
+  }),
+  files: Schema.Array(
+    Schema.Struct({ path: Schema.String, when: Schema.optionalKey(When) }),
+  ).annotate({
+    description:
+      "The files it writes. A path can appear once per stack it is written differently on.",
+  }),
+  edits: Schema.Array(Schema.Struct({ file: Schema.String, transforms: Strings })).annotate({
+    description: "The files it edits in place (the seams), with the transforms that edit each.",
+  }),
+  dependencies: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      version: Schema.String,
+      package: Schema.String.annotate({ description: "The workspace package, `.` for the root." }),
+      dev: Schema.Boolean,
+    }),
+  ),
+  scripts: Schema.Array(
+    Schema.Struct({ package: Schema.String, name: Schema.String, command: Schema.String }),
+  ),
+  env: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      description: Schema.String,
+      example: Schema.String,
+      secret: Schema.Boolean.annotate({
+        description: "A real secret: efforge writes it empty, you fill it in.",
+      }),
+      when: Schema.optionalKey(When),
+    }),
+  ),
+  requires: Schema.Array(
+    Schema.Struct({ slot: Schema.String, options: Strings, reason: Schema.String }),
+  ).annotate({
+    description: "What a project needs before it can have this add-on: one of `options` for each.",
+  }),
+  conflicts: Strings.annotate({ description: "Add-ons a project can't have with it." }),
+  card: Schema.NullOr(
+    Schema.Struct({ module: Schema.String, export: Schema.String, when: Schema.optionalKey(When) }),
+  ).annotate({ description: "Its dashboard card module (on /app), or null." }),
+  agents: Schema.Array(
+    Schema.Struct({ heading: Schema.String, when: Schema.optionalKey(When) }),
+  ).annotate({
+    description: "The AGENTS.md sections it adds, by heading.",
+  }),
+  project: Schema.optionalKey(
+    Schema.Struct({
+      directory: Schema.String,
+      installed: Schema.Boolean,
+      add: Schema.NullOr(Schema.String).annotate({
+        description:
+          "The command that adds it to this project, or null (it has it, or can't add it alone).",
+      }),
+      alternatives: Strings.annotate({
+        description: "When it can't be added alone: each command that adds it with what it needs.",
+      }),
+      reason: Schema.optionalKey(Schema.String),
+    }),
+  ).annotate({
+    description: "Only in an efforge project (--cwd, default: the current directory).",
+  }),
+}).annotate({ title: "efforge info --json" })
+
+const Layered = Schema.NullOr(Strings)
+
+export const GraphOutput = Schema.Struct({
+  ...Envelope,
+  ok: Schema.Literal(true),
+  directory: Schema.String,
+  file: Schema.String.annotate({ description: "The file the graph is read from." }),
+  layers: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      expression: Schema.String.annotate({
+        description: "The argument of Layer.mergeAll as written.",
+      }),
+      addon: Schema.NullOr(Schema.String).annotate({
+        description:
+          "The add-on that adds it (`base` for the logger), or null for a layer you added.",
+      }),
+      provides: Layered.annotate({
+        description: "The services it provides; null when unknown (your own layer).",
+      }),
+      needs: Layered.annotate({
+        description:
+          "What it needs: layers provided to it in layers.ts, bindings and settings; null when unknown.",
+      }),
+      color: Schema.String.annotate({
+        description: "Its tempering colour, by its place in the list.",
+      }),
+    }),
+  ),
+  nodes: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      kind: Schema.Literals(["app", "layer", "need"]),
+      label: Schema.String,
+    }),
+  ),
+  edges: Schema.Array(
+    Schema.Struct({
+      from: Schema.String,
+      to: Schema.String,
+      kind: Schema.Literals(["merges", "needs"]).annotate({
+        description: "merges: a layer into AppLayer; needs: what a layer needs, into the layer.",
+      }),
+    }),
+  ),
+  mermaid: Schema.String.annotate({
+    description: "The graph as a Mermaid flowchart, what `graph` prints.",
+  }),
+  written: Schema.NullOr(Schema.String).annotate({
+    description: "With --write: the file the graph was written to (README.md); else null.",
+  }),
+}).annotate({ title: "efforge graph --json" })
+
 export const ErrorOutput = Schema.Struct({
   ...Envelope,
   ok: Schema.Literal(false),
@@ -173,6 +319,8 @@ export const published = {
   "create.schema.json": CreateOutput,
   "add.schema.json": AddOutput,
   "list.schema.json": ListOutput,
+  "info.schema.json": InfoOutput,
+  "graph.schema.json": GraphOutput,
   "error.schema.json": ErrorOutput,
 } as const
 
