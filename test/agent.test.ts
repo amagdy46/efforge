@@ -217,7 +217,15 @@ describe("an agent drives efforge without a terminal", { timeout: 120_000 }, () 
     expect(existsSync(join(work, "help"))).toBe(false)
     const invented = failure(["remove", "email", "--json", "--cwd", "app"])
     expect(invented).toMatchObject({ code: "UnknownCommand", fix: null })
-    expect(invented.commands).toEqual(["create", "add", "list", "info", "graph"])
+    expect(invented.commands).toEqual([
+      "create",
+      "add",
+      "list",
+      "info",
+      "graph",
+      "upgrade",
+      "doctor",
+    ])
     expect(failure(["create", "my", "app", "--json"])).toMatchObject({
       code: "UnexpectedArgument",
       fix: null,

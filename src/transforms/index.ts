@@ -6,11 +6,13 @@ import { AUTH_FILE, addAuthPlugin } from "./addAuthPlugin.ts"
 import { addExport } from "./addExport.ts"
 import { addImport } from "./addImport.ts"
 import { addLayer } from "./addLayer.ts"
+import { addRegion } from "./addRegion.ts"
 import { addServerFnMiddleware } from "./addServerFnMiddleware.ts"
 import { addWorkflowSecret, WORKFLOW_FILE } from "./addWorkflowSecret.ts"
 import { addWranglerBinding, WRANGLER_FILE } from "./addWranglerBinding.ts"
 import { AGENTS_FILE, appendAgentsSection } from "./appendAgentsSection.ts"
 import { TransformAnchorMissing, UnknownTransform } from "./errors.ts"
+import { setDeclaration } from "./setDeclaration.ts"
 import { setWranglerValue } from "./setWranglerValue.ts"
 import type { Transform } from "./util.ts"
 
@@ -44,6 +46,8 @@ const registry: Readonly<Record<string, Entry>> = {
   addWranglerBinding: { run: addWranglerBinding, targets: fixed(WRANGLER_FILE) },
   setWranglerValue: { run: setWranglerValue, targets: fixed(WRANGLER_FILE) },
   addServerFnMiddleware: { run: addServerFnMiddleware, targets: onFile },
+  addRegion: { run: addRegion, targets: onFile },
+  setDeclaration: { run: setDeclaration, targets: onFile },
 }
 
 const entry = (name: string): Entry | undefined =>

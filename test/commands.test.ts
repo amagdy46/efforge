@@ -358,7 +358,7 @@ it("review nits: edits carry when, flags name their commands, case gets a fix, -
   )
   const cwdFlag = await cli(["x1", "--cwd", "app", "--json"])
   expect((json(cwdFlag.out).error as { message: string }).message).toContain(
-    "--cwd belongs to add, list, info and graph,",
+    "--cwd belongs to add, list, info, graph, upgrade and doctor,",
   )
   // a preset or a value in other case is that one
   const preset = await cli(["create", "app", "--json", "--dry-run", "--preset=SaaS"])
@@ -387,3 +387,36 @@ it("review nits: edits carry when, flags name their commands, case gets a fix, -
       "provides",
     ])
 })
+
+it("doctor's env check gives each variable the same secret and set as info", async () => {
+  await create("dr", "--database=d1", "--auth=better-auth", "--ai=effect-ai-byok")
+  const r = await cli(["doctor", "--json", "--cwd", "dr"])
+  const env = (
+    json(r.out) as {
+      checks: Array<{ id: string; details?: { vars?: Array<Record<string, unknown>> } }>
+    }
+  ).checks.find((c) => c.id === "env")
+  const vars = env?.details?.vars ?? []
+  expect(vars.length).toBeGreaterThan(3)
+  const info = new Map<string, Record<string, unknown>>()
+  for (const id of ["auth/better-auth", "ai"])
+    for (const v of (
+      json((await cli(["info", id, "--json", "--cwd", "dr"])).out) as {
+        env: Array<Record<string, unknown>>
+      }
+    ).env)
+      info.set(String(v.name), v)
+  for (const v of vars) {
+    const i = info.get(String(v.name))
+    if (i === undefined) continue
+    expect({ secret: v.secret, set: v.set }, String(v.name)).toEqual({
+      secret: i.secret,
+      set: i.set,
+    })
+  }
+  expect(vars.find((v) => v.name === "BETTER_AUTH_SECRET")).toMatchObject({
+    secret: true,
+    set: true,
+  })
+  expect(vars.find((v) => v.name === "LLM_API_KEY")).toMatchObject({ secret: true, set: false })
+}, 60_000)

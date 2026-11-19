@@ -5,17 +5,21 @@ import { stripVTControlCharacters } from "node:util"
 import { NodeServices } from "@effect/platform-node"
 import { Effect, Fiber, Layer, Schema } from "effect"
 import { afterEach, expect, it, vi } from "vitest"
+import { parseDocument } from "yaml"
 import { runWith } from "../src/cli.ts"
 import { errorCodes } from "../src/contract.ts"
 import { TemplatesDir } from "../src/commands/create.ts"
 import { livePromptIO, PromptIO } from "../src/prompts/navigable.ts"
+import { DoctorProbe, liveProbe } from "../src/doctor.ts"
 import {
   AddOutput,
   CreateOutput,
+  DoctorOutput,
   ErrorOutput,
   GraphOutput,
   InfoOutput,
   ListOutput,
+  UpgradeOutput,
 } from "../src/schemas.ts"
 import { recordingSpawner } from "./recordingSpawner.ts"
 
@@ -45,10 +49,23 @@ interface Scenario {
   readonly cwd?: string
   /** Commands that fail, with their output. */
   readonly fail?: (command: string) => string | undefined
+  /** What a command that succeeds prints (`git status --porcelain`). */
+  readonly print?: (command: string) => string | undefined
   readonly templates?: string
   /** Stop the run (as Ctrl-C would) when it starts a command with this prefix. */
   readonly interruptAt?: string
+  /** The exit code, when it isn't 0 (success) or 1 (an error code). */
+  readonly exit?: number
 }
+
+// doctor's view of the machine, the same everywhere the docs are checked
+const fixedProbe = Layer.succeed(DoctorProbe, {
+  ...liveProbe,
+  nodeVersion: () => "24.11.1",
+  pnpmVersion: () => "12.21.0",
+  peers: () => "{}",
+  reachable: () => Effect.succeed(false),
+})
 
 const cli = async (
   args: ReadonlyArray<string>,
@@ -75,7 +92,8 @@ const cli = async (
         Layer.mergeAll(
           NodeServices.layer,
           quietIO,
-          recordingSpawner(calls, undefined, s.fail, hang),
+          recordingSpawner(calls, undefined, s.fail, hang, s.print),
+          fixedProbe,
           ...(s.templates === undefined ? [] : [Layer.succeed(TemplatesDir, s.templates)]),
         ),
       ),
@@ -186,6 +204,42 @@ const scenarios: Record<string, Scenario> = {
         : undefined,
   },
   InternalError: { templates: "/nonexistent/templates" },
+  upgrade: { setup: myApp },
+  "upgrade-drifted": { setup: (work) => pinnedLike020(work), exit: 2 },
+  "upgrade-apply": { setup: (work) => pinnedLike020(work) },
+  doctor: { setup: myApp, exit: 2 },
+  ProjectNewerThanCli: {
+    setup: async (work) => {
+      await myApp(work)
+      const m = join(work, "my-app/efforge.jsonc")
+      writeFileSync(
+        m,
+        readFileSync(m, "utf8").replace(/"efforgeVersion": "[^"]*"/, '"efforgeVersion": "0.4.0"'),
+      )
+    },
+  },
+  UncommittedChanges: {
+    setup: (work) => pinnedLike020(work),
+    print: (c) => (c.startsWith("git status") ? " M package.json\n?? notes.md\n" : undefined),
+  },
+}
+
+/** What a project made by efforge 0.2.0 is pinned like: effect 4.0.5, no overrides, pnpm 12.4.2. */
+const pinnedLike020 = async (work: string) => {
+  await myApp(work)
+  const ws = join(work, "my-app/pnpm-workspace.yaml")
+  const doc = parseDocument(readFileSync(ws, "utf8"))
+  for (const name of ["effect", "@effect/platform-node", "@effect/sql-d1", "@effect/vitest"])
+    if (doc.hasIn(["catalog", name])) doc.setIn(["catalog", name], "4.0.5")
+  doc.setIn(["overrides"], { vite: "catalog:" })
+  writeFileSync(ws, doc.toString())
+  const pkg = join(work, "my-app/package.json")
+  writeFileSync(pkg, readFileSync(pkg, "utf8").replace("pnpm@12.21.0", "pnpm@12.4.2"))
+  const m = join(work, "my-app/efforge.jsonc")
+  writeFileSync(
+    m,
+    readFileSync(m, "utf8").replace(/"efforgeVersion": "[^"]*"/, '"efforgeVersion": "0.2.0"'),
+  )
 }
 
 /** Splits a documented command the way a shell would (single quotes only). */
@@ -200,7 +254,9 @@ const normalize = (text: string, work: string): string => {
     if (Array.isArray(v)) {
       const items = v.map((x) => elide(x))
       // cut to three items, and nothing else: the example must still match the schema
-      return (key === "files" || key === "addons") && items.length > 4 ? items.slice(0, 3) : items
+      return (key === "files" || key === "addons" || key === "pins") && items.length > 4
+        ? items.slice(0, 3)
+        : items
     }
     if (v !== null && typeof v === "object")
       return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, elide(x, k)]))
@@ -237,7 +293,7 @@ it("every example in docs/json.md is what the command prints", { timeout: 120_00
       // error examples are errors, success examples aren't, and each matches its schema
       const code = (id as string).split("-")[0] as string
       expect(r.exitCode, `${id}: ${raw}`).toBe(
-        id === "Interrupted" ? 130 : code in errorCodes ? 1 : 0,
+        s.exit ?? (id === "Interrupted" ? 130 : code in errorCodes ? 1 : 0),
       )
       if (out.startsWith("{")) {
         const schema =
@@ -251,7 +307,11 @@ it("every example in docs/json.md is what the command prints", { timeout: 120_00
                   ? InfoOutput
                   : code === "graph"
                     ? GraphOutput
-                    : ListOutput
+                    : code === "upgrade"
+                      ? UpgradeOutput
+                      : code === "doctor"
+                        ? DoctorOutput
+                        : ListOutput
         Schema.decodeUnknownSync(schema as Schema.Top as never)(JSON.parse(out))
       }
     } finally {

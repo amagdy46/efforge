@@ -25,7 +25,7 @@
       "properties": {
         "code": {
           "type": "string",
-          "description": "A stable identifier. Known codes: UnknownFlag, InvalidFlagValue, UnexpectedArgument, UnknownCommand, InsideProject, NeedsInput, UnknownValue, IncompatibleStack, InvalidProjectName, TargetNotEmpty, PnpmMissing, SetupIncomplete, Interrupted, WriteFailed, NotAnEfforgeProject, NoAddonIds, UnknownAddon, SlotAlreadySet, RemoveNotSupported, OverlayConflict, TransformAnchorMissing, CommandFailed, LayersUnreadable, ReadmeUnwritable, InternalError. New codes can appear within a contract version; treat an unknown one like any failure."
+          "description": "A stable identifier. Known codes: UnknownFlag, InvalidFlagValue, UnexpectedArgument, UnknownCommand, InsideProject, NeedsInput, UnknownValue, IncompatibleStack, InvalidProjectName, TargetNotEmpty, PnpmMissing, SetupIncomplete, Interrupted, WriteFailed, NotAnEfforgeProject, NoAddonIds, UnknownAddon, SlotAlreadySet, RemoveNotSupported, OverlayConflict, TransformAnchorMissing, CommandFailed, LayersUnreadable, ReadmeUnwritable, ProjectNewerThanCli, UncommittedChanges, InternalError. New codes can appear within a contract version; treat an unknown one like any failure."
         },
         "message": {
           "type": "string"

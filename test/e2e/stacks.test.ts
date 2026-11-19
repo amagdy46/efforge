@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { dirname, join, resolve as resolvePath } from "node:path"
 import { NodeFileSystem, NodeServices } from "@effect/platform-node"
 import { describe, it } from "@effect/vitest"
-import { Effect, FileSystem, Path } from "effect"
+import { vi } from "vitest"
+import { Effect, FileSystem, Layer, Path } from "effect"
 import { loadAddons } from "../../src/addon.ts"
 import { addAddons } from "../../src/commands/add.ts"
 import { projectGraph } from "../../src/commands/graph.ts"
@@ -13,6 +14,9 @@ import { generate } from "../../src/generate.ts"
 import { ROUTE_TREE_COMMAND } from "../../src/routeTree.ts"
 import { type StackConfig, withDefaults } from "../../src/stack.ts"
 import type { Tree } from "../../src/tree.ts"
+import { classifyPeers } from "../../src/doctor.ts"
+import { runWith } from "../../src/cli.ts"
+import { PromptIOLive } from "../../src/prompts/navigable.ts"
 import { isEffectLockstep } from "../../src/versions.ts"
 import { parse, parseAllDocuments } from "yaml"
 
@@ -42,16 +46,6 @@ const sh = (cwd: string, command: string) => {
 }
 
 /**
- * Unmet peers inside third-party packages that efforge can't fix from a template. Upstream as of
- * 2026-11-18: @alchemy.run/cloudflare-runtime depends on `unenv: ^2.0.0-rc.24` (now rc.25) and on
- * @cloudflare/unenv-preset, which peers on exactly 2.0.0-rc.24. The stack still passes its gate.
- */
-const knownUpstreamPeer = (peer: string, parents: ReadonlyArray<{ name: string }>) =>
-  peer === "unenv" &&
-  parents.some((p) => p.name === "@alchemy.run/cloudflare-runtime") &&
-  parents.at(-1)?.name === "@cloudflare/unenv-preset"
-
-/**
  * What the drift guard promises, checked against the real install: every package released with
  * `effect` resolved to the catalog's `effect` version (not only the ones the project names), and
  * pnpm reports no unmet peers.
@@ -71,27 +65,10 @@ const checkEffectLockstep = (dir: string) => {
   })
   if (drifted.length > 0)
     throw new Error(`Effect packages not at effect ${effect}: ${drifted.join(", ")}`)
-  // optional peers outside their range are warnings (alchemy's capnp-es asks for typescript 5 or
-  // 6); a required peer, or any Effect package, out of range is a failure
+  // optional peers outside their range, and the known upstream Alchemy one, are not failures; a
+  // required peer, or any Effect package, out of range is (the same rule as `doctor`'s peers check)
   const peers = spawnSync("pnpm", ["peers", "check", "--json"], { cwd: dir, encoding: "utf8" })
-  type Issue = {
-    optional: boolean
-    wantedRange?: string
-    foundVersion?: string
-    parents: Array<{ name: string }>
-  }
-  const report = JSON.parse(peers.stdout) as Record<
-    string,
-    { bad: Record<string, Issue[]>; missing: Record<string, Issue[]> }
-  >
-  const unmet = Object.entries(report).flatMap(([project, r]) =>
-    [...Object.entries(r.bad), ...Object.entries(r.missing)].flatMap(([peer, issues]) =>
-      issues
-        .filter((i) => !i.optional || isEffectLockstep(peer))
-        .filter((i) => !knownUpstreamPeer(peer, i.parents))
-        .map((i) => `${project}: ${peer} ${i.foundVersion ?? "missing"}, wanted ${i.wantedRange}`),
-    ),
-  )
+  const { unmet } = classifyPeers(JSON.parse(peers.stdout))
   if (unmet.length > 0) throw new Error(`unmet peers:\n${unmet.join("\n")}`)
 }
 
@@ -158,6 +135,56 @@ const checkRegionsOnly = (dir: string): number => {
 }
 
 /**
+ * `upgrade --check --json` and `doctor --json` on a project efforge just made and installed: nothing
+ * to do, and no check fails. Run in-process with the real spawner; doctor's Postgres check is pointed
+ * at a closed port, so the run touches no database.
+ */
+const checkDoctor = (dir: string) =>
+  Effect.gen(function* () {
+    const json = (args: ReadonlyArray<string>) =>
+      Effect.gen(function* () {
+        const out: string[] = []
+        const log = vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => {
+          out.push(a.join(" "))
+        })
+        const before = process.env.DATABASE_URL
+        process.env.DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:9/app"
+        process.exitCode = undefined
+        // its own runtime: it.effect's test console would swallow the document
+        yield* Effect.promise(() =>
+          Effect.runPromise(
+            runWith(args).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, PromptIOLive))),
+          ),
+        ).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              log.mockRestore()
+              if (before === undefined) delete process.env.DATABASE_URL
+              else process.env.DATABASE_URL = before
+            }),
+          ),
+        )
+        const exit = process.exitCode ?? 0
+        process.exitCode = undefined
+        return { doc: JSON.parse(out.join("\n")) as Record<string, unknown>, exit }
+      })
+    const upgrade = yield* json(["upgrade", "--check", "--strict", "--json", "--cwd", dir])
+    const left = [...(upgrade.doc.steps as unknown[]), ...(upgrade.doc.kept as unknown[])]
+    if (upgrade.exit !== 0 || upgrade.doc.status !== "current" || left.length > 0)
+      throw new Error(
+        `upgrade --check found something on a new project:\n${JSON.stringify({ steps: upgrade.doc.steps, kept: upgrade.doc.kept, needsAction: upgrade.doc.needsAction }, null, 2)}`,
+      )
+    const doctor = yield* json(["doctor", "--json", "--cwd", dir])
+    const failed = (
+      doctor.doc.checks as Array<{ id: string; status: string; message: string }>
+    ).filter((c) => c.status === "fail")
+    if (doctor.exit !== 0 || failed.length > 0)
+      throw new Error(
+        `doctor failed on a new project:\n${failed.map((c) => `${c.id}: ${c.message}`).join("\n")}`,
+      )
+  })
+
+/**
  * The README and AGENTS.md tell people to run `pnpm db:generate` after a schema change: on a fresh
  * project it must exit 0 and write nothing, or the committed Drizzle snapshots are stale.
  */
@@ -181,6 +208,7 @@ const checkDbGenerate = (dir: string) => {
 const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
   Effect.gen(function* () {
     const dir = yield* generateStack(config)
+    yield* checkDoctor(dir)
     if (config.orm === "drizzle") yield* Effect.try(() => checkDbGenerate(dir))
     yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
     // a minimal stack's card files may have nothing outside their regions; auth and database ones do
@@ -444,6 +472,155 @@ describe("graph on a real project", () => {
       }).pipe(Effect.provide(NodeServices.layer)),
     { timeout: 15 * 60 * 1000 },
   )
+})
+
+// --- upgrade an old project (ruling 1 of the W4-A2 review) -------------------------------------
+// A real project from an efforge release, with and without the owner's own edits in layers.ts and
+// the dashboard, then `upgrade` from this source, then the project's full gate. Whatever upgrade
+// applies must leave the project building, keep the owner's edits byte for byte, and leave both
+// commands with nothing to apply. Needs the release refs (`git fetch --tags origin release-0.2.1`).
+
+const repo = new URL("../..", import.meta.url).pathname
+const sources = new Map<string, string>()
+
+/** The efforge source at `ref`, installed, under .e2e (once per run). */
+const releaseSource = (ref: string): string => {
+  const hit = sources.get(ref)
+  if (hit !== undefined) return hit
+  const found = [ref, `origin/${ref}`].find(
+    (r) =>
+      spawnSync("git", ["rev-parse", "--verify", "-q", `${r}^{commit}`], { cwd: repo }).status ===
+      0,
+  )
+  if (found === undefined)
+    throw new Error(`${ref} isn't in this checkout: git fetch --tags origin release-0.2.1`)
+  mkdirSync(e2eRoot, { recursive: true })
+  const dir = mkdtempSync(`${e2eRoot}/efforge-${ref.replace(/\W+/g, "-")}-`)
+  sh(repo, `git archive ${found} | tar -x -C ${JSON.stringify(dir)}`)
+  sh(dir, "pnpm install --frozen-lockfile")
+  sources.set(ref, dir)
+  return dir
+}
+
+const LAYERS = "apps/web/src/server/layers.ts"
+const DASHBOARD = "apps/web/src/routes/app/index.tsx"
+
+/** The owner's own work: a layer of theirs in AppLayer, and a heading of theirs on the dashboard. */
+const ownerEdits = (dir: string) => {
+  const write = (file: string, f: (t: string) => string) =>
+    writeFileSync(join(dir, file), f(readFileSync(join(dir, file), "utf8")))
+  writeFileSync(
+    join(dir, "apps/web/src/server/billing.ts"),
+    'import { Layer } from "effect"\n\n/** Billing, ours. */\nexport const BillingLive = Layer.empty\n',
+  )
+  write(LAYERS, (t) =>
+    t
+      .replace(
+        'import { AuthLive } from "./auth-live"',
+        'import { AuthLive } from "./auth-live"\nimport { BillingLive } from "./billing"',
+      )
+      .replace("  AuthLive,\n", "  AuthLive,\n  BillingLive,\n"),
+  )
+  write(DASHBOARD, (t) => t.replace(">Dashboard<", ">Acme dashboard<"))
+  sh(dir, "pnpm format")
+  sh(
+    dir,
+    "git add -A && git -c user.name=e2e -c user.email=e2e@example.com commit -qm 'our billing layer and dashboard'",
+  )
+}
+
+const cliJson = (args: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const out: string[] = []
+    const log = vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => {
+      out.push(a.join(" "))
+    })
+    process.exitCode = undefined
+    yield* Effect.promise(() =>
+      Effect.runPromise(
+        runWith(args).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, PromptIOLive))),
+      ),
+    ).pipe(Effect.ensuring(Effect.sync(() => log.mockRestore())))
+    const exit = process.exitCode ?? 0
+    process.exitCode = undefined
+    return { doc: JSON.parse(out.join("\n")) as Record<string, unknown>, exit }
+  })
+
+const upgradeOld = (ref: string, flags: string, edited: boolean): Effect.Effect<void, unknown> =>
+  Effect.gen(function* () {
+    const source = releaseSource(ref)
+    const work = mkdtempSync(`${e2eRoot}/old-${ref.replace(/\W+/g, "-")}-`)
+    yield* Effect.try(() =>
+      sh(work, `node ${JSON.stringify(join(source, "src/bin.ts"))} old --yes ${flags}`),
+    )
+    const dir = join(work, "old")
+    // 0.2.1's own next step on Alchemy: the local values come from the example
+    if (flags.includes("--infra=alchemy"))
+      yield* Effect.try(() => sh(dir, "test -f .env || cp .env.example .env"))
+    if (edited) yield* Effect.try(() => ownerEdits(dir))
+    const mine = edited
+      ? {
+          layers: readFileSync(join(dir, LAYERS), "utf8"),
+          dashboard: readFileSync(join(dir, DASHBOARD), "utf8"),
+          billing: readFileSync(join(dir, "apps/web/src/server/billing.ts"), "utf8"),
+        }
+      : undefined
+    const applied = yield* cliJson(["upgrade", "--json", "--cwd", dir])
+    if (applied.exit !== 0 || applied.doc.ok !== true)
+      throw new Error(`upgrade failed:\n${JSON.stringify(applied.doc, null, 2)}`)
+    yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
+    if (mine !== undefined) {
+      // the owner's edits, byte for byte; layers.ts may only have gained the card region's markers
+      const now = (f: string) => readFileSync(join(dir, f), "utf8")
+      if (now(DASHBOARD) !== mine.dashboard)
+        throw new Error("upgrade changed the owner's dashboard")
+      if (now("apps/web/src/server/billing.ts") !== mine.billing)
+        throw new Error("upgrade changed billing.ts")
+      if (now(LAYERS).replace(/^\/\/ #(region card|endregion)\n/gm, "") !== mine.layers)
+        throw new Error(
+          `upgrade changed the owner's layers.ts beyond the region markers:\n${now(LAYERS)}`,
+        )
+    }
+    // both commands agree that nothing is left to apply
+    const again = yield* cliJson(["upgrade", "--check", "--strict", "--json", "--cwd", dir])
+    if (again.exit !== 0 || again.doc.status !== "current")
+      throw new Error(`upgrade --check after upgrade:\n${JSON.stringify(again.doc, null, 2)}`)
+    const before = process.env.DATABASE_URL
+    process.env.DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:9/app"
+    const doctor = yield* cliJson(["doctor", "--json", "--cwd", dir]).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (before === undefined) delete process.env.DATABASE_URL
+          else process.env.DATABASE_URL = before
+        }),
+      ),
+    )
+    const failed = (
+      doctor.doc.checks as Array<{ id: string; status: string; message: string }>
+    ).filter((c) => c.status === "fail" || (c.id === "upgrade" && c.status !== "ok"))
+    if (failed.length > 0)
+      throw new Error(
+        `doctor after upgrade:\n${failed.map((c) => `${c.id}: ${c.message}`).join("\n")}`,
+      )
+    rmSync(work, { recursive: true, force: true })
+  })
+
+describe("upgrade an old project", () => {
+  const releases: Array<[string, string, string]> = [
+    ["0.2.0", "v0.2.0", "--database=d1 --orm=effect-sql"],
+    [
+      "0.2.1",
+      "release-0.2.1",
+      "--database=d1 --orm=effect-sql --auth=better-auth --infra=alchemy --extras=storage,email",
+    ],
+  ]
+  for (const [version, ref, flags] of releases)
+    for (const edited of [false, true])
+      it.effect(
+        `${version}${edited ? " with the owner's edits in layers.ts and the dashboard" : ""}: upgrade, then the full gate`,
+        () => upgradeOld(ref, flags, edited),
+        { timeout: 20 * 60 * 1000 },
+      )
 })
 
 describe.skipIf(process.env.EFFORGE_E2E_BROWSER !== "1")("browser flow", () => {

@@ -3,6 +3,7 @@ import { Effect, Exit, FileSystem, Path, Schema } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import type { ChildProcessSpawner } from "effect/process"
 import { type ParseError, parse } from "jsonc-parser"
+import { sameJsonc } from "../structure.ts"
 import pc from "picocolors"
 import { parseDocument } from "yaml"
 import { type AddonLoadError, type AddonManifest, addonIdsFor, loadAddons } from "../addon.ts"
@@ -211,34 +212,6 @@ export const waysOut = (stack: StackConfig, named: ReadonlySet<string>): string[
     if (found.length > 0) return found
   }
   return []
-}
-
-/** Same JSONC data and comments, ignoring formatting, key order and array order (earlier `add`s reorder bindings). */
-const sameJsonc = (a: string, b: string | undefined): boolean => {
-  if (b === undefined) return false
-  const canon = (v: unknown): unknown =>
-    Array.isArray(v)
-      ? v.map(canon).toSorted((x, y) => byName(JSON.stringify(x), JSON.stringify(y)))
-      : v !== null && typeof v === "object"
-        ? Object.fromEntries(
-            Object.entries(v as Record<string, unknown>)
-              .toSorted(([x], [y]) => byName(x, y))
-              .map(([k, x]) => [k, canon(x)]),
-          )
-        : v
-  const read = (t: string) => {
-    const errors: ParseError[] = []
-    const v = parse(t, errors, { allowTrailingComma: true }) as unknown
-    return errors.length > 0 ? undefined : JSON.stringify(canon(v))
-  }
-  // comments are user content too, and the parser drops them
-  const comments = (t: string) =>
-    (t.match(/\/\/.*$|\/\*[\s\S]*?\*\//gm) ?? [])
-      .map((c) => c.trim())
-      .toSorted()
-      .join("\n")
-  const x = read(a)
-  return x !== undefined && x === read(b) && comments(a) === comments(b)
 }
 
 const isNewPackageJson = (target: string) => target.endsWith("/package.json")

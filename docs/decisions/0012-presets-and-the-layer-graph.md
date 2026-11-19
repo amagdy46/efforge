@@ -1,4 +1,4 @@
-# 0011 — Presets are data that record nothing; the layer graph is read, not described
+# 0012 — Presets are data that record nothing; the layer graph is read, not described
 
 Date: 2026-11-19. Status: accepted.
 

@@ -16,7 +16,8 @@ export const EfforgeManifest = Schema.Struct({
     description: "The JSON Schema for this file, for editors.",
   }),
   efforgeVersion: Schema.String.annotate({
-    description: "The efforge version that created the project. `add` leaves it unchanged.",
+    description:
+      "The efforge version that created the project, or last upgraded it (`upgrade` sets it; `add` leaves it unchanged). An older efforge refuses to upgrade the project.",
   }),
   stack: StackConfig.annotate({
     description:

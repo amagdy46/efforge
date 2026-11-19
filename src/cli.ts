@@ -3,19 +3,29 @@ import { type CliError, CliOutput, Command, Completions } from "effect/cli"
 import { BIN, type ErrorCode, type Failure, Invocation, printSuccess, report } from "./contract.ts"
 import { addCommand } from "./commands/add.ts"
 import { createCommand, createConfig, createHandler, presetFailure } from "./commands/create.ts"
+import { doctorCommand } from "./commands/doctor.ts"
 import { graphCommand } from "./commands/graph.ts"
 import { infoCommand } from "./commands/info.ts"
 import { listCommand } from "./commands/list.ts"
+import { upgradeCommand } from "./commands/upgrade.ts"
 import { commands, fix, intentOf, meantFlag, projectAbove, spelledOut } from "./fix.ts"
 import { slots } from "./slots.ts"
 import { efforgeVersion } from "./versions.ts"
 
-/** Root behaves as `create`; `efforge create` is an explicit alias, `add` and `list` are separate. */
+/** Root behaves as `create`; `efforge create` is an explicit alias; the other commands are separate. */
 export const root = Command.make("create-efforge", createConfig, createHandler).pipe(
   Command.withDescription(
     "Scaffold an Effect + TanStack Start app on Cloudflare with database, auth and services already wired together",
   ),
-  Command.withSubcommands([createCommand, addCommand, listCommand, infoCommand, graphCommand]),
+  Command.withSubcommands([
+    createCommand,
+    addCommand,
+    listCommand,
+    infoCommand,
+    graphCommand,
+    upgradeCommand,
+    doctorCommand,
+  ]),
   Command.withExamples([
     {
       command: "npm create efforge my-app",
@@ -36,6 +46,11 @@ export const root = Command.make("create-efforge", createConfig, createHandler).
     },
     { command: "npx create-efforge info email", description: "What one add-on adds and needs" },
     { command: "npx create-efforge graph", description: "The project's layer graph, as Mermaid" },
+    {
+      command: "npx create-efforge upgrade --check",
+      description: "See how a project differs from this efforge, and what to do",
+    },
+    { command: "npx create-efforge doctor", description: "See what is wrong with a checkout" },
   ]),
 )
 
@@ -55,6 +70,8 @@ const probe = Command.make("create-efforge", createConfig).pipe(
     Command.withHandler(listCommand, () => Effect.void),
     Command.withHandler(infoCommand, () => Effect.void),
     Command.withHandler(graphCommand, () => Effect.void),
+    Command.withHandler(upgradeCommand, () => Effect.void),
+    Command.withHandler(doctorCommand, () => Effect.void),
   ]),
 )
 
@@ -126,10 +143,12 @@ const parseFix = (args: ReadonlyArray<string>, e: CliError.NonShowHelpErrors): s
       })
     }
     case "UnexpectedArgument":
-      // `list foo`: list takes no arguments, so dropping them runs the same list. `create my
-      // app`: a project name is one word, and which one is the caller's choice
+      // `list foo`: list (like graph, upgrade and doctor) takes no arguments, so dropping them runs
+      // the same command. `create my app`: a project name is one word, and which one is the caller's
       return fix(args, (i) =>
-        i.verb === "list" || i.verb === "graph" ? { ...i, operands: [] } : undefined,
+        i.verb === "list" || i.verb === "graph" || i.verb === "upgrade" || i.verb === "doctor"
+          ? { ...i, operands: [] }
+          : undefined,
       )
     default:
       // a value a flag can't take, or none: which value is the caller's choice (`allowed`)
@@ -230,7 +249,9 @@ export const notACreate = (args: ReadonlyArray<string>): Failure | undefined => 
           ? ` For the version, run ${BIN} --version.`
           : lower === "ls"
             ? ` To see the add-ons, run ${BIN} list.`
-            : ""
+            : lower === "update"
+              ? ` To bring a project up to date with this efforge, run ${BIN} upgrade (--check to see what it would do).`
+              : ""
     return {
       code: "UnknownCommand",
       message: `${dashed ? `${typed} after -- is an argument, not the command,` : `${typed} isn't a command,`} and efforge doesn't take it as a project name.${hint} ${list} To name a project ${typed}, run ${BIN} create ${typed}.`,

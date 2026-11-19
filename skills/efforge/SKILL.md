@@ -1,6 +1,6 @@
 ---
 name: efforge
-description: Create a full-stack Effect app on Cloudflare Workers (TanStack Start, D1 or Postgres, Better Auth, email, storage, AI) with the efforge CLI, or add one of those capabilities to an existing efforge project. Use when asked to start a new Effect or Cloudflare Workers web app, or when a project has an efforge.jsonc file and needs a database, auth, email, storage, AI, realtime, workflows or browser rendering.
+description: Create a full-stack Effect app on Cloudflare Workers (TanStack Start, D1 or Postgres, Better Auth, email, storage, AI) with the efforge CLI, add one of those capabilities to an existing efforge project, check what is wrong with one, or bring an old one up to date. Use when asked to start a new Effect or Cloudflare Workers web app, or when a project has an efforge.jsonc file and needs a database, auth, email, storage, AI, realtime, workflows or browser rendering, fails to install or build, or was made by an older efforge.
 license: MIT
 compatibility: Needs create-efforge 0.3.0 or later, Node 24.11+ or 26+, pnpm, git, and network access to the npm registry.
 ---
@@ -91,6 +91,30 @@ npx -y create-efforge@latest graph --json --cwd my-app
 
 `layers` lists what `AppLayer` merges in `apps/web/src/server/layers.ts`, in order, each with the `addon` that adds it, what it `provides` and what it `needs`. A layer the user added has `addon`, `provides` and `needs` `null`. `mermaid` is the same graph as a Mermaid flowchart, for a README, an issue or a PR description. `graph --write` puts it in `README.md` between `efforge:readme:graph` markers, and `add` keeps it current from then on.
 
+## Check your own work
+
+After `create`, after `add`, and whenever an install or build fails in an efforge project, run:
+
+```sh
+npx -y create-efforge@latest doctor --json --cwd my-app
+```
+
+`checks` lists each check with `id`, `status` (`ok`, `warn`, `fail`, `skipped`, `unverified`), `message` and `fix`. Fix every `fail`: run its `fix` when it isn't `null` (after it, that check passes); when it is `null`, `message` and `details` say what to change (a missing binding, layer or env var), or what to do first (`details.uncommitted`: commit, then run `details.command`). Tell the user about each `warn` and `unverified` (doctor couldn't read a file of theirs the way it expects; not a failure). `status` is the worst check; the exit code is `2` when it is `fail`, and the document still has `ok: true`. doctor never changes anything and never prints a secret's value. A `fail` you can't fix (a Node version) goes to the user.
+
+## Bring an older project up to date
+
+```sh
+npx -y create-efforge@latest upgrade --check --json --cwd my-app
+```
+
+It changes nothing. `status` is `needs-action` (something breaks the project; exit code `2`), `behind` (`upgrade` has something to apply) or `current`. When it isn't `current`, the first step is `upgrade`; its `covers` lists everything it does, so don't do any of those by hand. Commit (or ask the user to), then:
+
+```sh
+npx -y create-efforge@latest upgrade --json --cwd my-app
+```
+
+It applies only what is still efforge's (pins, guards, scripts, files the user never changed, new files, and what new files need in files efforge edits in place), never a file the user changed, and runs `pnpm install`. With uncommitted changes it stops with `UncommittedChanges`. Then run `nextSteps` (the gate). `kept` lists files it left: `review` (the user changed it and so did efforge's template) and `held` (efforge's, held back because something of the user's depends on the old version). Tell the user about each, with `reason`; show efforge's version with `upgrade --check --diff --file <path>` and change a user's file only if they ask. A `needsAction` entry with `fix: null` (a set of pins half moved by the user) goes to the user with its `lines`.
+
 ## Errors
 
 | `code` | What to do |
@@ -115,11 +139,13 @@ npx -y create-efforge@latest graph --json --cwd my-app
 | `TransformAnchorMissing` | Nothing was written. Apply `snippet` to `file` by hand, then run the same command again. |
 | `PnpmMissing` | Install pnpm (`npm install --global pnpm`) and run the command again, or ask the user. |
 | `SetupIncomplete`, `CommandFailed` | The files are written; a command failed (`output` says why, often the network). Run `fix`, then the rest of `nextSteps`; the error also carries `env`. Running the same `add` again also finishes the install it owes. |
+| `UncommittedChanges` | `upgrade` wrote nothing because the project has uncommitted changes (`files`). Commit them (or ask the user to), then run the same command. `command` applies on top of them anyway; use it only if the user says so. |
+| `ProjectNewerThanCli` | The project was made or upgraded by a newer efforge. Run `command` (the same with `create-efforge@latest`). |
 | `WriteFailed`, `InternalError` | Stop and tell the user, with `message`. |
 
 A code not in this table is newer than this skill: treat it as a failure, run `fix` if it isn't `null`, and otherwise tell the user `message`.
 
-Exit codes: `0` success, `1` error, `130` stopped (with `--json`, `create` and `add` still print an `Interrupted` document; stopped in the first moment, before anything was written, stdout can be empty: run the same command again).
+Exit codes: `0` success, `1` error, `2` `upgrade` or `doctor` found something that breaks the project (the document has `ok: true`), `3` `upgrade --check --strict` found something to apply, `130` stopped (with `--json`, `create` and `add` still print an `Interrupted` document; stopped in the first moment, before anything was written, stdout can be empty: run the same command again).
 
 ## Verify
 
@@ -129,7 +155,7 @@ In the project directory, after the `nextSteps` that aren't long-running:
 pnpm typecheck && pnpm check && pnpm test && pnpm build
 ```
 
-All four pass on a new project and after every `add`. If one fails after your own edits, fix your code, not the generated setup.
+All four pass on a new project and after every `add`. If one fails after your own edits, fix your code, not the generated setup. If one fails and you don't know why, run `doctor --json` (above): it names a missing install, two Effect versions, a missing binding, layer or env var in one line each.
 
 ## Working in the project
 
