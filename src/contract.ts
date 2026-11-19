@@ -56,7 +56,7 @@ export const errorCodes = {
   NotAnEfforgeProject:
     "`add`, `upgrade`, `doctor`, `info`, `graph` or `list --cwd` was pointed at a directory without a valid efforge.jsonc (`list` in a directory without one succeeds with `project: false`). `fix` points --cwd at the nearby project when there is one; else null.",
   NoAddonIds:
-    "`add` was called with no add-on ids and no terminal to pick them in (or with --json), or `info` with no id. `available` lists them; `fix` lists them.",
+    "`add` was called with no add-on ids and no terminal to pick them in (or with --json), or `info` with no id. No fix: pick from `available`.",
   UnknownAddon:
     "An add-on id that doesn't exist or is ambiguous. `fix` uses the one id it is a clear typo or fragment of; else null with `suggestions`.",
   SlotAlreadySet:

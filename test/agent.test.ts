@@ -344,7 +344,9 @@ describe("an agent drives efforge without a terminal", { timeout: 120_000 }, () 
     expect(e.code).toBe("NoAddonIds")
     expect(e.available).toContain("extras/storage")
     expect(e.available).not.toContain("extras/email")
-    runFix(ListOutput, e.fix)
+    // listing isn't adding: no fix, the ids as data, and the list command in words
+    expect(e.fix).toBeNull()
+    expect(e.message).toContain("npx -y create-efforge list --json --cwd app")
   })
 
   it("add without efforge.jsonc: fix points --cwd at the project", () => {

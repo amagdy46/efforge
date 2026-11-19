@@ -108,7 +108,7 @@ it("info resolves ids the way add does, typo rule included", async () => {
   const none = await cli(["info", "--json"])
   expect(json(none.out).error).toMatchObject({
     code: "NoAddonIds",
-    fix: "npx -y create-efforge list --json",
+    fix: null,
   })
   const text = await cli(["info", "storage"])
   // CI=1 turns colours on

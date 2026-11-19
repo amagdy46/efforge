@@ -1068,8 +1068,9 @@ export const addFailure = (
       const available = e.available as string[]
       return {
         code: "NoAddonIds",
-        message: `Name the add-ons to add${available.length > 0 ? `: ${available.join(", ")}` : "; this project already has every add-on"}.`,
-        fix: fix(args, asList, { list: true }),
+        message: `Name the add-ons to add${available.length > 0 ? `: ${available.join(", ")}` : "; this project already has every add-on"}.${available.length > 0 ? seeList().replace("See which ones this project can add:", "What each one adds:") : ""}`,
+        // listing isn't adding: which add-on is the caller's choice (`available`)
+        fix: null,
         details: { available },
       }
     }

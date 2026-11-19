@@ -675,6 +675,12 @@ const check = async (c: Case, n: number): Promise<string[]> => {
         added.some((t) => t.startsWith("--") && knownFlags.has(t.slice(2).split("=")[0] as string))
       )
         say(`hop ${hop}: the fix puts a flag after --: ${fix}`)
+      // a fix does what the caller was trying to do: a command typed as itself stays that command
+      // (`add` with no ids never becomes `list`), as doctor's fixes must make their check pass
+      const was = words(step.args)[0]
+      const now = words(args)[0]
+      if (was !== undefined && defs.has(was) && now !== was)
+        say(`hop ${hop}: the fix of ${was} runs ${now ?? "create"}, which only reports: ${fix}`)
       if (isCreate(args)) {
         const w = words(args)
         const name = (w[0]?.toLowerCase() === "create" ? w[1] : w[0]) ?? "my-app"

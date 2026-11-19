@@ -2052,7 +2052,7 @@ npx -y create-efforge add email --json
 
 `add` got no add-on ids and there is no terminal to pick them in (or `--json`), or `info` got no id.
 
-Fields: `available`: the ids the project can still add (for `info`, every id). `fix`: `list` for the same project.
+Fields: `available`: the ids the project can still add (for `info`, every id). `fix`: `null`: which add-on is your choice, and a list isn't an add. The message names the `list --json` command that says what each one adds.
 
 Here, `my-app` has D1, Drizzle and Better Auth.
 
@@ -2069,8 +2069,8 @@ npx -y create-efforge add --json --cwd my-app
   "ok": false,
   "error": {
     "code": "NoAddonIds",
-    "message": "Name the add-ons to add: infra/alchemy, ai/effect-ai-byok, extras/workflows, extras/realtime, extras/browser, extras/storage, extras/email.",
-    "fix": "npx -y create-efforge list --json --cwd my-app",
+    "message": "Name the add-ons to add: infra/alchemy, ai/effect-ai-byok, extras/workflows, extras/realtime, extras/browser, extras/storage, extras/email. What each one adds: npx -y create-efforge list --json --cwd my-app",
+    "fix": null,
     "available": [
       "infra/alchemy",
       "ai/effect-ai-byok",
