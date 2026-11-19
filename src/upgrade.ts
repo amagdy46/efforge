@@ -14,6 +14,7 @@ import {
   efforgeGenerated,
   efforgePinned,
   efforgeScript,
+  efforgeWroteScript,
   enginesNew,
   recordFor,
   releasesSince,
@@ -705,7 +706,7 @@ export const planUpgrade = (
         const own = scalar(have[script])
         if (own === undefined) {
           // a script no release wrote here is new; one a release wrote is one you removed
-          if (!releasesSince(made).some(([, r]) => r.scripts[path]?.[script] !== undefined)) {
+          if (!efforgeWroteScript(made, path, script, stack)) {
             nextScripts[script] = cmd
             note(path, `script ${script}`)
           }

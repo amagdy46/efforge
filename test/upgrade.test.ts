@@ -475,6 +475,28 @@ it("a script an efforge release wrote moves; one you wrote stays yours", async (
   expect(mine.changes.get("package.json") ?? "").not.toContain("effect-tsgo vp check")
 })
 
+it("a script today's templates define that no release wrote for this stack is added; one you removed isn't", async () => {
+  // 0.2.0 wrote a root deploy script only for Alchemy stacks: a wrangler project made by it has none
+  const dir = await project({ infra: "none" })
+  edit(dir, "package.json", (t) => t.replace(/\n\s*"deploy": "[^"]*",?/, ""))
+  edit(dir, "efforge.jsonc", (t) =>
+    t.replace(/"efforgeVersion": "[^"]*"/, '"efforgeVersion": "0.2.0"'),
+  )
+  expect(read(dir, "package.json")).not.toContain('"deploy"')
+  const r = await check(dir)
+  expect(JSON.parse(r.changes.get("package.json") ?? "{}").scripts.deploy).toBe(
+    "pnpm --filter web run deploy",
+  )
+  // the same on an Alchemy project, where 0.2.0 wrote it: the owner removed it, so it stays gone
+  const alchemy = await project({ infra: "alchemy" })
+  edit(alchemy, "package.json", (t) => t.replace(/\n\s*"deploy": "[^"]*",?/, ""))
+  edit(alchemy, "efforge.jsonc", (t) =>
+    t.replace(/"efforgeVersion": "[^"]*"/, '"efforgeVersion": "0.2.0"'),
+  )
+  const kept = await check(alchemy)
+  expect(kept.changes.get("package.json") ?? "").not.toContain('"deploy"')
+})
+
 it("the release history has this efforge, with the pins versions.ts has", () => {
   const entry = releases[efforgeVersion]
   expect(entry, `run node scripts/history.ts for ${efforgeVersion}`).toBeDefined()

@@ -63,6 +63,8 @@ for (const database of options("database"))
 
 const deps = new Map<string, Set<string>>()
 const scripts = new Map<string, Map<string, Set<string>>>()
+/** path -> script -> the stacks that got it */
+const scriptStacks = new Map<string, Map<string, Array<Record<string, unknown>>>>()
 const records = new Map<string, Set<number>>()
 let engines: unknown = null
 let pnpm: string | undefined
@@ -79,9 +81,13 @@ for (const stack of stacks) {
         for (const n of Object.keys((pkg[field] as Record<string, string>) ?? {})) names.add(n)
       deps.set(path, names)
       const byName = scripts.get(path) ?? new Map<string, Set<string>>()
-      for (const [n, cmd] of Object.entries((pkg.scripts as Record<string, string>) ?? {}))
+      const stacksOf = scriptStacks.get(path) ?? new Map<string, Array<Record<string, unknown>>>()
+      for (const [n, cmd] of Object.entries((pkg.scripts as Record<string, string>) ?? {})) {
         byName.set(n, (byName.get(n) ?? new Set()).add(cmd))
+        stacksOf.set(n, [...(stacksOf.get(n) ?? []), stack as Record<string, unknown>])
+      }
       scripts.set(path, byName)
+      scriptStacks.set(path, stacksOf)
       if (path === "package.json") {
         engines ??= pkg.engines ?? null
         const pm = pkg.packageManager
@@ -102,6 +108,24 @@ for (const stack of stacks) {
   }
 }
 
+// A script only some stacks get: for each slot that narrows it, the values of the stacks that got
+// it; for extras, the extras each of them had (a project with any of them counts). Wider than
+// exact, so a script a release may have written is never taken for a new one.
+const narrowing = (got: ReadonlyArray<Record<string, unknown>>) => {
+  const out: Record<string, string[]> = {}
+  for (const slot of ["database", "orm", "auth", "infra", "ai"]) {
+    const all = new Set(stacks.map((s) => String((s as Record<string, unknown>)[slot])))
+    const seen = new Set(got.map((s) => String(s[slot])))
+    if (seen.size < all.size) out[slot] = [...seen].toSorted()
+  }
+  const each = got.map((s) => (s.extras as string[]) ?? [])
+  if (each.every((x) => x.length > 0)) {
+    const common = each.reduce((a, b) => a.filter((x) => b.includes(x)))
+    out.extras = common.toSorted()
+  }
+  return out
+}
+
 const sorted = <V>(m: Map<string, V>) => [...m].toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
 const entry = {
   pnpm: pnpm ?? null,
@@ -115,6 +139,18 @@ const entry = {
       p,
       Object.fromEntries(sorted(m).map(([n, s]) => [n, [...s].toSorted()])),
     ]),
+  ),
+  scriptStacks: Object.fromEntries(
+    sorted(scriptStacks)
+      .map(([p, m]) => [
+        p,
+        Object.fromEntries(
+          sorted(m)
+            .map(([n, got]) => [n, narrowing(got)] as const)
+            .filter(([, w]) => Object.keys(w).length > 0),
+        ),
+      ])
+      .filter(([, m]) => Object.keys(m as object).length > 0),
   ),
   records: Object.fromEntries(sorted(records).map(([p, s]) => [p, encodeRecord(s)])),
 }

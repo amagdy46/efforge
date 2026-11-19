@@ -34,7 +34,7 @@ So:
   `efforge.jsonc`. For everything else, `src/history.ts`: what each release generated, written by
   `scripts/history.ts` from the release's own source at release time, with a test that this
   efforge's version is in it. A release's entry has its pins, `packageManager`, `engines`, every
-  package.json's dependencies and scripts (for any stack), and for each file efforge edits in place
+  package.json's dependencies and scripts (for any stack, and for a script only some stacks get, which stacks: a script missing from a project is one the owner removed only if a release wrote it for that project's stack; otherwise `upgrade` adds it), and for each file efforge edits in place
   a fingerprint record: every run of five tokens it wrote, hashed to 24 bits (`src/record.ts`).
   Tokens, so formatting and line breaks don't count; runs, so a line the owner adds brings runs no
   release wrote. A pin, script or dependency a release wrote (since the one that made the project)
