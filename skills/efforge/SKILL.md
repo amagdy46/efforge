@@ -55,7 +55,7 @@ npx -y create-efforge@latest create my-app --json --dry-run --database=d1 --auth
 
 - `directory`: the project, absolute.
 - `nextSteps`: commands still to run, in order, each with its `cwd`. Run them. A step with `longRunning: true` is the dev server (`pnpm dev`): start it in the background or leave it to the user.
-- `env`: env vars the project reads. `set: false` means a real secret efforge wrote empty: fill it in (in `file`, `.dev.vars` or `.env` with Alchemy) before using the feature; `description` says what it is.
+- `env`: env vars the project reads. `set: false` means efforge wrote it empty: fill it in (in `file`, `.dev.vars` or `.env` with Alchemy) before using the feature; `description` says what it is. `secret: true` means the value is a secret: never print it or commit the deployed one. `info` uses the same two fields.
 - `command`: a command that creates the same stack again without prompts.
 - `warnings`: things that didn't stop the run but the user should know (git commit skipped, unsupported Node, an install a previous run left undone). Read them and tell the user.
 

@@ -34,6 +34,9 @@ const EnvVar = Schema.Struct({
   set: Schema.Boolean.annotate({
     description: "efforge already wrote a working local value; false means fill it in.",
   }),
+  secret: Schema.Boolean.annotate({
+    description: "The value is a secret: the deployed one is never printed or committed.",
+  }),
 })
 
 const Strings = Schema.Array(Schema.String)
@@ -206,7 +209,11 @@ export const InfoOutput = Schema.Struct({
       description: Schema.String,
       example: Schema.String,
       secret: Schema.Boolean.annotate({
-        description: "A real secret: efforge writes it empty, you fill it in.",
+        description: "The value is a secret: the deployed one is never printed or committed.",
+      }),
+      set: Schema.Boolean.annotate({
+        description:
+          "efforge writes a working local value when it adds it; false means fill it in.",
       }),
       when: Schema.optionalKey(When),
     }),

@@ -30,6 +30,7 @@
   "envVars": [
     {
       "name": "STORAGE_SIGNING_SECRET",
+      "secret": true,
       "example": "change-me-to-a-long-random-string",
 
       "dev": "dev-only-storage-signing-secret-replace-me",

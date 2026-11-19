@@ -92,7 +92,7 @@ export const appendBlock = (text: string | undefined, addition: string): string 
 
 /** True when `text` gives `name` a non-empty value. */
 export const assignsValue = (text: string | undefined, name: string): boolean =>
-  text !== undefined && new RegExp(`^\\s*(export\\s+)?${name}\\s*=\\s*\\S`, "m").test(text)
+  text !== undefined && new RegExp(`^\\s*(export\\s+)?${name}[ \\t]*=[ \\t]*\\S`, "m").test(text)
 
 /** The name a `NAME=value` line assigns. */
 export const nameOf = (line: string): string =>

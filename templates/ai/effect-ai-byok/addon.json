@@ -254,6 +254,7 @@
   "envVars": [
     {
       "name": "LLM_ENCRYPTION_KEY",
+      "secret": true,
       "example": "openssl rand -base64 32",
 
       "dev": "ZGV2LW9ubHktbGxtLWtleS1yZXBsYWNlLW1lLTMyISE=",
@@ -292,6 +293,7 @@
     },
     {
       "name": "LLM_API_KEY",
+      "secret": true,
       "example": "sk-...",
       "description": "Provider API key (not needed for a local Ollama); a Worker secret in production",
       "when": {

@@ -56,7 +56,7 @@ A signal in the first fraction of a second, before efforge has started, can end 
 
 `directory` is absolute. `files` lists everything written, sorted. With `--preset`, `stack` is what the preset chose (with any stack flag you gave over it), and `command` gives it flag by flag: a preset's contents can change between versions, so nothing records its name. `installed` says whether `pnpm install` ran; `git` is `committed`, `initialized` (git init worked, the commit didn't) or `skipped`. `command` recreates the same stack without prompts.
 
-`env` lists every env var the project reads: `file` is where the local value lives (`.dev.vars`, or `.env` with Alchemy) and `set` says whether efforge wrote a value there that works locally. When `set` is false the variable is a real secret (an API key): efforge wrote it empty, in `file` and in `.env.example`, and the feature that reads it fails until it is filled in. Production values are set as the description says, usually with `wrangler secret put`.
+`env` lists every env var the project reads: `file` is where the local value lives (`.dev.vars`, or `.env` with Alchemy) and `set` says whether efforge wrote a value there that works locally. When `set` is false (an API key only you have), efforge wrote it empty, in `file` and in `.env.example`, and the feature that reads it fails until it is filled in. `secret` says the value is a secret (a key, a password, a signing secret): the deployed value is set with `wrangler secret put` or the deploy env, and is never printed or committed. A secret can still have a local value (`BETTER_AUTH_SECRET` does: `secret: true`, `set: true`). These two fields mean the same in `create`, `add` and `info`.
 
 `nextSteps` are the commands still to run, in order, each with the directory to run it in (`cwd`). A step with `longRunning: true` (the dev server) doesn't exit on its own: start it in the background or leave it to the user.
 
@@ -96,13 +96,15 @@ npx -y create-efforge create my-app --json --database=d1 --auth=better-auth
       "name": "BETTER_AUTH_SECRET",
       "description": "Signs sessions and cookies (production: a Worker secret, `wrangler secret put BETTER_AUTH_SECRET` or the deploy env with Alchemy)",
       "file": ".dev.vars",
-      "set": true
+      "set": true,
+      "secret": true
     },
     {
       "name": "BETTER_AUTH_URL",
       "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port).",
       "file": ".dev.vars",
-      "set": true
+      "set": true,
+      "secret": false
     }
   ],
   "nextSteps": [
@@ -160,19 +162,22 @@ npx -y create-efforge create my-app --json --dry-run
       "name": "DATABASE_URL",
       "description": "Used by `pnpm db:migrate` and drizzle-kit, read from the shell; unset, they use the docker-compose database. The running app connects through the HYPERDRIVE binding.",
       "file": ".dev.vars",
-      "set": true
+      "set": true,
+      "secret": true
     },
     {
       "name": "BETTER_AUTH_SECRET",
       "description": "Signs sessions and cookies (production: a Worker secret, `wrangler secret put BETTER_AUTH_SECRET` or the deploy env with Alchemy)",
       "file": ".dev.vars",
-      "set": true
+      "set": true,
+      "secret": true
     },
     {
       "name": "BETTER_AUTH_URL",
       "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port).",
       "file": ".dev.vars",
-      "set": true
+      "set": true,
+      "secret": false
     }
   ],
   "nextSteps": [
@@ -250,13 +255,15 @@ npx -y create-efforge add email --json --cwd my-app
       "name": "MAIL_FROM",
       "description": "Sender address; its domain must be enabled for Cloudflare Email Sending (wrangler email sending enable <domain>)",
       "file": ".dev.vars",
-      "set": true
+      "set": true,
+      "secret": false
     },
     {
       "name": "MAIL_TRANSPORT",
       "description": "cloudflare (default) sends through the EMAIL binding; console prints emails instead (the local value)",
       "file": ".dev.vars",
-      "set": true
+      "set": true,
+      "secret": false
     }
   ],
   "nextSteps": [
@@ -349,31 +356,36 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
       "name": "LLM_PROVIDER",
       "description": "anthropic | openai | openrouter | ollama",
       "file": ".dev.vars",
-      "set": true
+      "set": true,
+      "secret": false
     },
     {
       "name": "LLM_MODEL",
       "description": "Model id for the provider",
       "file": ".dev.vars",
-      "set": true
+      "set": true,
+      "secret": false
     },
     {
       "name": "LLM_API_KEY",
       "description": "Provider API key (not needed for a local Ollama); a Worker secret in production",
       "file": ".dev.vars",
-      "set": true
+      "set": false,
+      "secret": true
     },
     {
       "name": "LLM_BASE_URL",
       "description": "Optional OpenAI-compatible endpoint (openai, ollama)",
       "file": ".dev.vars",
-      "set": true
+      "set": true,
+      "secret": false
     },
     {
       "name": "STORAGE_SIGNING_SECRET",
       "description": "HMAC secret for signed download URLs (wrangler secret put STORAGE_SIGNING_SECRET)",
       "file": ".dev.vars",
-      "set": true
+      "set": true,
+      "secret": true
     }
   ],
   "nextSteps": [
@@ -655,13 +667,15 @@ npx -y create-efforge info email --json --cwd my-app
       "name": "MAIL_FROM",
       "description": "Sender address; its domain must be enabled for Cloudflare Email Sending (wrangler email sending enable <domain>)",
       "example": "noreply@example.com",
-      "secret": false
+      "secret": false,
+      "set": true
     },
     {
       "name": "MAIL_TRANSPORT",
       "description": "cloudflare (default) sends through the EMAIL binding; console prints emails instead (the local value)",
       "example": "cloudflare",
-      "secret": false
+      "secret": false,
+      "set": true
     }
   ],
   "requires": [],
@@ -1310,19 +1324,22 @@ npx -y create-efforge create my-app --json
         "name": "DATABASE_URL",
         "description": "Used by `pnpm db:migrate` and drizzle-kit, read from the shell; unset, they use the docker-compose database. The running app connects through the HYPERDRIVE binding.",
         "file": ".dev.vars",
-        "set": true
+        "set": true,
+        "secret": true
       },
       {
         "name": "BETTER_AUTH_SECRET",
         "description": "Signs sessions and cookies (production: a Worker secret, `wrangler secret put BETTER_AUTH_SECRET` or the deploy env with Alchemy)",
         "file": ".dev.vars",
-        "set": true
+        "set": true,
+        "secret": true
       },
       {
         "name": "BETTER_AUTH_URL",
         "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port).",
         "file": ".dev.vars",
-        "set": true
+        "set": true,
+        "secret": false
       }
     ],
     "nextSteps": [
@@ -1413,19 +1430,22 @@ npx -y create-efforge create my-app --json
         "name": "DATABASE_URL",
         "description": "Used by `pnpm db:migrate` and drizzle-kit, read from the shell; unset, they use the docker-compose database. The running app connects through the HYPERDRIVE binding.",
         "file": ".dev.vars",
-        "set": true
+        "set": true,
+        "secret": true
       },
       {
         "name": "BETTER_AUTH_SECRET",
         "description": "Signs sessions and cookies (production: a Worker secret, `wrangler secret put BETTER_AUTH_SECRET` or the deploy env with Alchemy)",
         "file": ".dev.vars",
-        "set": true
+        "set": true,
+        "secret": true
       },
       {
         "name": "BETTER_AUTH_URL",
         "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port).",
         "file": ".dev.vars",
-        "set": true
+        "set": true,
+        "secret": false
       }
     ],
     "nextSteps": [
@@ -1785,25 +1805,29 @@ npx -y create-efforge add ai --json --cwd my-app
         "name": "LLM_PROVIDER",
         "description": "anthropic | openai | openrouter | ollama",
         "file": ".dev.vars",
-        "set": true
+        "set": true,
+        "secret": false
       },
       {
         "name": "LLM_MODEL",
         "description": "Model id for the provider",
         "file": ".dev.vars",
-        "set": true
+        "set": true,
+        "secret": false
       },
       {
         "name": "LLM_API_KEY",
         "description": "Provider API key (not needed for a local Ollama); a Worker secret in production",
         "file": ".dev.vars",
-        "set": true
+        "set": false,
+        "secret": true
       },
       {
         "name": "LLM_BASE_URL",
         "description": "Optional OpenAI-compatible endpoint (openai, ollama)",
         "file": ".dev.vars",
-        "set": true
+        "set": true,
+        "secret": false
       }
     ],
     "nextSteps": [

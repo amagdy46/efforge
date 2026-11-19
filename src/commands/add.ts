@@ -793,6 +793,7 @@ export const addAddons = (
         description: v.description,
         file: envFile,
         set: v.dev !== undefined || assignsValue(local, v.name),
+        secret: v.secret === true,
       })),
     )
 

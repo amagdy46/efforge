@@ -63,6 +63,7 @@ export interface AddonInfo {
     readonly description: string
     readonly example: string
     readonly secret: boolean
+    readonly set: boolean
     readonly when?: When
   }>
   readonly requires: ReadonlyArray<Requirement>
@@ -157,7 +158,9 @@ export const describeAddon = (m: AddonManifest, stack?: StackConfig): AddonInfo 
           name: v.name,
           description: v.description,
           example: v.example,
-          secret: v.dev === undefined,
+          secret: v.secret === true,
+          // the same meaning as in create and add: efforge writes a value that works locally
+          set: v.dev !== undefined,
         },
         cond(v.when),
       ),
@@ -320,7 +323,8 @@ export const renderInfo = (
     a.env.length === 0
       ? ["none"]
       : a.env.map(
-          (v) => `${v.name}${v.secret ? pc.dim(" (a secret you fill in)") : ""}${whenText(v.when)}`,
+          (v) =>
+            `${v.name}${pc.dim(v.secret && !v.set ? " (a secret; you fill it in)" : v.secret ? " (a secret; a local value is written)" : !v.set ? " (you fill it in)" : "")}${whenText(v.when)}`,
         ),
   )
   row("card", [

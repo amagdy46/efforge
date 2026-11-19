@@ -229,7 +229,11 @@
           },
           "secret": {
             "type": "boolean",
-            "description": "A real secret: efforge writes it empty, you fill it in."
+            "description": "The value is a secret: the deployed one is never printed or committed."
+          },
+          "set": {
+            "type": "boolean",
+            "description": "efforge writes a working local value when it adds it; false means fill it in."
           },
           "when": {
             "type": "object",
@@ -246,7 +250,8 @@
           "name",
           "description",
           "example",
-          "secret"
+          "secret",
+          "set"
         ],
         "additionalProperties": true
       }

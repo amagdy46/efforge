@@ -271,3 +271,73 @@ it("completions cover the new commands and the preset values", () => {
   expect(bash).toContain("graph")
   expect(bash).toContain("minimal")
 })
+
+it("an env var has the same fields in create, add and info: secret is a secret, set is a local value written", async () => {
+  type Env = { name: string; description: string; set: boolean; secret: boolean }
+  const shared = ["name", "description", "set", "secret"] as const
+  const pick = (v: Env) => Object.fromEntries(shared.map((k) => [k, v[k]]))
+  const fromInfo = new Map<string, Env>()
+  const seen: Env[] = []
+  // create: two stacks between them have every env var
+  for (const flags of [
+    ["--extras=storage,email", "--ai=effect-ai-byok", "--infra=alchemy"],
+    ["--database=d1", "--orm=effect-sql", "--auth=better-auth", "--ai=effect-ai-byok"],
+  ]) {
+    const r = await cli([
+      "create",
+      "app",
+      "--json",
+      "--dry-run",
+      "--no-install",
+      "--no-git",
+      ...flags,
+    ])
+    const doc = json(r.out) as { stack: Record<string, unknown>; env: Env[] }
+    for (const v of doc.env) for (const k of shared) expect(v, v.name).toHaveProperty(k)
+    seen.push(...doc.env)
+  }
+  // add, on a project without any
+  await create("bare", "--database=none")
+  const added = await cli([
+    "add",
+    "database/postgres",
+    "orm/drizzle",
+    "auth/better-auth",
+    "ai",
+    "storage",
+    "email",
+    "--cwd",
+    "bare",
+    "--dry-run",
+    "--json",
+    "--no-install",
+  ])
+  seen.push(...(json(added.out) as { env: Env[] }).env)
+  for (const id of [
+    "database/postgres",
+    "auth/better-auth",
+    "auth/better-auth-orgs",
+    "ai",
+    "storage",
+    "email",
+    "infra/alchemy",
+  ]) {
+    const r = await cli(["info", id, "--json"])
+    for (const v of (json(r.out) as { env: Env[] }).env) {
+      for (const k of shared) expect(v, `info ${id} ${v.name}`).toHaveProperty(k)
+      // the AI add-on's settings differ by stack, each name once
+      if (!fromInfo.has(v.name)) fromInfo.set(v.name, v)
+    }
+  }
+  for (const v of seen) {
+    const i = fromInfo.get(v.name)
+    expect(i, v.name).toBeDefined()
+    expect(pick(v), v.name).toEqual(pick(i as Env))
+  }
+  // what a secret is, by name: a key, a password, a signing secret, a connection string
+  for (const v of fromInfo.values())
+    expect(v.secret, v.name).toBe(/SECRET|_KEY$|TOKEN|PASSWORD|DATABASE_URL/.test(v.name))
+  expect(fromInfo.get("BETTER_AUTH_SECRET")).toMatchObject({ secret: true, set: true })
+  expect(fromInfo.get("LLM_API_KEY")).toMatchObject({ secret: true, set: false })
+  expect(fromInfo.get("MAIL_FROM")).toMatchObject({ secret: false, set: true })
+})

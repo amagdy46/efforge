@@ -93,8 +93,14 @@ export const AddonManifest = Schema.Struct({
       /** A production-style example, for the docs. */
       example: Schema.String,
       /**
+       * Its value is a secret (a key, a password, a signing secret): the deployed value is set
+       * with `wrangler secret put` or the deploy env, and is never printed or committed.
+       */
+      secret: Schema.optionalKey(Schema.Boolean),
+      /**
        * The value that works for local development, written to `.env.example` and to the local
-       * settings file (`.dev.vars`, `.env` with Alchemy). Absent: a real secret, written empty.
+       * settings file (`.dev.vars`, `.env` with Alchemy). Absent: there is none, so it is written
+       * empty for the user to fill in.
        */
       dev: Schema.optionalKey(Schema.String),
       description: Schema.String,

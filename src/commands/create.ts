@@ -232,6 +232,8 @@ export interface EnvVar {
   readonly file: string
   /** efforge already wrote a local value there; false means fill it in before it is used. */
   readonly set: boolean
+  /** The value is a secret: the deployed one is never printed or committed. */
+  readonly secret: boolean
 }
 
 /** Every env var of `stack`, in add-on order, as `create` leaves them. */
@@ -241,8 +243,9 @@ export const envFor = (stack: StackConfig, addons: ReadonlyMap<string, LoadedAdd
       name: v.name,
       description: v.description,
       file: localEnvFile(stack),
-      // efforge wrote a value that works locally; a real secret is written empty
+      // efforge wrote a value that works locally; one with none is written empty
       set: v.dev !== undefined,
+      secret: v.secret === true,
     })),
   )
 
