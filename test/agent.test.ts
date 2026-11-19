@@ -508,8 +508,10 @@ describe("an agent drives efforge without a terminal", { timeout: 120_000 }, () 
     const done = ok(AddOutput, [...args, "--cwd", "noinst"])
     expect(done).toMatchObject({ installed: true, added: [] })
     expect(done.nextSteps.map((x) => x.command)).toEqual(["pnpm db:migrate"])
+    // nothing left to install; the local D1 still lacks its migrations, so that step stays
     const quiet = ok(AddOutput, [...args, "--cwd", "noinst"])
-    expect(quiet).toMatchObject({ installed: false, nextSteps: [], warnings: [] })
+    expect(quiet).toMatchObject({ installed: false, warnings: [] })
+    expect(quiet.nextSteps.map((x) => x.command)).toEqual(["pnpm db:migrate"])
   })
 
   it("an interrupted add --json prints one document with the files and the install it owes", async () => {
