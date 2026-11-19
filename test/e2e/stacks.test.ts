@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process"
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -711,6 +712,106 @@ const upgradeOld = (ref: string, flags: string, edited: boolean): Effect.Effect<
     rmSync(work, { recursive: true, force: true })
   })
 
+/** A line as the guide quotes it and as a run prints it: versions and counts left out. */
+const shapeOf = (line: string) =>
+  line
+    .replace(/\d+\.\d+\.\d+/g, "<version>")
+    .replace(/\d+/g, "<n>")
+    .trimEnd()
+
+/**
+ * The `<!-- output: <command> -->` blocks of docs/upgrading.md's worked example, each in order:
+ * its lines, with `...` where the guide leaves lines out.
+ */
+const guideBlocks = (): Map<string, string[]> =>
+  new Map(
+    [
+      ...readFileSync(join(repo, "docs/upgrading.md"), "utf8").matchAll(
+        /<!-- output: (.+?) -->\n```text\n([\s\S]*?)```/g,
+      ),
+    ].map((m) => [m[1] as string, (m[2] as string).split("\n").filter((l) => l.trim() !== "")]),
+  )
+
+/** The quoted lines `block` has that `printed` lacks, in order (`...` skips any number of lines). */
+const notPrinted = (block: ReadonlyArray<string>, printed: string): string[] => {
+  const lines = printed.split("\n").map(shapeOf)
+  const missing: string[] = []
+  let at = 0
+  // the first quoted line may come anywhere
+  let gap = true
+  for (const quoted of block) {
+    if (quoted.trim() === "...") {
+      gap = true
+      continue
+    }
+    const want = shapeOf(quoted)
+    // the next line, or after a `...` any later one
+    const found = gap
+      ? lines.indexOf(want, at)
+      : lines.slice(at).findIndex((l) => l.trim() !== "") + at
+    if (found === -1 || lines[found] !== want) missing.push(quoted)
+    else at = found + 1
+    gap = false
+  }
+  return missing
+}
+
+/**
+ * docs/upgrading.md walks a 0.2.0 project through doctor, upgrade --check and upgrade. That project
+ * is the committed fixture (test/fixtures/v0.2.0: the files add reads, and the rest of what 0.2.0
+ * generated), installed, with the owner's renamed dashboard heading committed. Each quoted block is
+ * held to what this efforge prints for it, counts and versions aside.
+ */
+const upgradingGuide = (): Effect.Effect<void, unknown> =>
+  Effect.gen(function* () {
+    const blocks = guideBlocks()
+    if ([...blocks.keys()].join(",") !== "doctor,upgrade --check,upgrade")
+      throw new Error(`docs/upgrading.md output blocks: ${[...blocks.keys()].join(", ")}`)
+    mkdirSync(e2eRoot, { recursive: true })
+    const work = mkdtempSync(`${e2eRoot}/upgrading-guide-`)
+    const dir = join(work, "old-db")
+    const fixtures = join(repo, "test/fixtures/v0.2.0")
+    cpSync(join(fixtures, "d1-effect-sql-auth"), dir, { recursive: true })
+    cpSync(join(fixtures, "d1-effect-sql-auth-rest"), dir, { recursive: true })
+    for (const f of filesUnder(dir).filter((f) => f.endsWith("/gitignore")))
+      cpSync(f, f.replace(/gitignore$/, ".gitignore"))
+    for (const f of filesUnder(dir).filter((f) => f.endsWith("/gitignore"))) rmSync(f)
+    const dashboard = join(dir, "apps/web/src/routes/app/index.tsx")
+    writeFileSync(
+      dashboard,
+      readFileSync(dashboard, "utf8").replace(">Dashboard</h1>", ">Acme dashboard</h1>"),
+    )
+    yield* Effect.try(() => sh(dir, "pnpm install"))
+    yield* Effect.try(() =>
+      sh(
+        dir,
+        "git init -q && git add -A && git -c user.name=e2e -c user.email=e2e@localhost commit -qm owner",
+      ),
+    )
+    const efforge = (args: string) => {
+      const r = spawnSync(`node ${JSON.stringify(join(repo, "src/bin.ts"))} ${args}`, {
+        cwd: dir,
+        shell: true,
+        encoding: "utf8",
+        env: { ...process.env, NO_COLOR: "1", CI: "1" },
+      })
+      return { out: `${r.stdout}${r.stderr}`, code: r.status }
+    }
+    const problems: string[] = []
+    for (const [command, exit] of [
+      ["doctor", 2],
+      ["upgrade --check", 2],
+      ["upgrade", 0],
+    ] as const) {
+      const { out, code } = efforge(command)
+      if (code !== exit) problems.push(`${command} exited ${code}, the guide says ${exit}`)
+      for (const line of notPrinted(blocks.get(command) ?? [], out))
+        problems.push(`${command} no longer prints:\n  ${line}\n--- it printed:\n${out}`)
+    }
+    if (problems.length > 0) throw new Error(problems.join("\n\n"))
+    rmSync(work, { recursive: true, force: true })
+  })
+
 describe("upgrade an old project", () => {
   const releases: Array<[string, string, string]> = [
     ["0.2.0", "v0.2.0", "--database=d1 --orm=effect-sql"],
@@ -727,6 +828,11 @@ describe("upgrade an old project", () => {
       "--database=d1 --orm=drizzle --auth=better-auth --extras=storage,email,realtime",
     ],
   ]
+  it.effect(
+    "docs/upgrading.md's 0.2.0 example: each quoted line is what doctor, upgrade --check and upgrade print",
+    () => upgradingGuide(),
+    { timeout: 20 * 60 * 1000 },
+  )
   for (const [version, ref, flags] of releases)
     for (const edited of [false, true])
       it.effect(

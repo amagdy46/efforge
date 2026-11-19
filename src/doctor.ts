@@ -1010,7 +1010,7 @@ const gatesCheck: Check = {
   id: "gates",
   title: "The session gates, first",
   run: (ctx) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       const stack = ctx.manifest?.stack
       if (stack === undefined) return skipped("efforge.jsonc isn't valid, so the stack is unknown.")
       if (stack.auth === "none")
@@ -1046,13 +1046,26 @@ const gatesCheck: Check = {
           lines:
             'import { requireApiSession } from "./api-session"\n\nexport const workerRoutes: ReadonlyArray<WorkerRoute> = [requireApiSession, ...]',
         })
-      if (problems.length > 0)
+      if (problems.length > 0) {
+        // a project made before the gates: upgrade brings each one, first in its list
+        const plan = yield* ctx.plan
+        const gateOf = (file: string) => (file === START ? "sessionGate" : "requireApiSession")
+        const brought = problems.every((p) => {
+          const after = plan?.changes.get(p.file)
+          const list =
+            after === undefined
+              ? undefined
+              : firstOf(p.file, after, p.file === START ? "functionMiddleware" : "workerRoutes")
+          return list?.first === gateOf(p.file)
+        })
+        const fix = brought ? upgradeFix(ctx, plan) : null
         return {
           status: "fail" as const,
-          message: `${problems.map((p) => `${p.file}: ${p.problem}`).join(". ")}. Put it back first in the list (details.lines).`,
-          fix: null,
-          details: { problems },
+          message: `${problems.map((p) => `${p.file}: ${p.problem}`).join(". ")}. ${brought ? "upgrade adds the gates, first in their lists." : "Put it back first in the list (details.lines)."}`,
+          fix,
+          details: { problems, ...(brought && fix === null ? upgradeFacts(ctx, plan) : {}) },
         }
+      }
       if (unread.length > 0)
         return {
           status: "unverified" as const,
