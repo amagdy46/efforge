@@ -13,7 +13,7 @@ import { slots } from "./slots.ts"
 // caller made (other than a clear typo), or repeat the caller's own command, is refused: the
 // error then carries `fix: null` and its facts.
 
-export const commands = ["create", "add", "list"] as const
+export const commands = ["create", "add", "list", "info", "graph"] as const
 export type Verb = (typeof commands)[number]
 
 /**
@@ -105,8 +105,13 @@ const known: Record<Verb, { readonly values: string[]; readonly booleans: string
     booleans: ["overwrite", "dry-run", "json", "install", ...globalBooleans],
   },
   list: { values: ["cwd", ...globalValues], booleans: ["json", ...globalBooleans] },
+  info: { values: ["cwd", ...globalValues], booleans: ["json", ...globalBooleans] },
+  graph: {
+    values: ["cwd", "format", ...globalValues],
+    booleans: ["json", "write", ...globalBooleans],
+  },
 }
-const allValueFlags = new Set(["preset", ...stackFlags, "cwd", ...globalValues])
+const allValueFlags = new Set(["preset", ...stackFlags, "cwd", "format", ...globalValues])
 const allBooleans = new Set(Object.values(known).flatMap((k) => k.booleans))
 const shortFlags: Record<string, string> = { y: "yes", h: "help", v: "version" }
 const truthy = new Set(["true", "yes", "on", "1", "y"])
@@ -316,7 +321,8 @@ const wellFormed = (c: Intent): boolean => {
       if (values.some((x) => !options.includes(x))) return false
     }
   }
-  if (c.verb === "list" && c.operands.length > 0) return false
+  if ((c.verb === "list" || c.verb === "graph") && c.operands.length > 0) return false
+  if (c.verb === "info" && c.operands.length > 1) return false
   if (c.verb === "create") {
     if (c.operands.length > 1) return false
     if (c.word === undefined) {
@@ -367,7 +373,7 @@ export interface May {
   readonly cwd?: boolean
   /** `--overwrite` may be added (`OverlayConflict`: the caller sees what it discards). */
   readonly overwrite?: boolean
-  /** `add` may become `list` with the same `--json` and `--cwd` (`NoAddonIds`, read-only). */
+  /** `add` or `info` may become `list` with the same `--json` and `--cwd` (`NoAddonIds`, read-only). */
   readonly list?: boolean
   /** The same command again, after something else changed (`PnpmMissing`). */
   readonly again?: boolean
@@ -376,7 +382,7 @@ export interface May {
 /** Whether `c` keeps everything `o` asked for. */
 const keeps = (o: Intent, c: Intent, may: May): boolean => {
   if (o.verb === undefined || c.verb === undefined) return false
-  const toList = may.list === true && o.verb === "add" && c.verb === "list"
+  const toList = may.list === true && (o.verb === "add" || o.verb === "info") && c.verb === "list"
   if (c.verb !== o.verb && !toList) return false
   if ((o.word === undefined) !== (c.word === undefined)) return false
   const vo = view(o)
@@ -402,8 +408,8 @@ const keeps = (o: Intent, c: Intent, may: May): boolean => {
     const to = resolve(String(vc.set.get("cwd") ?? "."))
     if (from !== to && !(may.cwd === true && existsSync(join(to, "efforge.jsonc")))) return false
   }
-  if (c.verb === "list") return c.operands.length === 0
-  if (c.verb === "add") {
+  if (c.verb === "list" || c.verb === "graph") return c.operands.length === 0
+  if (c.verb === "add" || c.verb === "info") {
     if (o.operands.length !== c.operands.length) return false
     return o.operands.every((id, k) => {
       const to = c.operands[k] as string

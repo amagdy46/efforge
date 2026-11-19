@@ -69,7 +69,7 @@ import {
   pnpmWildcardOverrides,
   versions,
 } from "../versions.ts"
-import { type EnvVar, PnpmMissing, TemplatesDir } from "./create.ts"
+import { elapsed, type EnvVar, PnpmMissing, TemplatesDir } from "./create.ts"
 
 export class NotAnEfforgeProject extends Schema.TaggedError<NotAnEfforgeProject>()(
   "NotAnEfforgeProject",
@@ -230,7 +230,7 @@ const isNewPackageJson = (target: string) => target.endsWith("/package.json")
 const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
 /** `email`, `extras/email`, `ai/effect-ai-byok`, `ai=effect-ai-byok`, `ai` (a slot with one option) -> slot + option. */
-const parseId = (
+export const parseId = (
   raw: string,
 ): Effect.Effect<{ slot: SlotDef; option: string }, UnknownAddon | RemoveNotSupported> => {
   const id = raw.trim().toLowerCase()
@@ -275,7 +275,7 @@ const parseId = (
 }
 
 /** Applies `ids` to `stack`. Single-select slots may only go from `none` to a value. */
-const applyIds = (
+export const applyIds = (
   stack: StackConfig,
   ids: ReadonlyArray<string>,
 ): Effect.Effect<
@@ -1158,6 +1158,7 @@ export const addHandler = (input: {
     pending: string[]
     partial: object | undefined
   } = { phase: "planning", pending: [], partial: undefined }
+  const start = performance.now()
   return Effect.gen(function* () {
     const path = yield* Path.Path
     const fs = yield* FileSystem.FileSystem
@@ -1335,7 +1336,7 @@ export const addHandler = (input: {
         `${input.dryRun ? "Would raise" : "Raised"} packageManager from ${result.packageManager.from} to ${result.packageManager.to}: older pnpm ignores the overrides that keep Effect's packages on one version.`,
       )
     for (const note of result.notes) yield* io.warn(note)
-    if (input.dryRun) return yield* io.outro(pc.dim("dry run: nothing written"))
+    if (input.dryRun) return yield* io.outro(pc.dim("Dry run: nothing written."))
 
     yield* complete
     const width = Math.max(0, ...result.envVars.map((x) => x.name.length))
@@ -1360,7 +1361,9 @@ export const addHandler = (input: {
     // outside the box, so a narrow terminal does not break the links
     const docs = result.added.flatMap((a) => (a.docs === undefined ? [] : [a.docs]))
     if (docs.length > 0) yield* io.info(`Docs:\n${docs.join("\n")}`)
-    yield* io.outro(`${pc.green("Done.")} ${pc.dim("Review the changes with")} git diff`)
+    yield* io.outro(
+      `${pc.green("Done")} in ${elapsed(start)}. ${pc.dim("Review the changes with")} git diff`,
+    )
   }).pipe(
     // under --json a stopped add still prints its one document (Ctrl-C, SIGTERM, a timeout)
     Effect.onInterrupt(() =>

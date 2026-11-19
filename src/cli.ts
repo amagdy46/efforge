@@ -1,8 +1,9 @@
-import { Console, Effect, Stdio } from "effect"
-import { type CliError, Command, Completions } from "effect/cli"
+import { Console, Effect, Option, Stdio } from "effect"
+import { type CliError, CliOutput, Command, Completions } from "effect/cli"
 import { BIN, type ErrorCode, type Failure, Invocation, printSuccess, report } from "./contract.ts"
 import { addCommand } from "./commands/add.ts"
 import { createCommand, createConfig, createHandler, presetFailure } from "./commands/create.ts"
+import { infoCommand } from "./commands/info.ts"
 import { listCommand } from "./commands/list.ts"
 import { commands, fix, intentOf, meantFlag, projectAbove, spelledOut } from "./fix.ts"
 import { slots } from "./slots.ts"
@@ -13,7 +14,7 @@ export const root = Command.make("create-efforge", createConfig, createHandler).
   Command.withDescription(
     "Scaffold an Effect + TanStack Start app on Cloudflare with database, auth and services already wired together",
   ),
-  Command.withSubcommands([createCommand, addCommand, listCommand]),
+  Command.withSubcommands([createCommand, addCommand, listCommand, infoCommand]),
   Command.withExamples([
     {
       command: "npm create efforge my-app",
@@ -32,6 +33,7 @@ export const root = Command.make("create-efforge", createConfig, createHandler).
       command: "npx create-efforge add email storage",
       description: "Add add-ons to an existing project",
     },
+    { command: "npx create-efforge info email", description: "What one add-on adds and needs" },
   ]),
 )
 
@@ -49,6 +51,7 @@ const probe = Command.make("create-efforge", createConfig).pipe(
     Command.withHandler(createCommand, () => Effect.void),
     Command.withHandler(addCommand, () => Effect.void),
     Command.withHandler(listCommand, () => Effect.void),
+    Command.withHandler(infoCommand, () => Effect.void),
   ]),
 )
 
@@ -261,7 +264,49 @@ export const completionScript = (shell: "bash" | "zsh" | "fish" | "powershell"):
   }
 }
 
-const runRoot = Command.runWith(root, { version: efforgeVersion })
+// --- Help ----------------------------------------------------------------------------
+// Effect's help lists the global flags with every value in the flag's column, which pushes every
+// description to column 70 and the lines past 150, and it starts EXAMPLES without a blank line.
+
+const globalFlagDocs: Readonly<Record<string, { type: string; description: string }>> = {
+  completions: {
+    type: "<shell>",
+    description: "Print a shell completion script: bash, zsh, fish or powershell",
+  },
+  "log-level": {
+    type: "<level>",
+    description: "Minimum log level: all, trace, debug, info, warn, error, fatal or none",
+  },
+}
+
+/** Effect's help formatter, with short global flags and a blank line before EXAMPLES. */
+export const helpFormatter = (base: CliOutput.Formatter): CliOutput.Formatter => ({
+  formatCliError: (e) => base.formatCliError(e),
+  formatError: (e) => base.formatError(e),
+  formatErrors: (es) => base.formatErrors(es),
+  formatVersion: (name, version) => base.formatVersion(name, version),
+  formatHelpDoc: (doc) =>
+    base
+      .formatHelpDoc({
+        ...doc,
+        ...(doc.globalFlags === undefined
+          ? {}
+          : {
+              globalFlags: doc.globalFlags.map((f) => {
+                const short = globalFlagDocs[f.name]
+                return short === undefined
+                  ? f
+                  : { ...f, type: short.type, description: Option.some(short.description) }
+              }),
+            }),
+      })
+      .replace(/([^\n])\n((?:\S*\[1m)?EXAMPLES)/, "$1\n\n$2"),
+})
+
+const runRoot = (args: ReadonlyArray<string>) =>
+  Command.runWith(root, { version: efforgeVersion })(args).pipe(
+    Effect.provide(CliOutput.layer(helpFormatter(CliOutput.defaultFormatter()))),
+  )
 const runProbe = Command.runWith(probe, { version: efforgeVersion, renderErrors: false })
 
 /** Runs the CLI with explicit arguments (the entry point reads them from Stdio; tests pass them). */

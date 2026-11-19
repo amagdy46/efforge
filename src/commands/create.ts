@@ -589,9 +589,7 @@ export const createConfig = {
     Argument.optional,
   ),
   preset: Flag.Literals("preset", presetIds).pipe(
-    Flag.withDescription(
-      `Start from a preset; a stack flag overrides its slot: ${presets.map((p) => `${p.id} (${p.description})`).join("; ")}`,
-    ),
+    Flag.withDescription("Start from a preset (list shows them); a stack flag overrides its slot"),
     Flag.optional,
   ),
   runtime: slotFlag("runtime"),
