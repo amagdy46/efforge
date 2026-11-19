@@ -51,12 +51,13 @@ const BetterAuthLive = Layer.effect(
     })
     // Better Auth finishes starting in a promise (`$context`), which under `pnpm dev` loads its
     // database adapter with a dynamic import: I/O that belongs to the request that built this layer.
-    // workerd cancels a request's I/O when it ends, so if that request ends first (a WebSocket
-    // upgrade), the promise never settles and every later sign-in fails. `waitUntil` keeps that
-    // request alive until Better Auth has started. Do not await it here instead: the layer is built
-    // once per isolate, so every request that arrives meanwhile would wait on work owned by another
-    // request, and workerd fails it with "the Worker's code had hung". On Workers, never await a
-    // promise across requests; keep layer construction synchronous and hand slow work to waitUntil.
+    // workerd cancels a request's I/O when it ends, so if that request ends first (a Worker route
+    // that never needs a session, such as a storage download), the promise never settles and every
+    // later sign-in fails. `waitUntil` keeps that request alive until Better Auth has started. Do
+    // not await it here instead: the layer is built once per isolate, so every request that arrives
+    // meanwhile would wait on work owned by another request, and workerd fails it with "the
+    // Worker's code had hung". On Workers, never await a promise across requests; keep layer
+    // construction synchronous and hand slow work to waitUntil.
     waitUntil(auth.$context.then(ignore, ignore))
     return auth
   }),
