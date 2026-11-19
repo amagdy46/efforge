@@ -94,7 +94,7 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 
 - Ctrl-C or Escape in `add`'s picker exits 130 with "Cancelled. Nothing written.", like every other prompt; it printed "This is a bug in efforge" and exited 1. A test finds every prompt in the source and cancels at each.
 - Every prompt and every line of ordinary output fits 80 columns: the preset question wrapped at 80 and 100, and so did the picker's hints. Prose is wrapped under the guide, and a command too long for the line is printed whole on its own line. A test draws each prompt as a terminal does and fails on a wrapped line.
-- `info --json` said `secret: false` for `BETTER_AUTH_SECRET`, `STORAGE_SIGNING_SECRET` and `LLM_ENCRYPTION_KEY`. `secret` now means the value is a secret (never print or commit the deployed one), and `set` means efforge wrote a local value, with the same meaning in `create`, `add` and `info`, which all give both.
+- `info --json` said `secret: false` for `BETTER_AUTH_SECRET`, `STORAGE_SIGNING_SECRET` and `LLM_ENCRYPTION_KEY`. `secret` now means the value is a secret (never print or commit the deployed one), and `set` means efforge wrote a local value, with the same meaning in `create`, `add` and `info`, which all give both. `doctor`'s `env` check gives each variable the same two fields.
 - `add` reported `set: true` for an empty secret such as `LLM_API_KEY` when another line followed it in the local settings file.
 - `-- create`, `-- add` and the other commands after `--` made a project of that name; a word after `--` is an argument, so efforge now refuses it and says to put the command before `--`.
 - `--preset=SaaS` and `--database=D1` get the lower-case value as their fix.
