@@ -1,11 +1,14 @@
 import { spawn, spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve as resolvePath } from "node:path"
 import { NodeFileSystem, NodeServices } from "@effect/platform-node"
 import { describe, it } from "@effect/vitest"
 import { Effect, FileSystem, Path } from "effect"
 import { loadAddons } from "../../src/addon.ts"
 import { addAddons } from "../../src/commands/add.ts"
+import { projectGraph } from "../../src/commands/graph.ts"
+import { writeGraph } from "../../src/graph.ts"
+import { type Preset, presetById } from "../../src/presets.ts"
 import { generate } from "../../src/generate.ts"
 import { ROUTE_TREE_COMMAND } from "../../src/routeTree.ts"
 import { type StackConfig, withDefaults } from "../../src/stack.ts"
@@ -236,7 +239,10 @@ const browserFlow = (config: StackConfig): Effect.Effect<void, unknown> =>
     rmSync(dir, { recursive: true, force: true })
   })
 
+const preset = (id: string) => (presetById(id) as Preset).stack
+
 const stacks: Array<[string, Parameters<typeof withDefaults>[0]]> = [
+  // the minimal preset's stack
   [
     "minimal",
     {
@@ -253,6 +259,8 @@ const stacks: Array<[string, Parameters<typeof withDefaults>[0]]> = [
     "pg-drizzle",
     { name: "pg-drizzle", database: "postgres", orm: "drizzle", auth: "none", infra: "none" },
   ],
+  ["preset-saas", { name: "preset-saas", ...preset("saas") }],
+  ["preset-ai", { name: "preset-ai", ...preset("ai") }],
   [
     "d1-effect-sql",
     { name: "d1-effect-sql", database: "d1", orm: "effect-sql", auth: "none", infra: "none" },
@@ -410,6 +418,27 @@ describe("add on a real project", () => {
         })
         yield* Effect.try(() => checkEffectLockstep(dir))
         yield* Effect.try(() => checkDbGenerate(dir))
+        yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
+        rmSync(dir, { recursive: true, force: true })
+      }).pipe(Effect.provide(NodeServices.layer)),
+    { timeout: 15 * 60 * 1000 },
+  )
+})
+
+describe("graph on a real project", () => {
+  it.effect(
+    "the saas preset + graph --write + add realtime: the README keeps its graph and the gate passes",
+    () =>
+      Effect.gen(function* () {
+        const dir = yield* generateStack(withDefaults({ name: "graph-saas", ...preset("saas") }))
+        const { graph } = yield* projectGraph(dir)
+        const readme = readFileSync(join(dir, "README.md"), "utf8")
+        const filled = writeGraph(readme, graph)
+        if (filled.kind !== "filled") throw new Error(`graph --write: ${filled.kind}`)
+        writeFileSync(join(dir, "README.md"), filled.text)
+        yield* addAddons(dir, ["realtime"], { overwrite: false, dryRun: false, install: true })
+        const after = readFileSync(join(dir, "README.md"), "utf8")
+        if (!after.includes("RealtimeLive")) throw new Error("add didn't redraw the README's graph")
         yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
         rmSync(dir, { recursive: true, force: true })
       }).pipe(Effect.provide(NodeServices.layer)),

@@ -37,7 +37,7 @@ You get a TypeScript monorepo: a [TanStack Start](https://tanstack.com/start) ap
 - **`efforge add` edits code, not docs.** Adding email later wires the layer, the exports, the binding and the secrets with AST transforms, and refuses to overwrite a file you've changed.
 - **Ready for coding agents.** The generated `AGENTS.md` describes the layout and its rules, and `pnpm check` runs format, lint (with Effect diagnostics) and types.
 
-CI generates 15 stacks on every change, installs them and runs typecheck, lint, tests and a build on each. There is no telemetry.
+CI generates 17 stacks on every change, installs them and runs typecheck, lint, tests and a build on each. There is no telemetry.
 
 Use something else if you want Next.js, a runtime other than Cloudflare, or plain async code without Effect: [create-effect-app](https://github.com/Effect-TS/examples) for an Effect project without the web stack, or `npm create cloudflare` for TanStack Start on Workers without Effect.
 

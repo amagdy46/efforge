@@ -22,5 +22,5 @@ efforge is young, and the CLI's options may still change.
     "@effect/vitest": 4.0.5
   ```
 - With `infra=alchemy`, local settings live in `.env` (`alchemy dev` reads it) instead of `.dev.vars`; efforge writes them there at `create` and at every `add`. On D1, `pnpm dev` and `pnpm run deploy` apply the migrations; `pnpm db:migrate` needs a `wrangler.jsonc` and says so.
-- CI generates, installs and runs the full gate (typecheck, check, test, build) for a matrix of 15 stacks, not every combination.
+- CI generates, installs and runs the full gate (typecheck, check, test, build) for a matrix of 17 stacks (the three presets among them), not every combination.
 - With `--auth=none`, the `effect-ai-byok` demo server function is not gated, so anyone who can reach the app can spend the configured API key. Add auth or remove the demo before deploying.
