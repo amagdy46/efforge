@@ -216,7 +216,7 @@ const over = (top: string, a: number, bottom: string) =>
     .map((v) => v.toString(16).padStart(2, "0"))
     .join("")}`
 /** CIE76 distance between two colours (CIE L*a*b*, D65). */
-export const deltaE = (a: string, b: string): number => {
+export const deltaE = (one: string, two: string): number => {
   const lab = (hex: string) => {
     const [r, g, b] = hexRgb(hex).map((v) => {
       const c = v / 255
@@ -228,7 +228,7 @@ export const deltaE = (a: string, b: string): number => {
     const z = f((0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883)
     return [116 * y - 16, 500 * (x - y), 200 * (y - z)] as const
   }
-  const [p, q] = [lab(a), lab(b)]
+  const [p, q] = [lab(one), lab(two)]
   return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2])
 }
 const ratio = (a: string, b: string) => `${(Math.floor(contrast(a, b) * 100) / 100).toFixed(2)}:1`
