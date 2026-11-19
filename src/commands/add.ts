@@ -1279,9 +1279,15 @@ export const addHandler = (input: {
       ),
     )
     const replacementWarnings = Effect.gen(function* () {
-      if (result.removed.length > 0)
+      // .dev.vars is moved, not replaced: its settings are in .env, which alchemy dev reads
+      const replaced = result.removed.filter((f) => f !== DEV_VARS)
+      if (replaced.length > 0)
         yield* io.warn(
-          `${input.dryRun ? "Would remove" : "Removed"} ${result.removed.join(", ")}: the new add-ons replace it.`,
+          `${input.dryRun ? "Would remove" : "Removed"} ${replaced.join(", ")}: the new add-ons replace ${replaced.length === 1 ? "it" : "them"}.`,
+        )
+      if (result.removed.includes(DEV_VARS))
+        yield* io.warn(
+          `${input.dryRun ? "Would move" : "Moved"} the settings in ${DEV_VARS} to ${localEnvFile(result.stack)}, which \`pnpm dev\` now reads.`,
         )
       if (result.replacedScripts.length > 0)
         yield* io.warn(

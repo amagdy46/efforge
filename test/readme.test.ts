@@ -130,6 +130,9 @@ it("deploy follows the infra: wrangler resources and secrets, or Alchemy stages"
   expect(wrangler).toContain("pnpm db:migrate --remote")
   expect(wrangler).toContain("pnpm exec wrangler email sending enable")
   expect(wrangler).toContain("pnpm exec wrangler secret bulk .env.production")
+  // wrangler's prompts, and what to answer
+  expect(wrangler).toContain("wrangler asks to create the Worker: answer yes")
+  expect(wrangler).toContain("check that its `database_id` is no longer zeros")
   expect(wrangler).toContain("pnpm run deploy")
   expect(wrangler).not.toContain("alchemy")
   expect(await deploy(pg)).toMatch(
@@ -141,6 +144,12 @@ it("deploy follows the infra: wrangler resources and secrets, or Alchemy stages"
   expect(alchemy).toContain("Hyperdrive")
   expect(alchemy).toContain("R2 bucket")
   expect(alchemy).not.toContain("wrangler.jsonc")
+  // a local prod deploy and CI's prod keep separate state
+  expect(alchemy).toContain("CI keeps Alchemy's state in a store on Cloudflare")
+  expect(alchemy).toContain("Deploy each stage from one place")
+  // honest about what was not run
+  for (const text of [wrangler, alchemy])
+    expect(text).toContain("efforge's tests do not deploy to a Cloudflare account")
 })
 
 it("every capability names a service and a layer that exist in the generated code", async () => {
@@ -364,7 +373,7 @@ for (const [name, config, add] of b3)
     expect(stack.extras).toEqual(expect.arrayContaining([...add]))
     const fresh = (await generated(stack)).get("README.md") as string
     expect(results[0]).toBe(fresh)
-  })
+  }, 30_000)
 
 it("Add more suggests an add-on the project lacks, and none when it has them all", async () => {
   const more = async (c: StackConfig) =>
@@ -377,3 +386,40 @@ it("Add more suggests an add-on the project lacks, and none when it has them all
   expect(all).toContain("npx create-efforge list")
   expect(all).not.toContain("npx create-efforge add")
 })
+
+// W2-D review S3, S4: AGENTS.md sections follow the stack in a fixed order, stale ones go
+for (const [name, start, add] of [
+  ["default + email, then Alchemy", { ...pg, extras: ["email"] }, ["infra/alchemy"]],
+  ["D1 + Drizzle, then Alchemy", { ...d1, orm: "drizzle", extras: [] }, ["infra/alchemy"]],
+  ["minimal, then D1, Drizzle and email", minimal, ["database/d1", "orm/drizzle", "email"]],
+] as const)
+  it(`AGENTS.md after add (${name}) is what create writes, and the user's text stays`, async () => {
+    await run(writeTree(dir, await generated(start)))
+    const path = join(dir, "AGENTS.md")
+    const mine = readFileSync(path, "utf8")
+      .replace("## Commands\n", "## Commands\n\nOur note on commands.\n")
+      .replace(
+        "<!-- efforge:agents -->",
+        "## Our rules\n\nAsk before deploying.\n\n<!-- efforge:agents -->",
+      )
+    writeFileSync(path, mine)
+    await run(addAddons(dir, [...add], opts))
+    const after = readFileSync(path, "utf8")
+    expect(after).toContain("## Commands\n\nOur note on commands.\n")
+    // new sections go above the footer, so after the user's text there
+    expect(after).toContain("## Our rules\n\nAsk before deploying.\n\n")
+    const stack = JSON.parse(
+      readFileSync(join(dir, "efforge.jsonc"), "utf8").replace(/^\s*\/\/.*$/gm, ""),
+    ).stack as StackConfig
+    const fresh = (await generated(stack)).get("AGENTS.md") as string
+    const unmine = after
+      .replace("\nOur note on commands.\n", "")
+      .replace("## Our rules\n\nAsk before deploying.\n\n", "")
+    expect(unmine).toBe(fresh)
+    if (stack.infra === "alchemy") {
+      expect(after).not.toContain("declared in `wrangler.jsonc`")
+      expect(after).not.toContain("declared under `d1_databases` in `wrangler.jsonc`")
+      // on D1 alchemy dev migrates; db:migrate needs a wrangler.jsonc
+      if (stack.database === "d1") expect(after).not.toMatch(/then `pnpm db:migrate`/)
+    }
+  }, 30_000)

@@ -38,8 +38,9 @@ fresh clone rewrote a committed README differently from the machine that ran `cr
   guessing where they end: `add` only appends the missing ones, in the same old form.
 - The README and AGENTS.md are seams: `efforge.jsonc` doesn't hash them, since every `add`
   rewrites their regions.
-- What to run next has one source, `runSteps` in `src/readme.ts`: `create`'s and `add`'s printed
-  steps, their `--json` `nextSteps` and the README's "Run it".
+- What to run next has one source, `planSteps` (and the `runSteps` it builds on) in
+  `src/readme.ts`: `create`'s and `add`'s printed steps, their `--json` `nextSteps` and the
+  README's "Run it", install command included.
 - Local settings have one file per stack: `.dev.vars` with wrangler, `.env` with Alchemy (the
   file `alchemy dev` reads). `addon.json` gives each env var its local value (`dev`), or none
   for a real secret. efforge writes that file and `.env.example` with the same lines at `create`

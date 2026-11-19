@@ -377,7 +377,7 @@ const deployWrangler = (input: ReadmeInput): string => {
     )
   if (secrets.length > 0)
     steps.push(
-      `Write the production values of ${and(secrets.map(code))} to \`.env.production\` (gitignored; \`.env.example\` says what each is), then upload them: \`pnpm exec wrangler secret bulk .env.production\`.${secrets.includes("BETTER_AUTH_URL") ? " `BETTER_AUTH_URL` can stay empty until the first deploy prints the URL." : ""}`,
+      `Write the production values of ${and(secrets.map(code))} to \`.env.production\` (gitignored; \`.env.example\` says what each is), then upload them: \`pnpm exec wrangler secret bulk .env.production\` (before the first deploy, wrangler asks to create the Worker: answer yes).${secrets.includes("BETTER_AUTH_URL") ? " `BETTER_AUTH_URL` can stay empty until the first deploy prints the URL." : ""}`,
     )
   const notes = [
     ...(ids.includes("extras/storage") ? ["creates the R2 bucket"] : []),

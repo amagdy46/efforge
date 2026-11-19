@@ -6,6 +6,7 @@ import { NodeServices } from "@effect/platform-node"
 import { afterEach, beforeEach, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { loadAddons } from "../src/addon.ts"
+import { addAddons } from "../src/commands/add.ts"
 import { defaultTemplatesDir } from "../src/commands/create.ts"
 import { generate } from "../src/generate.ts"
 import { planSteps } from "../src/readme.ts"
@@ -131,3 +132,74 @@ it("Alchemy: create writes the local settings to .env, which alchemy dev reads, 
     note: "http://localhost:1337",
   })
 })
+
+// W2-D review S2: Alchemy reads .env, so every add writes the local values there, and adding
+// Alchemy moves what .dev.vars held, so nobody copies between two files
+const addOpts = { overwrite: false, dryRun: false, install: false }
+const settings = (dir: string, file: string) => {
+  try {
+    return readFileSync(join(dir, file), "utf8")
+  } catch {
+    return undefined
+  }
+}
+
+it("add infra/alchemy moves .dev.vars to .env, the user's lines with it", async () => {
+  const dir = join(tmp, "move")
+  await Effect.runPromise(
+    writeTree(dir, await generated(withDefaults({ name: "app" }))).pipe(
+      Effect.provide(NodeServices.layer),
+    ),
+  )
+  const before = `${settings(dir, ".dev.vars")}MY_OWN=kept\n`
+  writeFileSync(join(dir, ".dev.vars"), before)
+  const result = await Effect.runPromise(
+    addAddons(dir, ["infra/alchemy"], addOpts).pipe(Effect.provide(NodeServices.layer)),
+  )
+  expect(settings(dir, ".dev.vars")).toBeUndefined()
+  expect(result.removed).toContain(".dev.vars")
+  const env = settings(dir, ".env") as string
+  for (const l of before.split("\n").filter((x) => /^[A-Z_]+=/.test(x))) expect(env).toContain(l)
+  expect(env).toContain("CLOUDFLARE_ACCOUNT_ID=")
+  expect(result.envVars.every((v) => v.file === ".env")).toBe(true)
+}, 30_000)
+
+it("add infra/alchemy keeps an existing .env and adds only the names it lacks", async () => {
+  const dir = join(tmp, "merge")
+  await Effect.runPromise(
+    writeTree(dir, await generated(withDefaults({ name: "app" }))).pipe(
+      Effect.provide(NodeServices.layer),
+    ),
+  )
+  writeFileSync(join(dir, ".env"), "BETTER_AUTH_SECRET=mine\nOTHER=2\n")
+  await Effect.runPromise(
+    addAddons(dir, ["infra/alchemy"], addOpts).pipe(Effect.provide(NodeServices.layer)),
+  )
+  const env = settings(dir, ".env") as string
+  expect(env.startsWith("BETTER_AUTH_SECRET=mine\nOTHER=2\n")).toBe(true)
+  expect(env.match(/^BETTER_AUTH_SECRET=/gm)).toHaveLength(1)
+  expect(env).toContain("DATABASE_URL=postgres://postgres:postgres@localhost:5432/app")
+  expect(settings(dir, ".dev.vars")).toBeUndefined()
+}, 30_000)
+
+for (const variant of ["as created", "fresh clone"] as const)
+  it(`Alchemy, ${variant}: add storage writes its local value to .env, not .dev.vars`, async () => {
+    const dir = join(tmp, variant.replace(" ", "-"))
+    await Effect.runPromise(
+      writeTree(dir, await generated(withDefaults({ name: "app", infra: "alchemy" }))).pipe(
+        Effect.provide(NodeServices.layer),
+      ),
+    )
+    if (variant === "fresh clone") rmSync(join(dir, ".env"))
+    const result = await Effect.runPromise(
+      addAddons(dir, ["storage"], addOpts).pipe(Effect.provide(NodeServices.layer)),
+    )
+    expect(settings(dir, ".dev.vars")).toBeUndefined()
+    const env = settings(dir, ".env") as string
+    expect(env).toMatch(/^STORAGE_SIGNING_SECRET=\S+/m)
+    // a clone gets every setting, so pnpm dev starts
+    expect(env).toContain("BETTER_AUTH_SECRET=dev-only-")
+    expect(result.envVars).toEqual([
+      expect.objectContaining({ name: "STORAGE_SIGNING_SECRET", file: ".env", set: true }),
+    ])
+  }, 30_000)
