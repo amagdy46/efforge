@@ -182,3 +182,50 @@ it("add realtime on a 0.2.0 auth project succeeds without the card, and says so"
     rmSync(tmp, { recursive: true, force: true })
   }
 })
+
+it("storage and email register their cards on every auth option, with and without Alchemy", async () => {
+  const addons = await run(loadAddons(templates))
+  for (const auth of ["none", "better-auth", "better-auth-orgs"] as const)
+    for (const infra of ["none", "alchemy"] as const) {
+      const config = withDefaults({
+        name: "app",
+        database: "d1",
+        orm: "effect-sql",
+        auth,
+        infra,
+        extras: ["storage", "email"],
+      })
+      const tree = await run(generate(config, addons))
+      const where = `${auth}/${infra}`
+      expect(registered(tree).slice(-2), where).toEqual(["storage", "email"])
+      expectModules(tree, where)
+      for (const file of ["storage-demo.ts", "email-demo.ts"])
+        expect(tree.has(`apps/web/src/server/${file}`), `${where}: ${file}`).toBe(true)
+      for (const file of ["storage.test.ts", "storage-in-memory.ts", "mailer.test.ts"])
+        expect(tree.has(`packages/core/test/${file}`), `${where}: ${file}`).toBe(true)
+      // the card says nothing about wrangler.jsonc on an Alchemy stack
+      if (infra === "alchemy")
+        for (const card of ["storage.tsx", "email.tsx"])
+          expect(tree.get(`${CARDS_DIR}${card}`), `${where}: ${card}`).not.toContain("wrangler")
+    }
+})
+
+it("adding storage and email later adds their cards to the dashboard", async () => {
+  const { tmp, dir, result } = await addLater(d1Auth, ["storage", "email"])
+  try {
+    const read = (file: string) => readFileSync(join(dir, file), "utf8")
+    const tree: Tree = new Map(
+      ["registry.ts", "runtime.tsx", "database.tsx", "auth.tsx", "storage.tsx", "email.tsx"]
+        .map((f) => `${CARDS_DIR}${f}`)
+        .filter((f) => existsSync(join(dir, f)))
+        .map((f) => [f, read(f)]),
+    )
+    expect(registered(tree)).toEqual(["runtime", "database", "auth", "storage", "email"])
+    expectModules(tree, "after add")
+    for (const file of ["storage-demo.ts", "email-demo.ts"])
+      expect(read(`apps/web/src/server/${file}`), file).toContain(".middleware([requireSession])")
+    expect(result.notes).toEqual([])
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
+  }
+})

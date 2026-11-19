@@ -118,7 +118,7 @@ export const announce = createServerFn({ method: "POST" })
 
 ### Settings
 
-A layer that reads a setting fails to start when it is missing, and the runtime turns that into `NotConfigured`, which names the setting and the file (`.dev.vars`, or `.env` with Alchemy). `AppLayer` is built as a whole, so one missing setting stops every card and every route that needs the runtime: routes show a "Not configured yet" page, and cards whose call returns `NotConfigured` show it as their state. Read settings in your layer with `Config` (as `auth-live.ts` does with `BETTER_AUTH_SECRET`), and list them in `envVars` with a `description` that says where the value comes from. A setting that is set but unusable (too short, not a URL) fails with the layer's own `...ConfigError` carrying `setting` and a `message` that says what is wrong (`StorageConfigError`, `AuthConfigError`): the page then reads "This page needs `STORAGE_SIGNING_SECRET`. STORAGE_SIGNING_SECRET is too short: …". `test/generated-code.test.ts` checks that every env var an add-on declares and a layer reads produces a page that names it.
+A layer that reads a setting fails to start when it is missing, and the runtime turns that into `NotConfigured`, which names the setting and the file (`.dev.vars`, or `.env` with Alchemy). `AppLayer` is built as a whole, so one missing setting stops every card and every route that needs the runtime: routes show a "Not configured yet" page, and cards whose call returns `NotConfigured` show it as their state. Read settings in your layer with `Config` (as `auth-live.ts` does with `BETTER_AUTH_SECRET`), and list them in `envVars` with a `description` that says where the value comes from. A setting that is set but unusable (too short, not a URL), or one a layer checks itself (a sender a transport needs), fails with the layer's own `...ConfigError` carrying `setting` and a `message` that says what is wrong (`StorageConfigError`, `MailerConfigError`, `AuthConfigError`): the page then reads "This page needs `STORAGE_SIGNING_SECRET`. STORAGE_SIGNING_SECRET is too short: …". `test/generated-code.test.ts` checks that every env var an add-on declares and a layer reads produces a page that names it.
 
 A layer is built once per Worker isolate, inside whichever request comes first. Keep its construction synchronous: never await a promise there that another request might wait on or that outlives the request (see the auth section of the generated `AGENTS.md`); hand slow start-up work to `waitUntil` from `cloudflare:workers`, as `auth-live.ts` does.
 
@@ -171,7 +171,7 @@ layer(RealtimeInMemory)("announce", (it) => {
 })
 ```
 
-Use `it.effect` and `layer` from `@effect/vitest`; `Effect.run*` in a test is a lint error. A service with one fixed answer can be `Layer.succeed(Auth, Auth.of({ ... }))` (see `auth.test.ts`); time comes from `TestClock` (see `greeting.test.ts`). Test the program, not the fake: a test that only checks the test layer returns what it was given proves nothing.
+Put a test layer that users will want for their own tests in its own exported file next to the test (`packages/core/test/storage-in-memory.ts` exports `StorageInMemory`, `mailer-in-memory.ts` exports `MailerInMemory` and the `SentMail` it records into), and name it in the add-on's `AGENTS.md` section. Use `it.effect` and `layer` from `@effect/vitest`; `Effect.run*` in a test is a lint error. A service with one fixed answer can be `Layer.succeed(Auth, Auth.of({ ... }))` (see `auth.test.ts`); time comes from `TestClock` (see `greeting.test.ts`). Test the program, not the fake: a test that only checks the test layer returns what it was given proves nothing.
 
 ## States a demo must handle
 
@@ -189,6 +189,7 @@ A demo talks to a real server, so it is honest about state. Use the helpers and 
 
 - Keep what the user typed when a call fails, so they can fix it and send again: clear the input only when the outcome is `ok`.
 - Make every error path you show in the code reachable from the demo (the realtime card's "Send from the server" sends the typed text, so an oversized one comes back as `MessageTooLarge`).
+- A server function that writes or spends is open to anyone on a stack without auth. Say so on the card: `getStack()` from `@/server/stack` returns the stack, and the storage and email cards add one sentence when `stack.auth` is `"none"`. Add a `when: { auth: ["none"] }` `AGENTS.md` subsection that says the same, worded so it stays true once auth is added (`appendAgentsSection` never rewrites a section).
 - Plain words, no marketing: "Send a test email", "This ran on the server through the `Mailer` service". Give inputs labels, keep every control reachable by keyboard, and never use colour alone for a state (the realtime status dot sits next to its word).
 
 With `infra=alchemy` the page must not mention `wrangler.jsonc`: keep it out of card text, and out of the regions a card shows.
