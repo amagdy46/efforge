@@ -1,4 +1,5 @@
-import { Context, Data, Effect } from "effect"
+import { Context, Effect, Schema } from "effect"
+import { ServerOnly } from "./server-only"
 
 export interface Note {
   readonly id: string
@@ -6,18 +7,16 @@ export interface Note {
   readonly createdAt: Date
 }
 
-/** The title was blank or longer than 200 characters. */
-export class InvalidNote extends Data.TaggedError("InvalidNote")<{
-  readonly message: string
-}> {}
-
 /** The notes could not be read or written; `message` says what to do about it. */
-export class NotesUnavailable extends Data.TaggedError("NotesUnavailable")<{
-  readonly reason: "not-migrated" | "unreachable" | "query-failed"
-  readonly message: string
-  /** The driver's error, for the server log */
-  readonly cause?: string
-}> {}
+export class NotesUnavailable extends Schema.TaggedError<
+  NotesUnavailable,
+  { readonly brand: unique symbol }
+>()("NotesUnavailable", {
+  reason: Schema.Literals(["not-migrated", "unreachable", "query-failed"]),
+  message: Schema.String,
+  /** The driver's error, for the server log; it never reaches the browser */
+  cause: ServerOnly,
+}) {}
 
 /** Where notes are kept. packages/db implements it on the `Database` service; tests swap in a fake. */
 export class Notes extends Context.Service<
@@ -30,6 +29,12 @@ export class Notes extends Context.Service<
 >()("@repo/core/Notes") {}
 
 // #region card
+/** The title was blank or longer than `limit` characters. */
+export class InvalidNote extends Schema.TaggedError<
+  InvalidNote,
+  { readonly brand: unique symbol }
+>()("InvalidNote", { message: Schema.String, limit: Schema.Number }) {}
+
 /** Checks the title, then stores the note through `Notes`. */
 export const createNote = (
   input: string,
@@ -39,6 +44,7 @@ export const createNote = (
     if (title.length === 0 || title.length > 200)
       return yield* new InvalidNote({
         message: "A note needs a title of 1 to 200 characters.",
+        limit: 200,
       })
     const notes = yield* Notes
     return yield* notes.insert(title)
@@ -67,7 +73,8 @@ export const notesUnavailable = (cause: unknown): NotesUnavailable => {
       message:
         "The database is not reachable. For Postgres, start it with docker compose up -d --wait.",
     })
-  // the driver's own text stays in the server log (runOutcome logs failures), not in the browser
+  // the driver's own text stays in the server log (runOutcome logs failures): `cause` is
+  // ServerOnly, so encoding drops it
   return new NotesUnavailable({
     reason: "query-failed",
     message: "The database refused the query. The server log has its error.",

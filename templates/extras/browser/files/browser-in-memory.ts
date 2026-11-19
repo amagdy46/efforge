@@ -21,7 +21,7 @@ export const BrowserInMemory = Layer.effect(
           yield* Ref.update(visited, (all) => [...all, url])
           const host = new URL(url).hostname
           if (host === "localhost")
-            return yield* new UrlRefused({ message: `The browser refused ${url}.` })
+            return yield* new UrlRefused({ message: `The browser refused ${url}.`, url })
           return { title: host, requests: 3, screenshot: "" }
         }),
     })

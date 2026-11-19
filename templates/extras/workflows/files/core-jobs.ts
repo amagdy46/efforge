@@ -1,10 +1,11 @@
-import { Context, Data, Effect } from "effect"
+import { Context, Effect, Schema } from "effect"
+import { ServerOnly } from "./server-only"
 
-/** Starting a job or reading it failed; `cause` is the underlying error. */
-export class JobError extends Data.TaggedError("JobError")<{
-  readonly operation: string
-  readonly cause: unknown
-}> {
+/** Starting a job or reading it failed; `cause` (server only) is the underlying error. */
+export class JobError extends Schema.TaggedError<JobError, { readonly brand: unique symbol }>()(
+  "JobError",
+  { operation: Schema.String, cause: ServerOnly },
+) {
   override get message(): string {
     const cause = this.cause instanceof Error ? `: ${this.cause.message}` : ""
     return `Job ${this.operation} failed${cause}`
@@ -12,14 +13,16 @@ export class JobError extends Data.TaggedError("JobError")<{
 }
 
 /** A run id that does not belong to the caller: someone else's run and a made-up id alike. */
-export class UnknownRun extends Data.TaggedError("UnknownRun")<{
-  readonly message: string
-}> {}
+export class UnknownRun extends Schema.TaggedError<UnknownRun, { readonly brand: unique symbol }>()(
+  "UnknownRun",
+  { message: Schema.String },
+) {}
 
 /** The example job needs a name to greet. */
-export class MissingName extends Data.TaggedError("MissingName")<{
-  readonly message: string
-}> {}
+export class MissingName extends Schema.TaggedError<
+  MissingName,
+  { readonly brand: unique symbol }
+>()("MissingName", { message: Schema.String }) {}
 
 /** Payload per job name. Add an entry here when you add a workflow. */
 export interface JobPayloads {

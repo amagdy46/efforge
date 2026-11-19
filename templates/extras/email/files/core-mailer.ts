@@ -1,22 +1,17 @@
-import { Context, Data, Effect } from "effect"
+import { Context, Effect, Schema } from "effect"
+import { ServerOnly } from "./server-only"
 
-/** The message was not sent; `message` says what failed, `cause` is the transport's error. */
-export class MailerError extends Data.TaggedError("MailerError")<{
-  readonly operation: string
-  readonly message: string
-  readonly cause: unknown
-}> {}
+/** The message was not sent; `message` says what failed, `cause` (server only) why. */
+export class MailerError extends Schema.TaggedError<
+  MailerError,
+  { readonly brand: unique symbol }
+>()("MailerError", { operation: Schema.String, message: Schema.String, cause: ServerOnly }) {}
 
 /** The Mailer layer could not be built: `setting` (for example MAIL_FROM) is missing. */
-export class MailerConfigError extends Data.TaggedError("MailerConfigError")<{
-  readonly setting: string
-  readonly message: string
-}> {}
-
-/** `to` is not an email address. */
-export class InvalidAddress extends Data.TaggedError("InvalidAddress")<{
-  readonly message: string
-}> {}
+export class MailerConfigError extends Schema.TaggedError<
+  MailerConfigError,
+  { readonly brand: unique symbol }
+>()("MailerConfigError", { setting: Schema.String, message: Schema.String }) {}
 
 export interface MailMessage {
   readonly to: string
@@ -53,6 +48,12 @@ export interface SentMail extends MailMessage {
 const looksLikeAddress = (address: string) =>
   address.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)
 
+/** `address` is not an email address. */
+export class InvalidAddress extends Schema.TaggedError<
+  InvalidAddress,
+  { readonly brand: unique symbol }
+>()("InvalidAddress", { message: Schema.String, address: Schema.String }) {}
+
 // #region card
 /** Sends a short test message to `to` through the configured transport. */
 export const sendTestEmail = (
@@ -63,6 +64,7 @@ export const sendTestEmail = (
     if (!looksLikeAddress(address))
       return yield* new InvalidAddress({
         message: `"${address}" is not an email address.`,
+        address,
       })
     const mailer = yield* Mailer
     const message = {

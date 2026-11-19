@@ -50,6 +50,7 @@ export const createNote = (
     if (title.length === 0 || title.length > 200)
       return yield* new InvalidNote({
         message: "A note needs a title of 1 to 200 characters.",
+        limit: 200,
       })
     const notes = yield* Notes
     return yield* notes.insert(title)
@@ -58,7 +59,7 @@ export const createNote = (
 
 `Effect.gen` reads like `async` code, with `yield*` for `await`. `yield* Notes` asks for the service, and `yield* new InvalidNote(...)` fails with that error. The return type has a third part this time, the services the Effect needs: `createNote` cannot run until something provides `Notes`.
 
-`InvalidNote` and `NotesUnavailable` are **tagged errors**: classes with a `_tag` field, so code can handle each kind of failure by name, for example with `Effect.catchTag("InvalidNote", ...)`.
+`InvalidNote` and `NotesUnavailable` are **tagged errors**: classes with a `_tag` field, so code can handle each kind of failure by name, for example with `Effect.catchTag("InvalidNote", ...)`. They are declared with `Schema.TaggedError`, so each also has a schema: that is what lets one cross from a server function to the browser as the same class, fields included (see "How a request flows").
 
 Interfaces, their errors and code like `createNote` live in `packages/core`. It has no Cloudflare code, so it type-checks and tests anywhere.
 
@@ -77,10 +78,10 @@ export const NotesLive = Layer.effect(
         .select({ id: note.id, title: note.title, createdAt: note.createdAt })
         .from(note)
         .orderBy(desc(note.createdAt))
-        .pipe(Effect.mapError(notesUnavailable)),
+        .pipe(Effect.mapError(notesUnavailable), Effect.withSpan("Notes.list")),
 ```
 
-`Layer.effect(Notes, ...)` builds `Notes` by running an Effect. That Effect asks for another service, `Database`, which holds a Drizzle client whose queries are Effects. So `NotesLive` needs `Database` before it can build. `Notes.of({ ... })` is the implementation: an object with the interface's members. `x.pipe(f)` passes `x` through `f`; here `Effect.mapError(notesUnavailable)` turns a driver error into a `NotesUnavailable`. The file goes on to implement `insert` the same way.
+`Layer.effect(Notes, ...)` builds `Notes` by running an Effect. That Effect asks for another service, `Database`, which holds a Drizzle client whose queries are Effects. So `NotesLive` needs `Database` before it can build. `Notes.of({ ... })` is the implementation: an object with the interface's members. `x.pipe(f)` passes `x` through `f`; here `Effect.mapError(notesUnavailable)` turns a driver error into a `NotesUnavailable`, and `Effect.withSpan("Notes.list")` names the call for a trace (it costs nothing until a tracer is set in `layers.ts`; every member of every live layer has one). The file goes on to implement `insert` the same way.
 
 Layers live next to the code they wrap: the database ones in `packages/db`, the ones that use other Cloudflare resources in `apps/web/src/server`.
 
@@ -206,7 +207,7 @@ The dashboard at `/app` has a card for the database. When it loads, it calls the
 ```text
 listNotes(), called by the database card
   card        apps/web/src/capabilities/database.tsx  calls listNotes()
-  server fn   apps/web/src/server/notes.ts            runOutcome(program)
+  server fn   apps/web/src/server/notes.ts            runOutcome(program, errors)
   outcome     apps/web/src/server/outcome.ts          runtime.runPromise
   runtime     apps/web/src/server/runtime.ts          builds AppLayer for this call
   service     packages/core/src/notes.ts              Notes, its list member
@@ -222,10 +223,23 @@ The server function, from `apps/web/src/server/notes.ts`:
 ```ts
 export const listNotes = createServerFn({ method: "GET" })
   .middleware([requireSession])
-  .handler(() => runOutcome(Notes.use((notes) => notes.list)))
+  .handler(() => runOutcome(newestFirst, NotesUnavailable))
 ```
 
-`requireSession` refuses the call unless someone is signed in. `Notes.use(f)` asks for `Notes` and runs `f` with it. `runOutcome` runs the Effect through `runtime.runPromise` and hands the browser either the value or the tagged error as data, so the card can show each failure. [Capability cards](capability-cards.md) describes the cards and how an add-on contributes one.
+`requireSession` gives the handler the session (`sessionGate`, which runs before every server function, has already refused a call without one). `newestFirst` is `Notes.use((notes) => notes.list)`: it asks for `Notes` and runs `list`. `runOutcome` runs the Effect through `runtime.runPromise`, as a span named after the function (`serverFn.listNotes`), and returns its `Exit`, encoded for the wire: the value, or the tagged errors it failed with. The classes after the program are the errors to keep as classes; the card names the same ones:
+
+<!-- sample: apps/web/src/capabilities/database.tsx -->
+```tsx
+  const notes = useServerCall(listNotes, NotesUnavailable)
+```
+
+`useServerCall` decodes the `Exit`, so `notes.state.error` is a `NotesUnavailable` again, with its `reason`, and `instanceof` works on it. An error the function did not list (a `Data.TaggedError`, say) arrives with its tag and message only. Three things never become a value:
+
+- **A refused call.** The session gate's `Unauthorized`, the validator's `InvalidInput`, and a server that did not answer reject the call; `useServerCall` reports them with `rejected: true`, so a card can tell them from the function's own failures.
+- **A bug.** A defect (an exception in the program) rejects the call as a 500, as `runtime.runPromise` would.
+- **A raw driver error.** A field declared `ServerOnly` (`packages/core/src/server-only.ts`), such as `NotesUnavailable`'s `cause`, stays in the server log; encoding drops it.
+
+A missing setting is `NotConfigured`, a value like any other, which names the setting and the file to put it in. [Capability cards](capability-cards.md) describes the cards and how an add-on contributes one.
 
 ## What `efforge add` changes
 

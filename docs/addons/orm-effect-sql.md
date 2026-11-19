@@ -45,8 +45,9 @@ Your code asks for `Database`, declared in `packages/core/src/Database.ts`. It h
 
 ## Files it writes
 
-`efforge add` writes these files.
+`efforge add` writes these files. A file marked *only if missing* is written only where the project lacks it.
 
+- `packages/core/src/server-only.ts` (*only if missing*)
 - `packages/db/src/index.ts`
 - `packages/core/src/notes.ts`
 - `packages/core/test/notes.test.ts`

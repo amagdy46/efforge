@@ -50,8 +50,9 @@ Your code asks for `Storage`, declared in `packages/core/src/storage.ts`. Its me
 
 ## Files it writes
 
-`efforge add` writes these files.
+`efforge add` writes these files. A file marked *only if missing* is written only where the project lacks it.
 
+- `packages/core/src/server-only.ts` (*only if missing*)
 - `packages/core/src/storage-security.ts`
 - `packages/core/test/storage-security.test.ts`
 - `packages/core/src/storage.ts`

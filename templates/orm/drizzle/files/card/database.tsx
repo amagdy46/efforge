@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useServerCall } from "@/lib/use-server-call"
+import { InvalidNote, NotesUnavailable } from "@repo/core/notes"
 import { addNote, listNotes } from "@/server/notes"
 import program from "../../../../packages/core/src/notes.ts?region=card"
 import store from "../../../../packages/db/src/notes.ts?region=card"
@@ -11,8 +12,8 @@ import serverFns from "../server/notes.ts?region=card"
 import type { Capability } from "./types"
 
 function DatabaseDemo() {
-  const notes = useServerCall(listNotes)
-  const adding = useServerCall(addNote)
+  const notes = useServerCall(listNotes, NotesUnavailable)
+  const adding = useServerCall(addNote, InvalidNote, NotesUnavailable)
   const [title, setTitle] = useState("")
   const load = notes.run
 
@@ -50,13 +51,13 @@ function DatabaseDemo() {
           </Button>
         </div>
       </form>
-      {adding.state.status === "failed" ? <FailureNote error={adding.state.error} /> : null}
+      {adding.state.status === "failed" ? <FailureNote {...adding.state} /> : null}
       <div aria-live="polite" className="space-y-2">
         <h4 className="text-sm font-medium">Notes</h4>
         {notes.state.status === "idle" || notes.state.status === "running" ? (
           <Pending>Reading the note table…</Pending>
         ) : null}
-        {notes.state.status === "failed" ? <FailureNote error={notes.state.error} /> : null}
+        {notes.state.status === "failed" ? <FailureNote {...notes.state} /> : null}
         {notes.state.status === "done" && notes.state.value.length === 0 ? (
           <p className="text-sm text-muted-foreground">No notes yet. Add the first one.</p>
         ) : null}

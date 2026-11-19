@@ -81,9 +81,11 @@ export default defineConfig({
       },
       {
         // TypeScript checks default imports; this rule cannot see the default export of the
-        // `?region=card` modules (apps/web/regions.ts) the dashboard shows source with
+        // `?region=card` modules (apps/web/regions.ts) the dashboard shows source with. A card
+        // may show its own client lines (`./runtime.tsx?region=card`): a module of its own, not
+        // a self-import
         files: ["apps/web/src/capabilities/**", "apps/web/src/routes/app/index.tsx"],
-        rules: { "import/default": "off" },
+        rules: { "import/default": "off", "import/no-self-import": "off" },
       },
       {
         files: ["apps/web/src/server/cloudflare.ts"],

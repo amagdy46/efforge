@@ -1,4 +1,4 @@
-import { BrowserUnavailable, visit } from "@repo/core/browser"
+import { BrowserError, BrowserUnavailable, InvalidUrl, UrlRefused, visit } from "@repo/core/browser"
 import { createServerFn } from "@tanstack/react-start"
 import { Effect, Schema } from "effect"
 import { stack } from "./manifest"
@@ -26,5 +26,7 @@ const VisitInput = Schema.Struct({
 /** Loads a page in the browser container; the URL policy runs there too. */
 export const visitPage = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(VisitInput))
-  .handler(({ data }) => runOutcome(explain(visit(data.url))))
+  .handler(({ data }) =>
+    runOutcome(explain(visit(data.url)), InvalidUrl, UrlRefused, BrowserUnavailable, BrowserError),
+  )
 // #endregion

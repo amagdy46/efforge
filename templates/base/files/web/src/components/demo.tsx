@@ -1,10 +1,23 @@
 import { CircleAlert, LoaderCircle, Settings2, TriangleAlert } from "lucide-react"
 import type { ReactNode } from "react"
 import { useStack } from "@/lib/use-stack"
-import type { Failure } from "@/server/outcome"
+import type { Failure } from "@/lib/outcome"
 
-/** A failed call, shown as a normal state: what failed (`_tag`) and what to do about it. */
-export function FailureNote({ error }: { error: Failure }) {
+/** An error's own fields beyond its tag and message, as `[name, value]`. */
+const fieldsOf = (error: Failure) =>
+  Object.entries(error).filter(
+    (entry): entry is [string, string | number | boolean] =>
+      entry[0] !== "_tag" &&
+      entry[0] !== "message" &&
+      ["string", "number", "boolean"].includes(typeof entry[1]),
+  )
+
+/**
+ * A failed call, shown as a normal state: the tagged error it received (its
+ * `_tag`, message and fields) and what to do about it. `rejected` is a call the
+ * server refused before its Effect answered (useServerCall says which).
+ */
+export function FailureNote({ error, rejected = false }: { error: Failure; rejected?: boolean }) {
   if (error._tag === "NotConfigured")
     return (
       <div role="status" className="flex gap-2 rounded-md border border-dashed p-3 text-sm">
@@ -14,15 +27,31 @@ export function FailureNote({ error }: { error: Failure }) {
         </p>
       </div>
     )
+  const fields = fieldsOf(error)
   return (
     <div role="alert" className="flex gap-2 rounded-md border border-destructive/40 p-3 text-sm">
       <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-destructive" />
-      <p>
-        <code className="mr-1.5 rounded bg-muted px-1 py-0.5 font-mono text-[0.8em] font-medium text-destructive">
-          {error._tag}
-        </code>
-        {error.message}
-      </p>
+      <div className="min-w-0 space-y-1.5">
+        <p>
+          <code className="mr-1.5 rounded bg-muted px-1 py-0.5 font-mono text-[0.8em] font-medium text-destructive">
+            {error._tag}
+          </code>
+          {error.message}
+        </p>
+        {fields.length === 0 ? null : (
+          <dl className="flex flex-wrap gap-x-3 gap-y-1 font-mono text-xs text-muted-foreground">
+            {fields.map(([name, value]) => (
+              <div key={name} className="flex min-w-0 gap-1">
+                <dt>{name}:</dt>
+                <dd className="break-all text-foreground">{JSON.stringify(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {rejected ? (
+          <p className="text-xs text-muted-foreground">The server rejected the call.</p>
+        ) : null}
+      </div>
     </div>
   )
 }

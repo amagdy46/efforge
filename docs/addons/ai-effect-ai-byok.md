@@ -46,10 +46,11 @@ Your code asks for `Llm`, declared in `packages/core/src/llm.ts`. Its members:
 
 ## Files it writes
 
-`efforge add` writes these files.
+`efforge add` writes these files. A file marked *only if missing* is written only where the project lacks it.
 
 | File | Only with |
 | --- | --- |
+| `packages/core/src/server-only.ts` (*only if missing*) | Always |
 | `packages/core/src/llm.ts` | Always |
 | `apps/web/src/server/llm-provider.ts` | Always |
 | `apps/web/src/server/ai.ts` | Always |

@@ -3,9 +3,12 @@ import { FailureNote, Pending } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { EmptyPrompt, LlmError, LlmNotConfigured } from "@repo/core/llm"
+import { Schema } from "effect"
 import { asFailure } from "@/lib/failure"
+import type { Failure } from "@/lib/outcome"
+import { settleCall } from "@/lib/use-server-call"
 import { type AnswerPart, askModel } from "@/server/ai-demo"
-import type { Failure } from "@/server/outcome"
 import program from "../../../../packages/core/src/llm.ts?region=card"
 import serverFn from "../server/ai-demo.ts?region=card"
 import type { Capability } from "./types"
@@ -15,11 +18,19 @@ type Answer =
   | { readonly status: "waiting" }
   | { readonly status: "streaming"; readonly text: string }
   | { readonly status: "done"; readonly text: string }
-  | { readonly status: "failed"; readonly text: string; readonly error: Failure }
+  | {
+      readonly status: "failed"
+      readonly text: string
+      readonly error: Failure
+      readonly rejected: boolean
+    }
+
+/** An `LlmError` part way through the answer, as the server encoded it (ai-demo.ts). */
+const decodeLlmError = Schema.decodeSync(Schema.toCodecJson(LlmError))
 
 /** `LlmNotConfigured` (no key saved, no organization) is a "not configured" state like any other. */
 const shown = (error: Failure): Failure =>
-  error._tag === "LlmNotConfigured" ? { _tag: "NotConfigured", message: error.message } : error
+  error instanceof LlmNotConfigured ? { _tag: "NotConfigured", message: error.message } : error
 
 /** Asks the model and reads its answer as it streams in. */
 function useAnswer() {
@@ -37,24 +48,27 @@ function useAnswer() {
     current.current += 1
     const asked = current.current
     setAnswer({ status: "waiting" })
-    const outcome = await askModel({ data: { prompt } }).catch((error: unknown) => ({
-      ok: false as const,
-      error: asFailure(error),
-    }))
+    const outcome = await settleCall(askModel({ data: { prompt } }), EmptyPrompt, LlmNotConfigured)
     if (asked !== current.current) return false
     if (!outcome.ok) {
-      setAnswer({ status: "failed", text: "", error: outcome.error })
+      setAnswer({ status: "failed", text: "", ...outcome })
       return false
     }
     const reader = outcome.value.getReader()
     const read = async (text: string): Promise<void> => {
-      const next: ReadableStreamReadResult<AnswerPart> = await reader
-        .read()
-        .catch((error: unknown) => ({ done: false, value: { failure: asFailure(error) } }))
+      const next = await reader.read().then(
+        (part: ReadableStreamReadResult<AnswerPart>) => part,
+        (error: unknown) => ({ done: false, value: undefined, broken: asFailure(error) }) as const,
+      )
       if (asked !== current.current) return void reader.cancel()
+      if ("broken" in next)
+        return setAnswer({ status: "failed", text, error: next.broken, rejected: true })
       if (next.done) return setAnswer({ status: "done", text })
-      if ("failure" in next.value)
-        return setAnswer({ status: "failed", text, error: next.value.failure })
+      if ("failure" in next.value) {
+        // the LlmError that ended the answer, as its class again
+        const error = decodeLlmError(next.value.failure)
+        return setAnswer({ status: "failed", text, error, rejected: false })
+      }
       const more = text + next.value.text
       setAnswer({ status: "streaming", text: more })
       return read(more)
@@ -121,7 +135,9 @@ function AiDemo() {
             piece at a time.
           </p>
         ) : null}
-        {answer.status === "failed" ? <FailureNote error={shown(answer.error)} /> : null}
+        {answer.status === "failed" ? (
+          <FailureNote error={shown(answer.error)} rejected={answer.rejected} />
+        ) : null}
       </div>
     </div>
   )

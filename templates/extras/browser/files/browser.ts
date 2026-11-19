@@ -50,6 +50,7 @@ const make = Effect.gen(function* () {
         if (response.status === 403)
           return yield* new UrlRefused({
             message: `The browser refused ${url}: ${reason ?? "not allowed"}.`,
+            url,
           })
         if (!response.ok)
           return yield* fail("run")(new Error(reason ?? `container answered ${response.status}`))
@@ -62,6 +63,7 @@ const make = Effect.gen(function* () {
               fail("run")(new Error("The browser container did not answer in 90 seconds.")),
             ),
         }),
+        Effect.withSpan("Browser.run"),
       ),
   })
 })

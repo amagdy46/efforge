@@ -1,26 +1,20 @@
 import { Cause, type Context, Effect, Layer } from "effect"
+import { NotConfigured } from "../lib/outcome"
 import { stack } from "./manifest"
 
 /** Where `pnpm dev` reads settings from. */
 const SETTINGS_FILE = stack.infra === "alchemy" ? ".env" : ".dev.vars"
 
-/**
- * A setting a layer reads is missing or unusable, so nothing that needs the layer can run. A plain
- * `Error` (it reaches the browser intact): routes show it as a page, and cards as their "not
- * configured" state, both naming the setting and the file to put it in. `problem` says what is
- * wrong with it: not set (the default), or the layer's own reason (too short, not a URL).
- */
-export class NotConfigured extends Error {
-  readonly _tag = "NotConfigured"
-  constructor(
-    readonly setting: string,
-    readonly file: string = SETTINGS_FILE,
-    readonly problem: string = `${setting} is not set.`,
-  ) {
-    super(`${problem} Set ${setting} in ${file} and restart pnpm dev.`)
-    this.name = "NotConfigured"
-  }
-}
+export { NotConfigured }
+
+/** `setting` is missing (or, with `problem`, unusable): `NotConfigured`, naming where to set it. */
+export const notConfigured = (setting: string, problem = `${setting} is not set.`): NotConfigured =>
+  new NotConfigured({
+    setting,
+    file: SETTINGS_FILE,
+    problem,
+    message: `${problem} Set ${setting} in ${SETTINGS_FILE} and restart pnpm dev.`,
+  })
 
 /** A setting's name: upper case, digits and underscores, as `.dev.vars` and `.env` write them. */
 const NAME = /\b([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+|[A-Z]{2,}[A-Z0-9]*)\b/
@@ -38,12 +32,12 @@ export const asNotConfigured = (error: unknown): NotConfigured | undefined => {
   const message = "message" in error ? String(error.message) : ""
   const own = error._tag !== "ConfigError" && message !== "" ? message : undefined
   if ("setting" in error && typeof error.setting === "string")
-    return new NotConfigured(error.setting, SETTINGS_FILE, own)
+    return notConfigured(error.setting, own)
   // an Effect ConfigError names the key as `at ["NAME"]`
   const missing = /\["([A-Za-z0-9_]+)"\]/.exec(message)?.[1]
-  if (missing !== undefined) return new NotConfigured(missing)
+  if (missing !== undefined) return notConfigured(missing)
   const named = NAME.exec(message)?.[1]
-  return new NotConfigured(named ?? String(error._tag), SETTINGS_FILE, own)
+  return notConfigured(named ?? String(error._tag), own)
 }
 
 /**

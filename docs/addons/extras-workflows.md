@@ -47,8 +47,9 @@ Your code asks for `Jobs`, declared in `packages/core/src/jobs.ts`. Its members:
 
 ## Files it writes
 
-`efforge add` writes these files.
+`efforge add` writes these files. A file marked *only if missing* is written only where the project lacks it.
 
+- `packages/core/src/server-only.ts` (*only if missing*)
 - `packages/core/src/jobs.ts`
 - `apps/web/src/workflows/Example.ts`
 - `apps/web/src/server/jobs.ts`

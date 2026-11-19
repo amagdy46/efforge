@@ -4,19 +4,26 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useServerCall } from "@/lib/use-server-call"
+import { BrowserError, BrowserUnavailable, InvalidUrl, UrlRefused } from "@repo/core/browser"
+import type { Failure } from "@/lib/outcome"
 import { visitPage } from "@/server/browser-demo"
-import type { Failure } from "@/server/outcome"
 import program from "../../../../packages/core/src/browser.ts?region=card"
 import serverFn from "../server/browser-demo.ts?region=card"
 import type { Capability } from "./types"
 
 /** No container in local dev is a setup step, not a bug: show it as "not configured". */
 const shown = (error: Failure): Failure =>
-  error._tag === "BrowserUnavailable" ? { _tag: "NotConfigured", message: error.message } : error
+  error instanceof BrowserUnavailable ? { _tag: "NotConfigured", message: error.message } : error
 
 function BrowserDemo() {
   const [url, setUrl] = useState("https://example.com")
-  const { state, run } = useServerCall(visitPage)
+  const { state, run } = useServerCall(
+    visitPage,
+    InvalidUrl,
+    UrlRefused,
+    BrowserUnavailable,
+    BrowserError,
+  )
 
   const submit = (event: SubmitEvent) => {
     event.preventDefault()
@@ -57,7 +64,9 @@ function BrowserDemo() {
         {state.status === "running" ? (
           <Pending>Loading the page. The first visit starts the container, up to a minute…</Pending>
         ) : null}
-        {state.status === "failed" ? <FailureNote error={shown(state.error)} /> : null}
+        {state.status === "failed" ? (
+          <FailureNote error={shown(state.error)} rejected={state.rejected} />
+        ) : null}
         {state.status === "done" ? (
           <figure className="space-y-2 rounded-md border bg-background p-3">
             <img

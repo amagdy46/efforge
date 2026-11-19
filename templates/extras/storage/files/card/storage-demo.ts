@@ -1,4 +1,11 @@
-import { deleteUpload, listUploads, upload } from "@repo/core/storage"
+import {
+  deleteUpload,
+  FileTooLarge,
+  listUploads,
+  NotAnUpload,
+  StorageError,
+  upload,
+} from "@repo/core/storage"
 import { createServerFn } from "@tanstack/react-start"
 import { Effect, Schema } from "effect"
 import { runOutcome } from "./outcome"
@@ -6,7 +13,7 @@ import { currentOwner } from "./owner"
 
 /** Your uploaded files, each with a signed link that opens it through this Worker. */
 export const listFiles = createServerFn({ method: "GET" }).handler(() =>
-  runOutcome(currentOwner.pipe(Effect.flatMap(listUploads))),
+  runOutcome(currentOwner.pipe(Effect.flatMap(listUploads)), StorageError),
 )
 
 const DeleteInput = Schema.Struct({ key: Schema.String.check(Schema.isMaxLength(300)) })
@@ -15,7 +22,11 @@ const DeleteInput = Schema.Struct({ key: Schema.String.check(Schema.isMaxLength(
 export const deleteFile = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(DeleteInput))
   .handler(({ data }) =>
-    runOutcome(currentOwner.pipe(Effect.flatMap((owner) => deleteUpload(owner, data.key)))),
+    runOutcome(
+      currentOwner.pipe(Effect.flatMap((owner) => deleteUpload(owner, data.key))),
+      NotAnUpload,
+      StorageError,
+    ),
   )
 
 // #region card
@@ -27,7 +38,7 @@ const UploadInput = Schema.Struct({
   bytes: Schema.Uint8ArrayFromBase64.check(Schema.isMaxLength(4_000_000)),
 })
 
-/** Stored under the caller's own prefix; `FileTooLarge` comes back as data. */
+/** Stored under the caller's own prefix; `FileTooLarge` arrives as itself. */
 export const uploadFile = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(UploadInput))
   .handler(({ data }) =>
@@ -36,6 +47,8 @@ export const uploadFile = createServerFn({ method: "POST" })
         const owner = yield* currentOwner
         return yield* upload(owner, data.name, data.type, data.bytes)
       }),
+      FileTooLarge,
+      StorageError,
     ),
   )
 // #endregion

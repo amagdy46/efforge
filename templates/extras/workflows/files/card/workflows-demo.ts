@@ -1,4 +1,4 @@
-import { startExample, watchExample } from "@repo/core/jobs"
+import { JobError, MissingName, startExample, UnknownRun, watchExample } from "@repo/core/jobs"
 import { createServerFn } from "@tanstack/react-start"
 import { Effect, Schema } from "effect"
 import { runOutcome } from "./outcome"
@@ -15,7 +15,7 @@ const StartInput = Schema.Struct({
   failFirstAttempt: Schema.Boolean,
 })
 
-/** Starts a run that belongs to the caller; `MissingName` comes as data. */
+/** Starts a run that belongs to the caller; `MissingName` arrives as itself. */
 export const startWorkflow = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(StartInput))
   .handler(({ data }) =>
@@ -24,6 +24,8 @@ export const startWorkflow = createServerFn({ method: "POST" })
         const owner = yield* currentOwner
         return yield* startExample(owner, data)
       }),
+      MissingName,
+      JobError,
     ),
   )
 // #endregion
@@ -42,5 +44,7 @@ export const watchWorkflow = createServerFn({ method: "GET" })
           outputJson: JSON.stringify(run.output ?? null),
         })),
       ),
+      UnknownRun,
+      JobError,
     ),
   )

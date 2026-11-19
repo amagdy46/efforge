@@ -48,10 +48,11 @@ Your code asks for `Mailer`, declared in `packages/core/src/mailer.ts`. Its memb
 
 ## Files it writes
 
-`efforge add` writes these files.
+`efforge add` writes these files. A file marked *only if missing* is written only where the project lacks it.
 
 | File | Only with |
 | --- | --- |
+| `packages/core/src/server-only.ts` (*only if missing*) | Always |
 | `packages/core/src/mailer.ts` | Always |
 | `apps/web/src/server/mailer.ts` | Always |
 | `apps/web/src/server/invitation-email.ts` | `auth=better-auth-orgs` |
