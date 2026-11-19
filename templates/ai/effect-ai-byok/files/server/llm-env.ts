@@ -17,12 +17,16 @@ const loadSettings = (provider: ConfigProvider.ConfigProvider) =>
       provider: Config.String("LLM_PROVIDER")
         .parse(provider)
         .pipe(Effect.mapError(unset("LLM_PROVIDER"))),
-      model: Config.String("LLM_MODEL").parse(provider).pipe(Effect.mapError(unset("LLM_MODEL"))),
+      model: Config.String("LLM_MODEL")
+        .parse(provider)
+        .pipe(Effect.mapError(unset("LLM_MODEL"))),
       // an empty key is no key (Alchemy binds an empty one until you set it)
       apiKey: Config.option(Config.Redacted("LLM_API_KEY"))
         .parse(provider)
-        .pipe(Effect.map(Option.filter((key) => Redacted.value(key) !== "")))
-        .pipe(Effect.mapError(() => notConfigured("LLM_API_KEY is not set.", "LLM_API_KEY"))),
+        .pipe(
+          Effect.map(Option.filter((key) => Redacted.value(key) !== "")),
+          Effect.mapError(unset("LLM_API_KEY")),
+        ),
       baseUrl: Config.option(Config.String("LLM_BASE_URL"))
         .parse(provider)
         .pipe(Effect.mapError(() => notConfigured("LLM_BASE_URL is not valid.", "LLM_BASE_URL"))),

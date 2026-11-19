@@ -82,12 +82,14 @@ export class Jobs extends Context.Service<
 
 // #region card
 /** Starts the example workflow; it returns at once with the run's id. */
-export const startExample = (name: string, failFirstAttempt: boolean) =>
+export const startExample = (payload: JobPayloads["example"]) =>
   Effect.gen(function* () {
-    const trimmed = name.trim()
-    if (trimmed === "") return yield* new MissingName({ message: "Give the workflow a name." })
+    const name = payload.name.trim()
+    if (name === "") {
+      return yield* new MissingName({ message: "Give the workflow a name." })
+    }
     const jobs = yield* Jobs
-    return yield* jobs.start("example", { name: trimmed, failFirstAttempt })
+    return yield* jobs.start("example", { ...payload, name })
   })
 
 /** What happened in run `id` since event `after`, and where it is now. */

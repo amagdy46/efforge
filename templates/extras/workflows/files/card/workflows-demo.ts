@@ -17,7 +17,7 @@ const StartInput = Schema.Struct({
 /** Starts a run of the example workflow; `MissingName` comes back as data. */
 export const startWorkflow = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(StartInput))
-  .handler(({ data }) => runOutcome(startExample(data.name, data.failFirstAttempt)))
+  .handler(({ data }) => runOutcome(startExample(data)))
 // #endregion
 
 /** The run's new events and its status; the output travels as JSON text. */

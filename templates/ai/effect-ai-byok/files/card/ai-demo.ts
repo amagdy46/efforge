@@ -30,9 +30,8 @@ const parts = (answer: Stream.Stream<string, LlmError>) =>
 /** Asks the model; its answer streams back as it is written. */
 export const askModel = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(AskInput))
-  .handler(({ data }) =>
-    runOutcome(
-      ask(data.prompt).pipe(Effect.catchTag("LlmNotConfigured", named), Effect.map(parts)),
-    ),
-  )
+  .handler(({ data }) => {
+    const answer = ask(data.prompt).pipe(Effect.map(parts))
+    return runOutcome(answer.pipe(Effect.catchTag("LlmNotConfigured", named)))
+  })
 // #endregion

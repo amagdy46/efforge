@@ -1,4 +1,4 @@
-import { deleteUpload, listUploads, MAX_UPLOAD_BYTES, upload } from "@repo/core/storage"
+import { deleteUpload, listUploads, upload } from "@repo/core/storage"
 import { createServerFn } from "@tanstack/react-start"
 import { Schema } from "effect"
 import { runOutcome } from "./outcome"
@@ -17,8 +17,9 @@ export const deleteFile = createServerFn({ method: "POST" })
 const UploadInput = Schema.Struct({
   name: Schema.String.check(Schema.isMaxLength(300)),
   type: Schema.String.check(Schema.isMaxLength(200)),
-  // base64 in the request, bytes here; the program refuses over 1 MB
-  bytes: Schema.Uint8ArrayFromBase64.check(Schema.isMaxLength(MAX_UPLOAD_BYTES * 4)),
+  // base64 in the request, bytes here; up to 4 MB reaches the program,
+  // which refuses over 1 MB with FileTooLarge
+  bytes: Schema.Uint8ArrayFromBase64.check(Schema.isMaxLength(4_000_000)),
 })
 
 /** `FileTooLarge` and `StorageError` come back as data. */

@@ -6,7 +6,7 @@ import { JobsInMemory, Started } from "./jobs-in-memory"
 layer(JobsInMemory)("example workflow", (it) => {
   it.effect("starts a run with the trimmed name", () =>
     Effect.gen(function* () {
-      const run = yield* startExample("  Ada ", true)
+      const run = yield* startExample({ name: "  Ada ", failFirstAttempt: true })
       expect(run.id).toMatch(/^run-/)
       expect((yield* Ref.get(yield* Started)).at(-1)).toEqual({
         name: "Ada",
@@ -19,7 +19,7 @@ layer(JobsInMemory)("example workflow", (it) => {
     Effect.gen(function* () {
       const started = yield* Started
       const before = yield* Ref.get(started)
-      const error = yield* Effect.flip(startExample("   ", false))
+      const error = yield* Effect.flip(startExample({ name: "   ", failFirstAttempt: false }))
       expect(error).toBeInstanceOf(MissingName)
       expect(yield* Ref.get(started)).toEqual(before)
     }),

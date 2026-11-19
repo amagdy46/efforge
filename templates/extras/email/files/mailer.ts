@@ -63,10 +63,11 @@ const missingFrom = () =>
 export const MailerLive = Layer.unwrap(
   Effect.gen(function* () {
     const provider = yield* WorkerConfig.provider
-    const read = (name: string, fallback: string) =>
-      Config.String(name).pipe(Config.withDefault(fallback)).parse(provider)
-    const transport = yield* read("MAIL_TRANSPORT", "cloudflare")
-    const from = yield* read("MAIL_FROM", "")
+    const transport = yield* Config.String("MAIL_TRANSPORT")
+      .pipe(Config.withDefault("cloudflare"))
+      .parse(provider)
+    const sender = Config.String("MAIL_FROM").pipe(Config.withDefault(""))
+    const from = yield* sender.parse(provider)
     if (transport === "console") return ConsoleMailer(from)
     if (from === "") return yield* missingFrom()
     return CloudflareMailer(from)

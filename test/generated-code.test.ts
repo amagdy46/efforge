@@ -244,10 +244,20 @@ const REGION_WIDTH = 80
 const stacksWithCards = (["none", "better-auth", "better-auth-orgs"] as const).flatMap((auth) =>
   (["drizzle", "effect-sql"] as const).flatMap((orm) =>
     (["d1", "postgres"] as const).map((database) =>
-      withDefaults({ name: "app", database, orm, auth, infra: "none", extras: ["realtime"] }),
+      (["none", "alchemy"] as const).map((infra) =>
+        withDefaults({
+          name: "app",
+          database,
+          orm,
+          auth,
+          infra,
+          ai: "effect-ai-byok",
+          extras: ["realtime", "storage", "email", "workflows", "browser"],
+        }),
+      ),
     ),
   ),
-)
+).flat()
 
 it(`every region a registered card shows fits in ${REGION_WIDTH} characters, on every stack`, async () => {
   const addons = await Effect.runPromise(
