@@ -61,6 +61,11 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 
 - `doctor` has an `ignored` check: a project that isn't its own git repository, under a `.gitignore` that ignores everything (a dotfiles repository in `~` with `*`), has no files for `pnpm check` and no styles from Tailwind. It names the rule and its file, and its `fix` is `git init` in the project. `create` without a repository of its own (`--no-git`) says the same in one line, a `warnings` entry under `--json`.
 - `upgrade` appends the env vars the stack reads that `.env.example` lacks, there and in the local settings file (`.dev.vars`, or `.env` with Alchemy) when there is one, as `add` does: no line already there changes. They are listed in the output and as `env` under `--json`, in `--check` too.
+- Tagged errors survive the trip to the browser. A server function returns its Effect's `Exit`, encoded (`runOutcome(program, ...errors)`), and `useServerCall(fn, ...errors)` decodes it, so `state.error instanceof FileTooLarge` holds and `state.error.limit` is there. Every card's error state shows the error it received, with its fields, and the runtime card's code panel shows the client lines that match on it. An error you don't list still arrives as its tag and message; a call refused before it ran (no session, bad input) or a defect is `rejected: true`.
+- `ServerOnly` (`packages/core/src/server-only.ts`): an error field that stays in the server log. A driver's `cause` uses it, so no raw driver text reaches the browser.
+- Every service call is a named span (`Notes.list`, `Storage.put`, `Auth.currentSession`, ...) and every server function call is one (`serverFn.addNote`). Nothing records them until a tracer is set; then a trace reads by name.
+- `layers.ts` has a telemetry slot, `TelemetryLive`, underneath `AppLayer`, so a tracer there reaches what a layer forks while it builds as well as each request. Add-ons fill it with the new `addTelemetry` transform.
+- The generated `AGENTS.md` says how to add an error to a service and handle it in a component, to restart `pnpm dev` after adding a dependency, and where the Local Explorer is (`/cdn-cgi/local/explorer/`: D1 rows, R2 objects, Durable Object storage, Workflows, traces).
 
 ### Changed
 
@@ -115,6 +120,9 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - A missing or unusable setting names itself on the page and from `/api/auth/*`, for example `STORAGE_SIGNING_SECRET is too short`, a malformed `BETTER_AUTH_URL`, or an `LLM_PROVIDER` that is not a provider.
 - Every region a card shows fits 80 characters on every stack, so the code panel never scrolls sideways at 1440 px; a test checks all nine cards on both infras.
 - The README's Deploy section covers every add-on that binds a Cloudflare resource, from one record in `src/readme.ts`; a test fails for a new add-on with a wrangler binding until Deploy names it on both infras.
+
+- Service errors in `packages/core` are `Schema.TaggedError` classes (were `Data.TaggedError`), and several carry the fields a UI needs: `InvalidName.length`, `InvalidNote.limit`, `MessageTooLarge.limit`, `FileTooLarge.size` and `limit`, `InvalidAddress.address`, `UrlRefused.url`, `InvalidUrl.url`.
+- Effect's "experimental API" warning is off in `tsconfig.base.json` and lint, like the "unstable" one: an add-on that uses an experimental API (Effect Cluster) no longer fails `pnpm check`.
 
 ### Fixed
 

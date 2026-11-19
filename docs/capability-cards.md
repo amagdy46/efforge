@@ -26,11 +26,14 @@ These files come with every project (`templates/base/files/web`):
 | `src/components/demo.tsx` | `FailureNote` (an error or "not configured" state) and `Pending` (loading) |
 | `src/components/code-block.tsx`, `src/lib/highlight.ts` | Syntax-coloured code with file tabs, no dependency |
 | `regions.ts` | The Vite plugin behind `?region=card`: the marked part of a file, cut at build time |
-| `src/lib/use-server-call.ts` | `useServerCall(serverFn)`: idle, running, done or failed |
+| `src/lib/use-server-call.ts` | `useServerCall(serverFn, ...errors)`: idle, running, done or failed, the failure decoded into its class; `settleCall` for one call outside a hook |
+| `src/lib/outcome.ts` | `Outcome` (the encoded `Exit` a server function returns), `decodeOutcome`, `NotConfigured`, `Failure` |
 | `src/lib/failure.ts` | `asFailure(error)`: a rejected call as a `Failure` with its tag |
-| `src/server/outcome.ts` | `runOutcome(effect)`: a server function's result, or its tagged error as data |
+| `src/server/outcome.ts` | `runOutcome(effect, ...errors)`: runs the Effect as a span named after the function and returns its `Exit`, encoded |
+| `src/server/name-call.ts` | `nameCall`: names that span after the server function (`serverFn.announce`) |
+| `packages/core/src/server-only.ts` | `ServerOnly`: an error field that stays on the server (a driver's `cause`) |
 | `src/server/settings.ts` | `NotConfigured`: a missing setting, named, with the file to put it in |
-| `src/start.ts` | Keeps a tagged error's `_tag` on its way to the browser |
+| `src/start.ts` | Runs `nameCall` (and `sessionGate` with auth) before every server function; keeps a thrown tagged error's `_tag` on its way to the browser |
 | `src/components/layer-graph.tsx`, `src/lib/layer-graph.ts` | The layer graph, read from `server/layers.ts` and annotated from the cards |
 
 ## Contribute a card
@@ -98,20 +101,30 @@ When the user edits the file, the card shows their edit (`pnpm dev` watches it).
 
 ### 2. Server functions
 
-Put each server function the card calls in a card file under `apps/web/src/server/` (step 3), and only there: `loadAddons` refuses a card file elsewhere that calls `createServerFn`, and a card file there that does not. Run the Effect with `runOutcome` (from `./outcome`), not `runtime.runPromise`:
+Put each server function the card calls in a card file under `apps/web/src/server/` (step 3), and only there: `loadAddons` refuses a card file elsewhere that calls `createServerFn`, and a card file there that does not. Run the Effect with `runOutcome` (from `./outcome`), not `runtime.runPromise`, and list the tagged errors it can fail with:
 
 ```ts
 const AnnounceInput = Schema.Struct({ text: Schema.String })
 
 export const announce = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(AnnounceInput))
-  .handler(({ data }) => runOutcome(announceProgram("demo", data.text)))
+  .handler(({ data }) => {
+    const program = announceProgram("demo", data.text)
+    return runOutcome(program, MessageTooLarge, RealtimeError)
+  })
+```
+
+The demo names the same classes, and gets each failure back as an instance of its class, with its fields:
+
+```tsx
+const server = useServerCall(announce, MessageTooLarge, RealtimeError)
+// server.state.error instanceof MessageTooLarge, server.state.error.limit
 ```
 
 - Do not add `requireSession`. On auth stacks efforge chains `.middleware([requireSession])` on every `createServerFn` in the add-on's files under `apps/web/src/`, GET and POST alike, so an anonymous request gets `Unauthorized` and never reaches the handler. It does this when the file is written and again when auth is added later. A function that already has `.middleware([timing])` gets `[requireSession, timing]`; one whose `.middleware(...)` is not a written-out list cannot be edited, so `add` names it in a note with the fix and the project's `pnpm check` fails until it is guarded.
 - A server function that must answer signed-out visitors is rare (the route guard's `getSession`, the landing page's `getStack`). It needs its name on the `public` list of `efforge/server-fn-session` in the base `vite.config.ts` and in `PUBLIC_SERVER_FNS` (`src/cards.ts`); a test checks the two agree. Ask before adding one.
-- Typed failures come back as `{ ok: false, error: { _tag, message } }`. They are logged on the server; only `_tag` and `message` reach the browser, so put a driver's raw text in another field, never in `message`.
-- Every error in `E` needs `_tag` and `message`: `Data.TaggedError` with a `message` field that is always set. TypeScript does not catch a missing one, because `Error` has `message`.
+- `runOutcome` returns the Effect's `Exit`, encoded with `Schema` (`toCodecJson`), and logs typed failures on the server. Every field of a listed error reaches the browser, so declare a driver's raw error as `cause: ServerOnly`, which encoding drops, and never put it in `message` or another field. An error you do not list arrives as its `_tag` and `message` only; `NotConfigured` always arrives as itself. A defect still rejects, a 500.
+- Every error in `E` needs `_tag` and `message`. Declare it with `Schema.TaggedError` and a brand (`Schema.TaggedError<MessageTooLarge, { readonly brand: unique symbol }>()("MessageTooLarge", { message: Schema.String, limit: Schema.Number })`; the project's lint asks for the brand), with a `message` that is always set. TypeScript does not catch a missing one, because `Error` has `message`. Give it the fields a UI would use (`limit`, `url`, `address`); the card shows them.
 - Put the logic in a program in `packages/core` (`announce`, `createNote`, `greet`) and keep the server function to validation and `runOutcome`, so the test can run the same program.
 - The demo calls it as `run({ data: { text } })`; a GET without input as `run()`.
 - Keep the validator's limits and the input's `maxLength` the same, and the program's own limits inside them, so the program's tagged error is what a user sees. A validator rejection still arrives as `InvalidInput` with its messages.
@@ -185,13 +198,13 @@ A demo talks to a real server, so it is honest about state. Use the helpers and 
 | --- | --- |
 | Loading | `<Pending>Reading the note table…</Pending>`; disable the button that started it |
 | Empty | A plain sentence that says what to do: "No notes yet. Add the first one." |
-| Error | `<FailureNote error={state.error} />`: shows the `_tag` and the message |
-| Not configured | The same `FailureNote`: for `NotConfigured` it says which setting is missing and where to set it. Never a crash. A setup step your add-on reports with its own tag (`LlmNotConfigured`: no key saved; `BrowserUnavailable`: no container in local dev) is shown the same way: pass `{ _tag: "NotConfigured", message }` |
+| Error | `<FailureNote {...state} />`: shows the `_tag`, the message and the error's fields, and says when the server rejected the call |
+| Not configured | The same `FailureNote`: for `NotConfigured` it says which setting is missing and where to set it. Never a crash. A setup step your add-on reports with its own tag (`LlmNotConfigured`: no key saved; `BrowserUnavailable`: no container in local dev) is shown the same way: pass `{ _tag: "NotConfigured", message }` when `state.error instanceof LlmNotConfigured` |
 | Done | The result, and one line on what ran: "Answered at 7:55 PM by the Worker, through the `greet` program" |
 
-`useServerCall(serverFn)` gives `{ state, run }` with `state.status` one of `idle`, `running`, `done`, `failed`; `run` resolves to the outcome. Load on mount with `useEffect(() => { void run() }, [run])` when the demo starts from data (the database card does). A call the server rejects fails with its own tag (`Unauthorized`, `NotConfigured`), `InvalidInput` (the validator), `Unreachable` (no answer) or `Defect` (a bug), never a blank message.
+`useServerCall(serverFn, ...errors)` gives `{ state, run }` with `state.status` one of `idle`, `running`, `done`, `failed`; `run` resolves to `{ ok: true, value }` or `{ ok: false, error, rejected }`. Load on mount with `useEffect(() => { void run() }, [run])` when the demo starts from data (the database card does). A failed state's `error` is the tagged error the Effect failed with, as its class (`rejected: false`), or, for a call the server refused, `rejected: true` with its own tag (`Unauthorized` from the session gate), `InvalidInput` (the validator), `Unreachable` (no answer) or `Defect` (a bug, a 500), never a blank message. A demo that calls a server function itself (the AI card reads a stream; the workflows card polls) uses `settleCall(serverFn(input), ...errors)` for the same result.
 
-- Keep what the user typed when a call fails, so they can fix it and send again: clear the input only when the outcome is `ok`.
+- Keep what the user typed when a call fails, so they can fix it and send again: clear the input only when the result is `ok`.
 - Make every error path you show in the code reachable from the demo (the realtime card's "Send from the server" sends the typed text, so an oversized one comes back as `MessageTooLarge`).
 - Say who may use the demo with `access` on the card. `{ effect: "reads" }` for one that changes nothing. A demo with a server function that writes (stores something) or spends (a model call, an email, a container) is `{ effect: "writes" | "spends", open, signedIn }`: the card frame shows `open` after "Open endpoint." while `efforge.jsonc` says `auth: "none"`, and `signedIn` after "Any signed-in user." with auth, since sign-up is open. A test over the registry fails on a card with a `POST` server function that says `reads`. A card that needs the stack for other wording (the email card names `.env` on Alchemy) calls `useStack()` from `@/lib/use-stack`, which asks `getStack` once per page for every card. Do not call `getStack` from a card yourself. Add a `when: { auth: ["none"] }` `AGENTS.md` subsection that says the same as `open`; `add` drops it when auth is added, since the sections are regenerated from the stack.
 - Data a user makes belongs to them: key it by `currentOwner` from `apps/web/src/server/owner.ts` (the signed-in user's id with auth, one shared owner without), as the storage and workflows cards do. Say on the card when data is shared on purpose, as the database card does.
