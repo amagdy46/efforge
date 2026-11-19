@@ -1,8 +1,15 @@
 import { Effect, Schema } from "effect"
+import { type Preset, presetById, presets } from "../presets.ts"
 import { IncompatibleStack, validate } from "../rules.ts"
 import { available, type OptionDef, slots, whyUnavailable } from "../slots.ts"
 import { ProjectName, type SlotId, type StackConfig } from "../stack.ts"
 import { GoBack, type PromptError, type PromptIOShape } from "./navigable.ts"
+
+/** `--preset` named no preset. */
+export class UnknownPreset extends Schema.TaggedError<UnknownPreset>()("UnknownPreset", {
+  value: Schema.String,
+  allowed: Schema.Array(Schema.String),
+}) {}
 
 export class InvalidProjectName extends Schema.TaggedError<InvalidProjectName>()(
   "InvalidProjectName",
@@ -12,6 +19,8 @@ export class InvalidProjectName extends Schema.TaggedError<InvalidProjectName>()
 /** Flag values as typed by the user: unvalidated strings. */
 export interface StackFlags {
   readonly name?: string | undefined
+  /** A preset's id: its stack fills every slot no flag set. */
+  readonly preset?: string | undefined
   readonly runtime?: string | undefined
   readonly database?: string | undefined
   readonly orm?: string | undefined
@@ -26,6 +35,8 @@ export interface AskOptions {
   readonly yes?: boolean | undefined
   /** Extra check on the project name (e.g. the target directory is not empty), run while prompting. */
   readonly checkName?: ((name: string) => string | undefined) | undefined
+  /** Told which preset filled the stack (from the flag or the prompt), if any. */
+  readonly onPreset?: ((preset: Preset) => void) | undefined
 }
 
 export const DEFAULT_NAME = "my-app"
@@ -54,16 +65,35 @@ const defaultFor = (slot: (typeof slots)[number], options: ReadonlyArray<OptionD
   return options.some((o) => o.id === wanted) ? wanted : (options[0]?.id ?? wanted)
 }
 
+/** The preset prompt's answer for "choose each part". */
+export const CUSTOM = "custom"
+
+/** The choices of the preset prompt: each preset, then "choose each part". */
+export const presetChoices = () => [
+  ...presets.map((p) => ({ value: p.id, label: p.title, hint: p.description })),
+  {
+    value: CUSTOM,
+    label: "Choose each part",
+    hint: "database, ORM, auth, infrastructure, AI, extras",
+  },
+]
+
 /**
- * Walks the slots in order. Flags skip their prompt but are validated against the
- * answers so far; a slot with a single available option is chosen silently.
- * `GoBack` returns to the previous slot that was actually prompted.
+ * Asks for the name, then (when no stack flag and no `--yes` decided anything) whether to start from
+ * a preset or choose each part, then walks the slots in order. Flags skip their prompt but are
+ * validated against the answers so far; a slot with a single available option is chosen silently. A
+ * preset fills every slot no flag set, without prompting, with its value where the flags allow it
+ * and the default where they don't. `GoBack` returns to the previous slot that was actually
+ * prompted, and from the first one to the preset prompt.
  */
 export const askStack = (
   flags: StackFlags,
   io: PromptIOShape,
   opts: AskOptions = {},
-): Effect.Effect<StackConfig, PromptError | IncompatibleStack | InvalidProjectName> =>
+): Effect.Effect<
+  StackConfig,
+  PromptError | IncompatibleStack | InvalidProjectName | UnknownPreset
+> =>
   Effect.gen(function* () {
     // 1. name
     let name = flags.name
@@ -83,11 +113,59 @@ export const askStack = (
     const invalid = nameError(name)
     if (invalid !== undefined) return yield* new InvalidProjectName({ name, message: invalid })
 
-    // 2. slots
-    const draft: Draft = {}
+    // 2. a preset, from the flag or the prompt
+    let preset: Preset | undefined
+    if (flags.preset !== undefined) {
+      preset = presetById(flags.preset)
+      if (preset === undefined)
+        return yield* new UnknownPreset({
+          value: flags.preset,
+          allowed: presets.map((p) => p.id),
+        })
+    }
+    const slotFlags = slots.some((s) => flags[s.id as keyof StackFlags] !== undefined)
+    const askPreset = preset === undefined && opts.yes !== true && !slotFlags
+
+    // 3. slots
     const previous: Draft = {}
+    let presetAnswer: string | undefined
+    for (;;) {
+      if (askPreset) {
+        const answer = yield* io.select({
+          id: "preset",
+          message: "Start from a preset, or choose each part?",
+          options: presetChoices(),
+          initial: presetAnswer ?? (presets[0] as Preset).id,
+          canGoBack: false,
+        })
+        presetAnswer = answer === GoBack ? CUSTOM : answer
+        preset = presetById(presetAnswer)
+      }
+      const draft = yield* walkSlots(flags, io, {
+        ...opts,
+        preset,
+        previous,
+        backToStart: askPreset,
+      })
+      if (draft === GoBack) continue
+      if (preset !== undefined) opts.onPreset?.(preset)
+      return yield* validate({ name, ...draft } as unknown as StackConfig)
+    }
+  })
+
+const walkSlots = (
+  flags: StackFlags,
+  io: PromptIOShape,
+  opts: AskOptions & {
+    readonly preset: Preset | undefined
+    readonly previous: Draft
+    readonly backToStart: boolean
+  },
+): Effect.Effect<Draft | GoBack, PromptError | IncompatibleStack> =>
+  Effect.gen(function* () {
+    const { preset, previous } = opts
+    const draft: Draft = {}
     const history: number[] = []
-    let section: string | undefined
     let i = 0
     while (i < slots.length) {
       const slot = slots[i] as (typeof slots)[number]
@@ -111,18 +189,26 @@ export const askStack = (
         i++
         continue
       }
+      if (preset !== undefined) {
+        // the preset's value where the flags allow it, else the default
+        const value = preset.stack[slot.id]
+        draft[slot.id] =
+          typeof value === "string"
+            ? ids.includes(value)
+              ? value
+              : defaultFor(slot, options)
+            : value.filter((v) => ids.includes(v))
+        i++
+        continue
+      }
       if (opts.yes || (!slot.multi && options.length <= 1)) {
         draft[slot.id] = defaultFor(slot, options)
         i++
         continue
       }
 
-      if (section !== slot.section) {
-        section = slot.section
-        yield* io.section(slot.section)
-      }
       const choices = options.map((o) => ({ value: o.id, label: o.label, hint: o.hint }))
-      const canGoBack = history.length > 0
+      const canGoBack = history.length > 0 || opts.backToStart
       const prev = previous[slot.id]
       const answer = slot.multi
         ? yield* io.multiselect({
@@ -142,9 +228,8 @@ export const askStack = (
 
       if (answer === GoBack) {
         const back = history.pop()
-        if (back === undefined) continue // cannot happen: first prompt has no Back; re-ask
+        if (back === undefined) return GoBack
         for (let j = back; j < slots.length; j++) delete draft[(slots[j] as { id: SlotId }).id]
-        section = undefined
         i = back
         continue
       }
@@ -153,6 +238,5 @@ export const askStack = (
       history.push(i)
       i++
     }
-
-    return yield* validate({ name, ...draft } as unknown as StackConfig)
+    return draft
   })

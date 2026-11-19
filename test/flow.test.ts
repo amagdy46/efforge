@@ -21,6 +21,7 @@ it.effect("full interactive run", () =>
   Effect.gen(function* () {
     const { s, result } = run({}, [
       "app",
+      "custom",
       "d1",
       "drizzle",
       "better-auth",
@@ -39,9 +40,11 @@ it.effect("full interactive run", () =>
       ai: "effect-ai-byok",
       extras: ["email", "storage"],
     })
-    // runtime has a single option so it is never asked; first select cannot go back
+    // runtime has a single option so it is never asked; the preset prompt cannot go back, and the
+    // first slot goes back to it
     expect(s.shown.map((x) => x.id)).toEqual([
       "name",
+      "preset",
       "database",
       "orm",
       "auth",
@@ -49,13 +52,9 @@ it.effect("full interactive run", () =>
       "ai",
       "extras",
     ])
-    expect(s.shown.find((x) => x.id === "database")?.canGoBack).toBe(false)
+    expect(s.shown.find((x) => x.id === "preset")?.canGoBack).toBe(false)
+    expect(s.shown.find((x) => x.id === "database")?.canGoBack).toBe(true)
     expect(s.shown.find((x) => x.id === "orm")?.canGoBack).toBe(true)
-    expect(s.output.filter((o) => o.startsWith("section:"))).toEqual([
-      "section: Data",
-      "section: Platform",
-      "section: Features",
-    ])
   }),
 )
 
@@ -64,6 +63,7 @@ it.effect("a back step re-asks the previous slot and clears later answers", () =
     // database=postgres, orm=drizzle, auth=back -> orm again (=none? not allowed with postgres) ...
     const { s, result } = run({}, [
       "app",
+      "custom",
       "postgres",
       "drizzle",
       GoBack, // at auth: back to orm
@@ -79,6 +79,7 @@ it.effect("a back step re-asks the previous slot and clears later answers", () =
     expect(cfg.auth).toBe("none")
     expect(s.shown.map((x) => x.id)).toEqual([
       "name",
+      "preset",
       "database",
       "orm",
       "auth",
@@ -191,7 +192,7 @@ it.effect("invalid project names are rejected", () =>
 
 it.effect("cancel anywhere fails with Cancelled", () =>
   Effect.gen(function* () {
-    const { result } = run({ name: "app" }, ["postgres", CANCEL])
+    const { result } = run({ name: "app" }, ["custom", "postgres", CANCEL])
     expect(yield* result.pipe(Effect.flip)).toMatchObject({ _tag: "Cancelled" })
   }),
 )

@@ -5,7 +5,7 @@ import { Context, Effect, Exit, Option, Path, Schema } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { parse as parseJsonc } from "jsonc-parser"
 import pc from "picocolors"
-import { type LoadedAddon, loadAddons } from "../addon.ts"
+import { addonIdsFor, type LoadedAddon, loadAddons } from "../addon.ts"
 import {
   BIN,
   type Failure,
@@ -16,9 +16,10 @@ import {
   typoOf,
 } from "../contract.ts"
 import { COMMIT, exec, FORMAT, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
-import { alternative, finish, fix, meantName, withFlag } from "../fix.ts"
-import { generate } from "../generate.ts"
-import { askStack, DEFAULT_NAME, type StackFlags } from "../prompts/flow.ts"
+import { alternative, finish, fix, intentOf, meantName, withFlag } from "../fix.ts"
+import { generate, matches } from "../generate.ts"
+import { askStack, CUSTOM, DEFAULT_NAME, type StackFlags } from "../prompts/flow.ts"
+import { type Preset, presetIds, presets } from "../presets.ts"
 import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
 import { projectDirName } from "../projectName.ts"
 import { envGroups, localEnvFile } from "../env.ts"
@@ -45,10 +46,16 @@ export interface CreateOptions {
   readonly flags: StackFlags
   readonly yes: boolean
   readonly dryRun: boolean
+  /** The dry run lists every file, not a summary by add-on. */
+  readonly verbose?: boolean
   readonly json: boolean
   readonly install: boolean
   readonly git: boolean
 }
+
+/** The summary's title: says which preset, if one was used, filled the stack. */
+const stackTitle = (preset: Preset | undefined): string =>
+  preset === undefined ? "Your stack" : `Your stack (the ${preset.title} preset)`
 
 const summary = (stack: StackConfig): string =>
   [
@@ -59,11 +66,87 @@ const summary = (stack: StackConfig): string =>
     }),
   ].join("\n")
 
+/** Seconds since `start`, for the last line of a run. */
+export const elapsed = (start: number): string =>
+  `${((performance.now() - start) / 1000).toFixed(1)}s`
+
+/** Label-value lines with the values in one column, each after the outro's own indent. */
+export const outroLines = (
+  first: string,
+  rows: ReadonlyArray<readonly [string, string]>,
+): string => {
+  const width = Math.max(0, ...rows.map(([label]) => label.length))
+  return [
+    first,
+    ...rows.map(([label, value]) => `   ${pc.dim(label.padEnd(width))}  ${value}`),
+  ].join("\n")
+}
+
+/** Where each file comes from: the last add-on, in overlay order, that writes it; else `base`. */
+export const origins = (
+  stack: StackConfig,
+  addons: ReadonlyMap<string, LoadedAddon>,
+  files: ReadonlyArray<string>,
+): Map<string, string> => {
+  const from = new Map<string, string>()
+  for (const id of addonIdsFor(stack)) {
+    const m = addons.get(id)?.manifest
+    for (const f of [...(m?.files ?? []), ...(m?.card?.files ?? [])])
+      if (matches(f.when, stack) && !(f.ifAbsent === true && from.has(f.target)))
+        from.set(f.target, id)
+  }
+  return new Map(files.map((f) => [f, from.get(f) ?? "base"]))
+}
+
+/** `apps/web/src/x.ts` -> `apps/web`, `README.md` -> `(root)`: the top two levels of a path. */
+const topOf = (file: string): string => {
+  const parts = file.split("/")
+  return parts.length === 1 ? "(root)" : parts.slice(0, Math.min(2, parts.length - 1)).join("/")
+}
+
+/**
+ * The files a dry run would write, by the add-on they come from: a count and the top-level
+ * directories for each, or (`verbose`) every file under its add-on.
+ */
+export const filesByOrigin = (
+  stack: StackConfig,
+  addons: ReadonlyMap<string, LoadedAddon>,
+  files: ReadonlyArray<string>,
+  verbose: boolean,
+): string => {
+  const from = origins(stack, addons, files)
+  const order = addonIdsFor(stack)
+  const groups = order
+    .map((id) => ({ id, files: files.filter((f) => from.get(f) === id) }))
+    .filter((g) => g.files.length > 0)
+  if (verbose)
+    return groups
+      .map((g) =>
+        [pc.bold(`${g.id} (${g.files.length})`), ...g.files.map((f) => `  ${f}`)].join("\n"),
+      )
+      .join("\n\n")
+  const width = Math.max(...groups.map((g) => g.id.length))
+  const count = Math.max(...groups.map((g) => String(g.files.length).length)) + 1
+  return [
+    ...groups.map((g, i) => {
+      const tops = new Map<string, number>()
+      for (const f of g.files) tops.set(topOf(f), (tops.get(topOf(f)) ?? 0) + 1)
+      const where = [...tops]
+        .toSorted(([a, x], [b, y]) => y - x || (a < b ? -1 : 1))
+        .map(([dir, n]) => `${dir} ${n}`)
+        .join(", ")
+      const n = `${i === 0 ? "" : "+"}${g.files.length}`.padStart(count)
+      return `${g.id.padEnd(width)}  ${n}  ${pc.dim(where)}`
+    }),
+    "",
+    pc.dim("Every file: add --verbose, or --json for the list as data."),
+  ].join("\n")
+}
+
 /** --json: no chrome on stdout; warnings and skipped steps are kept for the document. */
 const collectingIO = (io: PromptIOShape, warnings: string[]): PromptIOShape => ({
   ...io,
   intro: () => Effect.void,
-  section: () => Effect.void,
   info: (m) => Effect.sync(() => void warnings.push(m)),
   warn: (m) => Effect.sync(() => void warnings.push(m)),
   note: () => Effect.void,
@@ -176,6 +259,7 @@ export const create = (opts: CreateOptions) =>
     const yes = opts.yes || opts.json
     const warnings: string[] = []
     const io: PromptIOShape = quiet ? collectingIO(live, warnings) : live
+    const start = performance.now()
 
     if (!quiet) yield* io.intro(introLine())
 
@@ -198,8 +282,12 @@ export const create = (opts: CreateOptions) =>
 
     const targetFor = (name: string) =>
       inPlace ? process.cwd() : path.resolve(projectDirName(name))
+    let preset: Preset | undefined
     const stack = yield* askStack(flags, io, {
       yes,
+      onPreset: (p) => {
+        preset = p
+      },
       checkName: opts.dryRun
         ? undefined
         : (name) => {
@@ -252,16 +340,19 @@ export const create = (opts: CreateOptions) =>
           warnings,
         })
       } else {
-        yield* io.note(summary(stack), "Your stack")
-        yield* io.note(files.join("\n"), `${files.length} files`)
+        yield* io.note(summary(stack), stackTitle(preset))
+        yield* io.note(
+          filesByOrigin(stack, addons, files, opts.verbose === true),
+          `Would write ${files.length} files`,
+        )
         yield* io.outro(
-          `${pc.dim("dry run: nothing written.")} Run it for real:\n  ${shownCommand}`,
+          outroLines(pc.dim("Dry run: nothing written."), [["Run it for real:", shownCommand]]),
         )
       }
       return
     }
 
-    yield* io.note(summary(stack), "Your stack")
+    yield* io.note(summary(stack), stackTitle(preset))
     if (!yes) {
       const ok = yield* io.confirm({
         id: "confirm",
@@ -396,7 +487,10 @@ export const create = (opts: CreateOptions) =>
       })
     yield* io.note(nextSteps(stack, { dirName, inPlace, installed: opts.install }), "Next steps")
     yield* io.outro(
-      `${pc.green("Done.")} ${pc.dim("Add more later:")} ${BIN} list${inPlace ? "" : ` --cwd ${dirName}`}\n   ${pc.dim("Same stack again:")} ${command}`,
+      outroLines(`${pc.green("Done")} in ${elapsed(start)}.`, [
+        ["Add more later:", `${BIN} list${inPlace ? "" : ` --cwd ${dirName}`}`],
+        ["Same stack again:", command],
+      ]),
     )
   })
 
@@ -494,6 +588,12 @@ export const createConfig = {
     Argument.withDescription(`Project name and directory (default prompt: ${DEFAULT_NAME})`),
     Argument.optional,
   ),
+  preset: Flag.Literals("preset", presetIds).pipe(
+    Flag.withDescription(
+      `Start from a preset; a stack flag overrides its slot: ${presets.map((p) => `${p.id} (${p.description})`).join("; ")}`,
+    ),
+    Flag.optional,
+  ),
   runtime: slotFlag("runtime"),
   database: slotFlag("database"),
   orm: slotFlag("orm"),
@@ -507,7 +607,11 @@ export const createConfig = {
     Flag.withDefault(false),
   ),
   dryRun: Flag.Boolean("dry-run").pipe(
-    Flag.withDescription("Print the files that would be written; write nothing"),
+    Flag.withDescription("Print the files that would be written, by add-on; write nothing"),
+    Flag.withDefault(false),
+  ),
+  verbose: Flag.Boolean("verbose").pipe(
+    Flag.withDescription("With --dry-run, list every file"),
     Flag.withDefault(false),
   ),
   json: Flag.Boolean("json").pipe(
@@ -530,6 +634,7 @@ const opt = <A>(o: Option.Option<A>): A | undefined => Option.getOrUndefined(o)
 
 export const toCreateOptions = (input: {
   name: Option.Option<string>
+  preset: Option.Option<string>
   runtime: Option.Option<string>
   database: Option.Option<string>
   orm: Option.Option<string>
@@ -539,12 +644,14 @@ export const toCreateOptions = (input: {
   extras: Option.Option<string>
   yes: boolean
   dryRun: boolean
+  verbose: boolean
   json: boolean
   install: boolean
   git: boolean
 }): CreateOptions => ({
   flags: {
     name: opt(input.name),
+    preset: opt(input.preset),
     runtime: opt(input.runtime),
     database: opt(input.database),
     orm: opt(input.orm),
@@ -562,6 +669,7 @@ export const toCreateOptions = (input: {
   },
   yes: input.yes,
   dryRun: input.dryRun,
+  verbose: input.verbose,
   json: input.json,
   install: input.install,
   git: input.git,
@@ -667,6 +775,17 @@ export const createFailure = (
         details: { flag: `--${slot}`, value, allowed },
       }
     }
+    case "UnknownPreset": {
+      const value = String(e.value)
+      const near = typoOf(value, presetIds)
+      const fixed = near === undefined ? null : fix(args, (i) => withFlag(i, "preset", near))
+      return {
+        code: "UnknownValue",
+        message: `Unknown --preset=${value}. Presets: ${presets.map((p) => `${p.id} (${p.description})`).join("; ")}.${fixed === null ? " It isn't a clear typo of any of them, so there is no fix." : ""}`,
+        fix: fixed,
+        details: { flag: "--preset", value, allowed: [...presetIds] },
+      }
+    }
     case "InvalidProjectName": {
       const name = String(e.name)
       // only case and spaces are changed (`My App`): a path or other characters mean a choice
@@ -723,7 +842,8 @@ export const createFailure = (
     }
     case "NeedsInput": {
       const id = String(e.id)
-      const options = e.options as string[]
+      // "choose each part" is the stack flags, not a value of --preset
+      const options = (e.options as string[]).filter((o) => !(id === "preset" && o === CUSTOM))
       const flag = id === "name" ? "<name>" : id === "confirm" ? "--yes" : `--${id}`
       return {
         code: "NeedsInput",
@@ -773,9 +893,45 @@ export const createFailure = (
 const flagHint = (id: string, options: ReadonlyArray<string>): string =>
   id === "name"
     ? "pass a project name"
-    : id === "confirm"
-      ? "pass --yes to create without confirming"
-      : `pass --${id}=${options.join("|")}${id === "extras" ? " (comma-separated, or --extras= for none)" : ""}`
+    : id === "preset"
+      ? `pass --preset=${options.join("|")} or the stack flags`
+      : id === "confirm"
+        ? "pass --yes to create without confirming"
+        : `pass --${id}=${options.join("|")}${id === "extras" ? " (comma-separated, or --extras= for none)" : ""}`
+
+/**
+ * An unknown `--preset`, as `create` reports it (`UnknownValue`, with the typo fix), checked before
+ * the arguments are parsed: the flag takes only the presets, so the parser would say less.
+ */
+export const presetFailure = (args: ReadonlyArray<string>): Failure | undefined => {
+  const i = intentOf(args)
+  if (i.verb !== "create") return undefined
+  const flag = i.flags.find((f) => f.name === "preset")
+  if (typeof flag?.value !== "string" || flag.value === "" || presetIds.includes(flag.value))
+    return undefined
+  const value = flag.value
+  return createFailure(
+    { _tag: "UnknownPreset", value, allowed: [...presetIds] },
+    args,
+    toCreateOptions({
+      name: Option.none(),
+      preset: Option.some(value),
+      runtime: Option.none(),
+      database: Option.none(),
+      orm: Option.none(),
+      auth: Option.none(),
+      infra: Option.none(),
+      ai: Option.none(),
+      extras: Option.none(),
+      yes: false,
+      dryRun: false,
+      verbose: false,
+      json: false,
+      install: true,
+      git: true,
+    }).flags,
+  )
+}
 
 /** Command handler: one clear error and exit code 1; cancelling exits 130 like any Ctrl-C. */
 export const createHandler = (input: Parameters<typeof toCreateOptions>[0]) => {

@@ -424,6 +424,55 @@ npx -y create-efforge list --json
       "title": "Drizzle ORM",
       "description": "Drizzle 1.0 with its Effect drivers behind the Database service; migrations come from drizzle-kit."
     }
+  ],
+  "presets": [
+    {
+      "id": "saas",
+      "title": "SaaS",
+      "description": "Postgres, Drizzle, Better Auth with organizations, email and storage",
+      "stack": {
+        "runtime": "cloudflare",
+        "database": "postgres",
+        "orm": "drizzle",
+        "auth": "better-auth-orgs",
+        "infra": "none",
+        "ai": "none",
+        "extras": [
+          "storage",
+          "email"
+        ]
+      }
+    },
+    {
+      "id": "ai",
+      "title": "AI",
+      "description": "D1, Effect SQL, Better Auth, AI with your own key, and realtime",
+      "stack": {
+        "runtime": "cloudflare",
+        "database": "d1",
+        "orm": "effect-sql",
+        "auth": "better-auth",
+        "infra": "none",
+        "ai": "effect-ai-byok",
+        "extras": [
+          "realtime"
+        ]
+      }
+    },
+    {
+      "id": "minimal",
+      "title": "Minimal",
+      "description": "No database and no auth: the app, its layers and the dashboard",
+      "stack": {
+        "runtime": "cloudflare",
+        "database": "none",
+        "orm": "none",
+        "auth": "none",
+        "infra": "none",
+        "ai": "none",
+        "extras": []
+      }
+    }
   ]
 }
 ```
@@ -475,6 +524,55 @@ npx -y create-efforge list --json --cwd my-app
       "title": "Drizzle ORM",
       "description": "Drizzle 1.0 with its Effect drivers behind the Database service; migrations come from drizzle-kit.",
       "installed": true
+    }
+  ],
+  "presets": [
+    {
+      "id": "saas",
+      "title": "SaaS",
+      "description": "Postgres, Drizzle, Better Auth with organizations, email and storage",
+      "stack": {
+        "runtime": "cloudflare",
+        "database": "postgres",
+        "orm": "drizzle",
+        "auth": "better-auth-orgs",
+        "infra": "none",
+        "ai": "none",
+        "extras": [
+          "storage",
+          "email"
+        ]
+      }
+    },
+    {
+      "id": "ai",
+      "title": "AI",
+      "description": "D1, Effect SQL, Better Auth, AI with your own key, and realtime",
+      "stack": {
+        "runtime": "cloudflare",
+        "database": "d1",
+        "orm": "effect-sql",
+        "auth": "better-auth",
+        "infra": "none",
+        "ai": "effect-ai-byok",
+        "extras": [
+          "realtime"
+        ]
+      }
+    },
+    {
+      "id": "minimal",
+      "title": "Minimal",
+      "description": "No database and no auth: the app, its layers and the dashboard",
+      "stack": {
+        "runtime": "cloudflare",
+        "database": "none",
+        "orm": "none",
+        "auth": "none",
+        "infra": "none",
+        "ai": "none",
+        "extras": []
+      }
     }
   ]
 }
@@ -651,7 +749,7 @@ npx -y create-efforge create my-app
 ```
 
 ```text
-No terminal to ask for "database": pass --database=postgres|d1|none, or --yes to accept the defaults.
+No terminal to ask for "preset": pass --preset=saas|ai|minimal or the stack flags, or --yes to accept the defaults.
 Try: npx -y create-efforge create my-app --yes
 ```
 

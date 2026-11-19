@@ -399,7 +399,7 @@ describe("an agent drives efforge without a terminal", { timeout: 120_000 }, () 
   it("without --json, a prompt it can't show fails at once, names the fix and prints no chrome", () => {
     const r = efforge(["create", "asks", "--dry-run"])
     expect(r.status).toBe(1)
-    expect(r.stderr).toContain(`No terminal to ask for "database"`)
+    expect(r.stderr).toContain(`No terminal to ask for "preset"`)
     expect(r.stderr).toContain("Try: npx -y create-efforge create asks --dry-run --yes")
     expect(`${r.stdout}${r.stderr}`).not.toContain("◇")
     const fixed = efforge(parseFix("npx -y create-efforge create asks --dry-run --yes", work).args)

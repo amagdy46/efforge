@@ -60,7 +60,6 @@ export interface PromptIOShape {
   readonly confirm: (o: ConfirmOptions) => Effect.Effect<boolean | GoBack, PromptError>
   /** Non-interactive output, kept on the service so tests stay silent. */
   readonly intro: (title: string) => Effect.Effect<void>
-  readonly section: (title: string) => Effect.Effect<void>
   readonly info: (message: string) => Effect.Effect<void>
   readonly warn: (message: string) => Effect.Effect<void>
   readonly note: (body: string, title: string) => Effect.Effect<void>
@@ -88,8 +87,18 @@ export const isCI = (): boolean => {
 /** Prompts need a terminal on stdin, and never run in CI: there a missing answer fails at once. */
 export const canPrompt = (): boolean => process.stdin.isTTY && !isCI()
 
-/** A section header waits for the first prompt under it, so a run that prompts for nothing prints none. */
-let pendingSection: string | undefined
+/**
+ * True right after a step's line: the next step goes on the line below, without the `│` spacer
+ * every other block starts with, so a run of steps is one line each.
+ */
+let afterStep = false
+
+/** Runs `print` (anything but a step), so the next step starts with a spacer again. */
+const block = (print: () => void) =>
+  Effect.sync(() => {
+    afterStep = false
+    print()
+  })
 
 const ask = <A>(
   id: string,
@@ -98,8 +107,7 @@ const ask = <A>(
 ): Effect.Effect<A, PromptError> =>
   canPrompt()
     ? Effect.sync(() => {
-        if (pendingSection !== undefined) p.log.step(pc.bold(pendingSection))
-        pendingSection = undefined
+        afterStep = false
       }).pipe(
         Effect.andThen(Effect.promise(run)),
         Effect.flatMap((v) =>
@@ -181,15 +189,11 @@ export const livePromptIO: PromptIOShape = {
         ...(o.initial === undefined ? {} : { initialValue: o.initial }),
       }),
     ),
-  intro: (title) => Effect.sync(() => p.intro(title)),
-  section: (title) =>
-    Effect.sync(() => {
-      pendingSection = title
-    }),
-  info: (message) => Effect.sync(() => p.log.info(message)),
-  note: (body, title) => Effect.sync(() => p.note(body, title)),
-  outro: (message) => Effect.sync(() => p.outro(message)),
-  warn: (message) => Effect.sync(() => p.log.warn(message)),
+  intro: (title) => block(() => p.intro(title)),
+  info: (message) => block(() => p.log.info(message)),
+  note: (body, title) => block(() => p.note(body, title)),
+  outro: (message) => block(() => p.outro(message)),
+  warn: (message) => block(() => p.log.warn(message)),
   // Spinners redraw the terminal: in CI or a pipe, print one line per step instead.
   step: (label, eff) => run(label, () => eff, false),
   task: (label, eff) => run(label, eff, true),
@@ -214,7 +218,7 @@ const spinner = (label: string) => {
   const render = () =>
     out.write(`\r\u001b[2K${pc.magenta(frames[frame++ % 4] ?? "")}  ${fit(text)}`)
   const showCursor = () => out.write("\u001b[?25h")
-  out.write(`${pc.gray("│")}\n\u001b[?25l`)
+  out.write(`${afterStep ? "" : `${pc.gray("│")}\n`}\u001b[?25l`)
   process.once("exit", showCursor)
   render()
   const timer = setInterval(render, 80)
@@ -226,6 +230,7 @@ const spinner = (label: string) => {
       clearInterval(timer)
       process.off("exit", showCursor)
       out.write(`\r\u001b[2K${symbol}  ${fit(s)}\n`)
+      afterStep = true
       showCursor()
     },
   }
@@ -252,12 +257,17 @@ const run = <A, E, R>(
       }
     }
     if (!interactive()) {
-      if (live) p.log.message(`${label}…`)
+      // one line per step, as in a terminal: a long one says it started, then how it ended
+      const line = (symbol: string, text: string) => {
+        process.stdout.write(`${afterStep ? "" : `${pc.gray("│")}\n`}${symbol}  ${text}\n`)
+        afterStep = true
+      }
+      if (live) line(pc.gray("│"), `${label}…`)
       return eff(() => {}).pipe(
         Effect.onExit((exit) =>
           Effect.sync(() => {
             const { ok, interrupted, msg } = done(exit)
-            ;(ok ? p.log.message : interrupted ? p.log.warn : p.log.error)(msg)
+            line(ok ? pc.gray("│") : interrupted ? pc.yellow("■") : pc.red("▲"), msg)
           }),
         ),
       )
@@ -347,7 +357,6 @@ export const scriptedPromptIO = (answers: ReadonlyArray<Answer>): Scripted => {
         PromptError
       >,
     intro: (t) => Effect.sync(() => void output.push(`intro: ${t}`)),
-    section: (t) => Effect.sync(() => void output.push(`section: ${t}`)),
     info: (m) => Effect.sync(() => void output.push(`info: ${m}`)),
     warn: (m) => Effect.sync(() => void output.push(`warn: ${m}`)),
     note: (b, t) => Effect.sync(() => void output.push(`note ${t}: ${b}`)),

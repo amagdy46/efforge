@@ -145,6 +145,109 @@
         ],
         "additionalProperties": true
       }
+    },
+    "presets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "What to pass to `create --preset`."
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "stack": {
+            "type": "object",
+            "properties": {
+              "runtime": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "cloudflare"
+                    ]
+                  }
+                ]
+              },
+              "database": {
+                "type": "string",
+                "enum": [
+                  "postgres",
+                  "d1",
+                  "none"
+                ]
+              },
+              "orm": {
+                "type": "string",
+                "enum": [
+                  "drizzle",
+                  "effect-sql",
+                  "none"
+                ]
+              },
+              "auth": {
+                "type": "string",
+                "enum": [
+                  "better-auth-orgs",
+                  "better-auth",
+                  "none"
+                ]
+              },
+              "infra": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "alchemy"
+                ]
+              },
+              "ai": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "effect-ai-byok"
+                ]
+              },
+              "extras": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "workflows",
+                    "realtime",
+                    "browser",
+                    "storage",
+                    "email"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "runtime",
+              "database",
+              "orm",
+              "auth",
+              "infra",
+              "ai",
+              "extras"
+            ],
+            "additionalProperties": true,
+            "description": "What the preset chooses in this version. A stack flag given with --preset overrides its slot."
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "stack"
+        ],
+        "additionalProperties": true
+      },
+      "description": "Named stacks for `create --preset`. Their contents can change between versions; `create` records the stack it made, flag by flag, never the preset."
     }
   },
   "required": [
@@ -152,7 +255,8 @@
     "contract",
     "ok",
     "project",
-    "addons"
+    "addons",
+    "presets"
   ],
   "additionalProperties": true,
   "title": "efforge list --json"

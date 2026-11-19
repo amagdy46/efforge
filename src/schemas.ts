@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import { CONTRACT, type ErrorCode, errorCodes } from "./contract.ts"
 import { EfforgeManifest } from "./manifest.ts"
-import { StackConfig } from "./stack.ts"
+import { Ai, Auth, Database, Extra, Infra, Orm, Runtime, StackConfig } from "./stack.ts"
 
 // The `--json` documents (docs/json.md) as schemas. Tests decode real output with them, and
 // `node scripts/schemas.ts` writes them to `schemas/` as JSON Schema, shipped in the package.
@@ -126,6 +126,28 @@ export const ListOutput = Schema.Struct({
       installed: Schema.optionalKey(Schema.Boolean),
     }),
   ),
+  presets: Schema.Array(
+    Schema.Struct({
+      id: Schema.String.annotate({ description: "What to pass to `create --preset`." }),
+      title: Schema.String,
+      description: Schema.String,
+      stack: Schema.Struct({
+        runtime: Runtime,
+        database: Database,
+        orm: Orm,
+        auth: Auth,
+        infra: Infra,
+        ai: Ai,
+        extras: Schema.Array(Extra),
+      }).annotate({
+        description:
+          "What the preset chooses in this version. A stack flag given with --preset overrides its slot.",
+      }),
+    }),
+  ).annotate({
+    description:
+      "Named stacks for `create --preset`. Their contents can change between versions; `create` records the stack it made, flag by flag, never the preset.",
+  }),
 }).annotate({ title: "efforge list --json" })
 
 export const ErrorOutput = Schema.Struct({

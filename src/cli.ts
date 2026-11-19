@@ -2,7 +2,7 @@ import { Console, Effect, Stdio } from "effect"
 import { type CliError, Command, Completions } from "effect/cli"
 import { BIN, type ErrorCode, type Failure, Invocation, printSuccess, report } from "./contract.ts"
 import { addCommand } from "./commands/add.ts"
-import { createCommand, createConfig, createHandler } from "./commands/create.ts"
+import { createCommand, createConfig, createHandler, presetFailure } from "./commands/create.ts"
 import { listCommand } from "./commands/list.ts"
 import { commands, fix, intentOf, meantFlag, projectAbove, spelledOut } from "./fix.ts"
 import { slots } from "./slots.ts"
@@ -275,7 +275,7 @@ export const runWith = (args: ReadonlyArray<string>) =>
       return yield* printSuccess({})
     // before parsing: a mistyped `add` rarely parses as a create, and its parse error's fix
     // would turn it into one
-    const command = notACreate(args)
+    const command = notACreate(args) ?? presetFailure(args)
     if (command !== undefined) return yield* report(wantsJson(args), command)
     // the wizard prompts, so it can't be dry-parsed; it reports its own errors
     if (!args.some((a) => a === "--wizard" || a.startsWith("--wizard="))) {

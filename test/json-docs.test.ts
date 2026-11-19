@@ -24,7 +24,6 @@ const SHOWN = "/home/me/projects"
 const quietIO = Layer.succeed(PromptIO, {
   ...livePromptIO,
   intro: () => Effect.void,
-  section: () => Effect.void,
   info: () => Effect.void,
   warn: () => Effect.void,
   note: () => Effect.void,

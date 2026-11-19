@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from "node:fs"
 import { dirname, join, relative, resolve } from "node:path"
 import { BIN, inDir, isTypo, quote, typoOf } from "./contract.ts"
 import { COMMIT, FORMAT, INSTALL } from "./exec.ts"
+import { presetIds } from "./presets.ts"
 import { nameError } from "./prompts/flow.ts"
 import { slots } from "./slots.ts"
 
@@ -89,12 +90,15 @@ export const looksLikeCommand = (word: string): boolean => {
 // --- Flags -------------------------------------------------------------------------------
 
 const stackFlags = slots.map((s) => s.id as string)
+/** Flags whose value is one of a list: the stack flags and `--preset`. */
+const choicesOf = (name: string): ReadonlyArray<string> | undefined =>
+  name === "preset" ? presetIds : slots.find((s) => s.id === name)?.options.map((o) => o.id)
 const globalValues = ["log-level", "completions"]
 const globalBooleans = ["help", "version", "wizard"]
 const known: Record<Verb, { readonly values: string[]; readonly booleans: string[] }> = {
   create: {
-    values: [...stackFlags, ...globalValues],
-    booleans: ["yes", "dry-run", "json", "install", "git", ...globalBooleans],
+    values: ["preset", ...stackFlags, ...globalValues],
+    booleans: ["yes", "dry-run", "verbose", "json", "install", "git", ...globalBooleans],
   },
   add: {
     values: ["cwd", ...globalValues],
@@ -102,7 +106,7 @@ const known: Record<Verb, { readonly values: string[]; readonly booleans: string
   },
   list: { values: ["cwd", ...globalValues], booleans: ["json", ...globalBooleans] },
 }
-const allValueFlags = new Set([...stackFlags, "cwd", ...globalValues])
+const allValueFlags = new Set(["preset", ...stackFlags, "cwd", ...globalValues])
 const allBooleans = new Set(Object.values(known).flatMap((k) => k.booleans))
 const shortFlags: Record<string, string> = { y: "yes", h: "help", v: "version" }
 const truthy = new Set(["true", "yes", "on", "1", "y"])
@@ -306,8 +310,8 @@ const wellFormed = (c: Intent): boolean => {
       if (typeof value !== "boolean") return false
     } else if (typeof value !== "string") return false
     else if (name === "log-level" && !logLevels.has(value)) return false
-    else if (stackFlags.includes(name)) {
-      const options = slots.find((s) => s.id === name)?.options.map((o) => o.id) ?? []
+    else if (stackFlags.includes(name) || name === "preset") {
+      const options = choicesOf(name) ?? []
       const values = name === "extras" ? value.split(",").filter((x) => x !== "") : [value]
       if (values.some((x) => !options.includes(x))) return false
     }
@@ -350,7 +354,7 @@ export const addonSuggestions = (id: string): string[] => {
 const sameChoice = (slot: string, o: unknown, c: unknown): boolean => {
   if (o === c) return true
   if (typeof o !== "string" || typeof c !== "string") return false
-  const options = slots.find((s) => s.id === slot)?.options.map((x) => x.id) ?? []
+  const options = choicesOf(slot) ?? []
   const meant = (x: string) => (options.includes(x) ? x : (typoOf(x, options) ?? x))
   if (slot !== "extras") return meant(o) === c
   const list = (s: string) => s.split(",").filter((x) => x !== "")
@@ -385,7 +389,7 @@ const keeps = (o: Intent, c: Intent, may: May): boolean => {
   const names = toList ? ["json", "log-level"] : [...new Set([...vo.set.keys(), ...vc.set.keys()])]
   for (const name of names) {
     if (name === "cwd") continue
-    if (stackFlags.includes(name)) {
+    if (stackFlags.includes(name) || name === "preset") {
       if (!sameChoice(name, vo.set.get(name), vc.set.get(name))) return false
     } else if (name === "yes") {
       if (switchOf(vo, "yes") === true && switchOf(vc, "yes") !== true) return false

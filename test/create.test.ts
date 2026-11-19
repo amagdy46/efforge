@@ -107,7 +107,17 @@ it("the printed command replays the stack without prompting", async () => {
 it("dry-run without json lists the paths and writes nothing", async () => {
   const { s, p } = cli(["app", "--dry-run", "-y", ...stackFlags])
   await p
-  expect(s.output.join("\n")).toContain("efforge.jsonc")
+  // a count per add-on, not 100 paths
+  const files = s.output.find((o) => o.startsWith("note Would write"))
+  expect(files).toMatch(/^note Would write \d+ files: base +\d+ /)
+  expect(files).not.toContain("efforge.jsonc")
+  expect(readdirSync(tmp)).toEqual([])
+  // --verbose lists every file, under the add-on it comes from
+  const verbose = cli(["app", "--dry-run", "-y", "--verbose", ...stackFlags])
+  await verbose.p
+  const all = verbose.s.output.find((o) => o.startsWith("note Would write")) ?? ""
+  expect(all).toContain("efforge.jsonc")
+  expect(all).toMatch(/base \(\d+\)/)
   expect(readdirSync(tmp)).toEqual([])
 })
 
@@ -133,11 +143,12 @@ it("--install=false and --git=false are accepted too", async () => {
 it("interactive: answers drive the stack and confirm gates writing", async () => {
   const { s, p } = cli(
     ["--no-install", "--no-git"],
-    ["app", "postgres", "drizzle", "none", "none", "none", [], true],
+    ["app", "custom", "postgres", "drizzle", "none", "none", "none", [], true],
   )
   await p
   expect(s.shown.map((x) => x.id)).toEqual([
     "name",
+    "preset",
     "database",
     "orm",
     "auth",
@@ -152,7 +163,7 @@ it("interactive: answers drive the stack and confirm gates writing", async () =>
 it("declining the confirmation writes nothing", async () => {
   const { p } = cli(
     ["--no-install", "--no-git"],
-    ["app", "postgres", "drizzle", "none", "none", "none", [], false],
+    ["app", "custom", "postgres", "drizzle", "none", "none", "none", [], false],
   )
   await p
   expect(readdirSync(tmp)).toEqual([])
