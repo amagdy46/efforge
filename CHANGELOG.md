@@ -6,6 +6,12 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 
 ### Added
 
+- `create --preset=saas|ai|minimal`: the whole stack in one choice. `saas` is Postgres, Drizzle, Better Auth with organizations, email and storage; `ai` is D1, Effect SQL, Better Auth, AI with your own key and realtime; `minimal` has no database and no auth. A stack flag beside it overrides that slot (`--preset=saas --database=d1`). In the prompts, the question after the name is "Start from a preset, or choose each part?", and Back from the first slot returns to it. `list` and `list --json` show the presets. The recorded command stays explicit, flag by flag, since a preset can change between versions.
+- `efforge add` with no ids, in a terminal, opens a picker: the add-ons the project doesn't have, by slot, with descriptions; those in a slot the project already filled are shown disabled, with why. A pick the rules refuse is said and asked again, and picking nothing adds nothing. Without a terminal, or with `--json`, it is `NoAddonIds` as before.
+- `efforge info <id>` describes one add-on: what it is for, its service and layer, what it needs and conflicts with, the files it writes and edits, packages, env vars, its dashboard card, its `AGENTS.md` sections and its docs page. Inside a project it shows what that project would get and the command that adds it. `--json` has the same as data.
+- `efforge graph` prints the project's layer graph, read from `apps/web/src/server/layers.ts`: what `AppLayer` merges, what each layer provides and needs. Mermaid by default, in the tempering colours, readable on GitHub light and dark; `--format=text` for an indented list; `--json` for nodes and edges. Layers you added yourself are shown with provides and needs unknown. `graph --write` puts it in `README.md` between `efforge:readme:graph` markers, and `add` keeps it current.
+- Two error codes: `LayersUnreadable` (`graph` can't find `AppLayer = Layer.mergeAll(...)`) and `ReadmeUnwritable` (`graph --write` found no README markers, or broken ones, and wrote nothing).
+
 - A new identity: a maker's punch with ef struck through it replaces the ember logo. The README header, social preview and avatar use it, and `docs/brand.md` is the brand guide.
 - Generated apps get a placeholder favicon (`apps/web/public/favicon.svg`) and a "made with efforge" badge in their README.
 - `create`, `add` and `list` start with one line: an `ef` cell and the version. It is plain text under `NO_COLOR`, in a pipe and in CI. `--json` prints none of it.
@@ -36,6 +42,10 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - A marker counts only on a line of its own, and each region needs one opening and one closing marker, in order, not nested. When a README or `AGENTS.md` breaks that, `add` leaves the whole file as it is and names the marker, in text and in `notes`. A seeded property test with random user text and random marker damage holds this ([ADR 0010](docs/decisions/0010-generated-docs-regions.md)).
 
 ### Changed
+
+- `create --dry-run` counts the files by the add-on they come from, with the top-level directories of each, instead of a flat list of 100 paths; `--verbose` lists every file, and `--json` always has them all.
+- Terminal output: a run of steps is one line each, without a spacer line between them; the empty "Data", "Platform" and "Features" headers are gone; `create` and `add` end with their total time; the outro's lines line up; `--help` has a blank line before EXAMPLES and its global flags fit in 100 columns.
+- Without a terminal, a `create` that would prompt now names `preset` first: `No terminal to ask for "preset": pass --preset=saas|ai|minimal or the stack flags, or --yes to accept the defaults.`
 
 - The `--json` output changed shape (see [ADR 0007](docs/decisions/0007-json-contract.md)). Against 0.2.1:
 

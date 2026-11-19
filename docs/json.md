@@ -1,8 +1,8 @@
 # `--json`: the contract for scripts and coding agents
 
-`create`, `add` and `list` take `--json`. With it, a run prints exactly one JSON document on stdout and nothing else, whether it succeeds or fails. Nothing goes to stderr either, except what a child process prints when it crashes outright. Progress is not printed; warnings and skipped steps go into the document. `--json` never prompts: on `create` it implies `--yes`.
+`create`, `add`, `list`, `info` and `graph` take `--json`. With it, a run prints exactly one JSON document on stdout and nothing else, whether it succeeds or fails. Nothing goes to stderr either, except what a child process prints when it crashes outright. Progress is not printed; warnings and skipped steps go into the document. `--json` never prompts: on `create` it implies `--yes`.
 
-This page is the contract. Every example on it is the real output of the command above it, checked by `test/json-docs.test.ts` (paths shortened to `/home/me/projects`, long `files` and `addons` lists cut to their first three items) and matches its schema. JSON Schemas for the documents ship in the package under `schemas/` ([create](../schemas/create.schema.json), [add](../schemas/add.schema.json), [list](../schemas/list.schema.json), [error](../schemas/error.schema.json)).
+This page is the contract. Every example on it is the real output of the command above it, checked by `test/json-docs.test.ts` (paths shortened to `/home/me/projects`, long `files` and `addons` lists cut to their first three items) and matches its schema. JSON Schemas for the documents ship in the package under `schemas/` ([create](../schemas/create.schema.json), [add](../schemas/add.schema.json), [list](../schemas/list.schema.json), [info](../schemas/info.schema.json), [graph](../schemas/graph.schema.json), [error](../schemas/error.schema.json)).
 
 Run efforge as `npx -y create-efforge ...` (create-efforge 0.3.0 or later; a document without `contract` comes from an older CLI). Under `npm create efforge`, npm prints its own lines on stdout before efforge's.
 
@@ -54,7 +54,7 @@ A signal in the first fraction of a second, before efforge has started, can end 
 
 ## `create`
 
-`directory` is absolute. `files` lists everything written, sorted. `installed` says whether `pnpm install` ran; `git` is `committed`, `initialized` (git init worked, the commit didn't) or `skipped`. `command` recreates the same stack without prompts.
+`directory` is absolute. `files` lists everything written, sorted. With `--preset`, `stack` is what the preset chose (with any stack flag you gave over it), and `command` gives it flag by flag: a preset's contents can change between versions, so nothing records its name. `installed` says whether `pnpm install` ran; `git` is `committed`, `initialized` (git init worked, the commit didn't) or `skipped`. `command` recreates the same stack without prompts.
 
 `env` lists every env var the project reads: `file` is where the local value lives (`.dev.vars`, or `.env` with Alchemy) and `set` says whether efforge wrote a value there that works locally. When `set` is false the variable is a real secret (an API key): efforge wrote it empty, in `file` and in `.env.example`, and the feature that reads it fails until it is filled in. Production values are set as the description says, usually with `wrangler secret put`.
 
@@ -388,7 +388,7 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
 
 ## `list`
 
-`addons` has every add-on you can pick or add: `id` is what `add` takes. In an efforge project's root (or with `--cwd` pointing at it), `project` is `true`, the document has the project's `directory` and `stack`, and each add-on has `installed`. Elsewhere `project` is `false`, as `add` would see it; when the directory is inside a project (`my-app/apps/web`) or holds exactly one, `nearby` is that project's path, to pass as `--cwd`.
+`addons` has every add-on you can pick or add: `id` is what `add` takes. `presets` has the named stacks `create --preset` takes, each with the `stack` it chooses in this version. In an efforge project's root (or with `--cwd` pointing at it), `project` is `true`, the document has the project's `directory` and `stack`, and each add-on has `installed`. Elsewhere `project` is `false`, as `add` would see it; when the directory is inside a project (`my-app/apps/web`) or holds exactly one, `nearby` is that project's path, to pass as `--cwd`.
 
 <!-- example: list -->
 
@@ -578,6 +578,239 @@ npx -y create-efforge list --json --cwd my-app
 }
 ```
 
+## `info`
+
+Describes one add-on from its manifest. The id resolves the way `add` resolves it (`email`, `extras/email`, `ai`, a clear typo), and an unknown one is [`UnknownAddon`](#unknownaddon). `files` are what it writes and `edits` the files it edits in place (the seams), each with the transforms that edit it. `requires` says what a project needs first (one of `options` for each), `conflicts` the add-ons it can't be with. `card` is its dashboard card module and `agents` the `AGENTS.md` sections it adds, by heading. `docs.page` is its page in efforge's repo. Outside a project, a file, env var or section that only some stacks get carries `when`.
+
+In an efforge project (`--cwd`, default the current directory), the lists hold only what this project gets, and `project` says whether it has the add-on: `add` is the command that adds it, or `null` when it is there already or can't be added alone; then `reason` says why and `alternatives` are the commands that add it with what it needs.
+
+<!-- example: info -->
+
+```sh
+npx -y create-efforge info email --json --cwd my-app
+```
+
+```json
+{
+  "efforge": "0.2.1",
+  "contract": 1,
+  "ok": true,
+  "id": "extras/email",
+  "slot": "extras",
+  "option": "email",
+  "title": "Email",
+  "description": "Transactional email: a Mailer service on Cloudflare Email Service, printed to the console in development, plus invitation emails with organizations.",
+  "purpose": "Send invitations, receipts and password resets. Call `send` on the `Mailer` service. In production the layer sends through Cloudflare Email Service; in development (`MAIL_TRANSPORT=console`) it prints each message to the dev server log. With organizations, invitations are emailed too.",
+  "docs": {
+    "page": "docs/addons/extras-email.md",
+    "url": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-email.md"
+  },
+  "service": {
+    "name": "Mailer",
+    "file": "packages/core/src/mailer.ts",
+    "errors": [
+      "MailerError",
+      "MailerConfigError"
+    ]
+  },
+  "layer": "MailerLive",
+  "files": [
+    {
+      "path": "apps/web/src/server/mailer.ts"
+    },
+    {
+      "path": "packages/core/src/mailer.ts"
+    }
+  ],
+  "edits": [
+    {
+      "file": "AGENTS.md",
+      "transforms": [
+        "appendAgentsSection"
+      ]
+    },
+    {
+      "file": "apps/web/src/server/layers.ts",
+      "transforms": [
+        "addLayer"
+      ]
+    },
+    {
+      "file": "packages/core/src/index.ts",
+      "transforms": [
+        "addExport"
+      ]
+    },
+    {
+      "file": "wrangler.jsonc",
+      "transforms": [
+        "addWranglerBinding"
+      ]
+    }
+  ],
+  "dependencies": [],
+  "scripts": [],
+  "env": [
+    {
+      "name": "MAIL_FROM",
+      "description": "Sender address; its domain must be enabled for Cloudflare Email Sending (wrangler email sending enable <domain>)",
+      "example": "noreply@example.com",
+      "secret": false
+    },
+    {
+      "name": "MAIL_TRANSPORT",
+      "description": "cloudflare (default) sends through the EMAIL binding; console prints emails instead (the local value)",
+      "example": "cloudflare",
+      "secret": false
+    }
+  ],
+  "requires": [],
+  "conflicts": [],
+  "card": null,
+  "agents": [
+    {
+      "heading": "Email"
+    }
+  ],
+  "project": {
+    "directory": "/home/me/projects/my-app",
+    "installed": false,
+    "add": "npx -y create-efforge add extras/email --cwd my-app",
+    "alternatives": []
+  }
+}
+```
+
+## `graph`
+
+The project's layer graph, read from `apps/web/src/server/layers.ts`: every argument of `AppLayer = Layer.mergeAll(...)`, in order. `layers` has each one's `name`, `expression` as written, the `addon` that adds it (`base` for the logger, `null` for a layer you added), what it `provides` and what it `needs` (layers provided to it there with `Layer.provide`, bindings and settings), and its tempering `color`. For a layer you added, `provides` and `needs` are `null`: efforge doesn't guess. `nodes` and `edges` are the same graph for drawing (`merges` into `app`, `needs` into a layer), and `mermaid` is what `graph` prints. With `--write`, `written` is `README.md`.
+
+<!-- example: graph -->
+
+```sh
+npx -y create-efforge graph --json --cwd my-app
+```
+
+```json
+{
+  "efforge": "0.2.1",
+  "contract": 1,
+  "ok": true,
+  "directory": "/home/me/projects/my-app",
+  "file": "apps/web/src/server/layers.ts",
+  "layers": [
+    {
+      "name": "Logger.layer",
+      "expression": "Logger.layer([Logger.consolePretty()])",
+      "addon": "base",
+      "provides": [
+        "Logger"
+      ],
+      "needs": [],
+      "color": "Straw"
+    },
+    {
+      "name": "DatabaseLayer",
+      "expression": "DatabaseLayer.pipe(Layer.provide(WorkerEnvLive))",
+      "addon": "orm/drizzle",
+      "provides": [
+        "Database",
+        "Notes"
+      ],
+      "needs": [
+        "WorkerEnvLive",
+        "database binding"
+      ],
+      "color": "Bronze"
+    },
+    {
+      "name": "AuthLive",
+      "expression": "AuthLive",
+      "addon": "auth/better-auth",
+      "provides": [
+        "Auth",
+        "BetterAuth"
+      ],
+      "needs": [
+        "BETTER_AUTH_SECRET"
+      ],
+      "color": "Temper purple"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "app",
+      "kind": "app",
+      "label": "AppLayer"
+    },
+    {
+      "id": "l0",
+      "kind": "layer",
+      "label": "Logger.layer"
+    },
+    {
+      "id": "l1",
+      "kind": "layer",
+      "label": "DatabaseLayer"
+    },
+    {
+      "id": "l2",
+      "kind": "layer",
+      "label": "AuthLive"
+    },
+    {
+      "id": "n0",
+      "kind": "need",
+      "label": "WorkerEnvLive"
+    },
+    {
+      "id": "n1",
+      "kind": "need",
+      "label": "database binding"
+    },
+    {
+      "id": "n2",
+      "kind": "need",
+      "label": "BETTER_AUTH_SECRET"
+    }
+  ],
+  "edges": [
+    {
+      "from": "l0",
+      "to": "app",
+      "kind": "merges"
+    },
+    {
+      "from": "l1",
+      "to": "app",
+      "kind": "merges"
+    },
+    {
+      "from": "l2",
+      "to": "app",
+      "kind": "merges"
+    },
+    {
+      "from": "n0",
+      "to": "l1",
+      "kind": "needs"
+    },
+    {
+      "from": "n1",
+      "to": "l1",
+      "kind": "needs"
+    },
+    {
+      "from": "n2",
+      "to": "l2",
+      "kind": "needs"
+    }
+  ],
+  "mermaid": "flowchart LR\n  app[[\"AppLayer<br/>apps/web/src/server/layers.ts\"]]:::app\n  l0[\"<b>Logger.layer</b><br/>provides Logger\"]:::t1\n  l1[\"<b>DatabaseLayer</b><br/>provides Database, Notes\"]:::t2\n  l2[\"<b>AuthLive</b><br/>provides Auth, BetterAuth\"]:::t3\n  n0([\"WorkerEnvLive\"]):::need\n  n1([\"database binding\"]):::need\n  n2([\"BETTER_AUTH_SECRET\"]):::need\n  l0 --> app\n  l1 --> app\n  l2 --> app\n  n0 -.-> l1\n  n1 -.-> l1\n  n2 -.-> l2\n  classDef t1 fill:#efe3c6,stroke:#E2C275,color:#1C1D20,stroke-width:2px\n  classDef t2 fill:#dbc4b1,stroke:#A8683A,color:#1C1D20,stroke-width:2px\n  classDef t3 fill:#c6bbd1,stroke:#6C4E96,color:#1C1D20,stroke-width:2px\n  classDef t4 fill:#b0bfd7,stroke:#2F5AA8,color:#1C1D20,stroke-width:2px\n  classDef app fill:#1C1D20,stroke:#C9CDD2,color:#F6F5F1\n  classDef need fill:#C9CDD2,stroke:#C9CDD2,color:#1C1D20",
+  "written": null
+}
+```
+
 ## Error codes
 
 ### `UnknownFlag`
@@ -646,7 +879,7 @@ npx -y create-efforge create my-app --json --database
 
 More positional arguments than the command takes.
 
-Fields: `arguments`. `fix`: For `create`, `null`: a project name is one word, and efforge doesn't guess which. For `list`, the command without them.
+Fields: `arguments`. `fix`: For `create`, `null`: a project name is one word, and efforge doesn't guess which. For `list` and `graph`, the command without them.
 
 <!-- example: UnexpectedArgument -->
 
@@ -689,14 +922,16 @@ npx -y create-efforge lst --json
   "ok": false,
   "error": {
     "code": "UnknownCommand",
-    "message": "Unknown command lst. Did you mean list? The commands are create, add, list. To name a project lst, run npx -y create-efforge create lst.",
+    "message": "Unknown command lst. Did you mean list? The commands are create, add, list, info, graph. To name a project lst, run npx -y create-efforge create lst.",
     "fix": "npx -y create-efforge list --json",
     "command": "lst",
     "suggestion": "list",
     "commands": [
       "create",
       "add",
-      "list"
+      "list",
+      "info",
+      "graph"
     ]
   }
 }
@@ -723,14 +958,16 @@ npx -y create-efforge app2 --json
   "ok": false,
   "error": {
     "code": "InsideProject",
-    "message": "This is inside the efforge project /home/me/projects/my-app, so efforge doesn't create a project here without the word create. The commands are create, add, list. To add to this project, run npx -y create-efforge add <id>; to create a project inside it anyway, run npx -y create-efforge create app2.",
+    "message": "This is inside the efforge project /home/me/projects/my-app, so efforge doesn't create a project here without the word create. The commands are create, add, list, info, graph. To add to this project, run npx -y create-efforge add <id>; to create a project inside it anyway, run npx -y create-efforge create app2.",
     "fix": null,
     "project": "/home/me/projects/my-app",
     "name": "app2",
     "commands": [
       "create",
       "add",
-      "list"
+      "list",
+      "info",
+      "graph"
     ]
   }
 }
@@ -740,7 +977,7 @@ npx -y create-efforge app2 --json
 
 Without `--json` and without a terminal (stdin is not a TTY, or `CI` is set), a prompt was needed. It fails at once instead of waiting. `--json` never prompts, so it never returns this code; the example is the text on stderr.
 
-Fields: `prompt` (`name`, `confirm` or a slot id), `flag`, `allowed`. `fix`: The command with `--yes`, which takes the default for every choice a flag didn't make.
+Fields: `prompt` (`name`, `preset`, `confirm` or a slot id), `flag`, `allowed`. The first question after the name is `preset` unless a stack flag or `--yes` already chose; `--preset` or any stack flag answers it. `fix`: The command with `--yes`, which takes the default for every choice a flag didn't make.
 
 <!-- example: NeedsInput -->
 
@@ -755,7 +992,7 @@ Try: npx -y create-efforge create my-app --yes
 
 ### `UnknownValue`
 
-A stack flag got a value that isn't one of its options.
+A stack flag, or `--preset`, got a value that isn't one of its options.
 
 Fields: `flag`, `value`, `allowed`. `fix`: The command with the option, when the value is a clear typo of exactly one; otherwise `null`. Pick from `allowed`, and if what you want isn't there, efforge doesn't offer it.
 
@@ -1286,9 +1523,9 @@ npx -y create-efforge add email --json
 
 ### `NoAddonIds`
 
-`add` got no add-on ids.
+`add` got no add-on ids and there is no terminal to pick them in (or `--json`), or `info` got no id.
 
-Fields: `available`: the ids the project can still add. `fix`: `list` for the same project.
+Fields: `available`: the ids the project can still add (for `info`, every id). `fix`: `list` for the same project.
 
 Here, `my-app` has D1, Drizzle and Better Auth.
 
@@ -1576,6 +1813,62 @@ npx -y create-efforge add ai --json --cwd my-app
       }
     ],
     "warnings": []
+  }
+}
+```
+
+### `LayersUnreadable`
+
+`graph` couldn't read the layers: `apps/web/src/server/layers.ts` is missing, or it has no `export const AppLayer = Layer.mergeAll(...)` (efforge add needs that call too).
+
+Fields: `file`, `reason`. `fix`: None.
+
+<!-- example: LayersUnreadable -->
+
+```sh
+npx -y create-efforge graph --json --cwd my-app
+```
+
+```json
+{
+  "efforge": "0.2.1",
+  "contract": 1,
+  "ok": false,
+  "error": {
+    "code": "LayersUnreadable",
+    "message": "Can't read the layer graph from apps/web/src/server/layers.ts: it has no `export const AppLayer = Layer.mergeAll(...)`. efforge add keeps that call; put it back to see the graph.",
+    "fix": null,
+    "file": "apps/web/src/server/layers.ts",
+    "reason": "it has no `export const AppLayer = Layer.mergeAll(...)`"
+  }
+}
+```
+
+### `ReadmeUnwritable`
+
+`graph --write` found no `efforge:readme` markers in `README.md` (a project from before efforge 0.3, or a rewritten README), broken ones, or no README. Nothing was written.
+
+Fields: `file`, `problems`. `fix`: None. Repair the markers `problems` names, or paste the output of `graph` yourself.
+
+<!-- example: ReadmeUnwritable -->
+
+```sh
+npx -y create-efforge graph --write --json --cwd my-app
+```
+
+```json
+{
+  "efforge": "0.2.1",
+  "contract": 1,
+  "ok": false,
+  "error": {
+    "code": "ReadmeUnwritable",
+    "message": "README.md has no efforge:readme markers (made before efforge 0.3, or rewritten), so it was left as it is. Nothing was written. Fix the markers, or paste the output of npx -y create-efforge graph where you want it.",
+    "fix": null,
+    "file": "README.md",
+    "problems": [
+      "README.md has no efforge:readme markers (made before efforge 0.3, or rewritten), so it was left as it is"
+    ]
   }
 }
 ```

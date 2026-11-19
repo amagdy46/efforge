@@ -9,7 +9,14 @@ import { runWith } from "../src/cli.ts"
 import { errorCodes } from "../src/contract.ts"
 import { TemplatesDir } from "../src/commands/create.ts"
 import { livePromptIO, PromptIO } from "../src/prompts/navigable.ts"
-import { AddOutput, CreateOutput, ErrorOutput, ListOutput } from "../src/schemas.ts"
+import {
+  AddOutput,
+  CreateOutput,
+  ErrorOutput,
+  GraphOutput,
+  InfoOutput,
+  ListOutput,
+} from "../src/schemas.ts"
 import { recordingSpawner } from "./recordingSpawner.ts"
 
 // Every example in docs/json.md is the output of the command printed above it, run here against
@@ -104,6 +111,23 @@ const scenarios: Record<string, Scenario> = {
   "list-project": { setup: myApp },
   add: { setup: myApp },
   "add-dry-run": { setup: myApp },
+  info: { setup: myApp },
+  graph: { setup: myApp },
+  LayersUnreadable: {
+    setup: async (work) => {
+      await myApp(work)
+      writeFileSync(
+        join(work, "my-app/apps/web/src/server/layers.ts"),
+        'import { Layer } from "effect"\n\nexport const AppLayer = Layer.empty\n',
+      )
+    },
+  },
+  ReadmeUnwritable: {
+    setup: async (work) => {
+      await myApp(work)
+      writeFileSync(join(work, "my-app/README.md"), "# my-app\n\nMy own README.\n")
+    },
+  },
   UnknownFlag: {},
   InvalidFlagValue: {},
   UnexpectedArgument: {},
@@ -223,7 +247,11 @@ it("every example in docs/json.md is what the command prints", { timeout: 120_00
               ? CreateOutput
               : code === "add"
                 ? AddOutput
-                : ListOutput
+                : code === "info"
+                  ? InfoOutput
+                  : code === "graph"
+                    ? GraphOutput
+                    : ListOutput
         Schema.decodeUnknownSync(schema as Schema.Top as never)(JSON.parse(out))
       }
     } finally {

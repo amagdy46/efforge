@@ -7,8 +7,11 @@ Coding agents: run the CLI with `--json` and no prompts. Needs create-efforge 0.
 ```sh
 npx -y create-efforge@latest --version --json
 npx -y create-efforge@latest create my-app --json --database=d1 --auth=better-auth
+npx -y create-efforge@latest create my-saas --json --preset=saas
 npx -y create-efforge@latest list --json --cwd my-app
+npx -y create-efforge@latest info email --json --cwd my-app
 npx -y create-efforge@latest add email --json --cwd my-app
+npx -y create-efforge@latest graph --json --cwd my-app
 ```
 
 ## Docs

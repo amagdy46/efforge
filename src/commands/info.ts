@@ -115,7 +115,7 @@ export const describeAddon = (m: AddonManifest, stack?: StackConfig): AddonInfo 
   const def = slots.find((s) => s.id === slot)
   const addLayer = m.transforms.find((t) => t.name === "addLayer")
   const edits = new Map<string, string[]>()
-  for (const t of [...m.transforms, ...cardTransforms(m)])
+  for (const t of on([...m.transforms, ...cardTransforms(m)]))
     for (const file of transformTargets(t)) {
       const names = edits.get(file) ?? []
       if (!names.includes(t.name)) names.push(t.name)
