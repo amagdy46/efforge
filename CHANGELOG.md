@@ -68,7 +68,7 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - The generated `AGENTS.md` says how to add an error to a service and handle it in a component, to restart `pnpm dev` after adding a dependency, and where the Local Explorer is (`/cdn-cgi/local/explorer/`: D1 rows, R2 objects, Durable Object storage, Workflows, traces).
 - `doctor` has a `gates` check on stacks with auth: `sessionGate` first in `functionMiddleware` and passed to `createStart`, `requireApiSession` first in `workerRoutes`. A gate taken out, or something listed before it, fails with the lines to put back; on a project made before the gates, the fix is `upgrade`, which adds them.
 - `add --dry-run` groups what it would write by add-on, as `create --dry-run` does, with rows for the files it edits and removes; `--verbose` lists every file.
-- A new error code, `UpgradeFirst`: `add` refuses to write dashboard cards onto a project whose card boundary (`apps/web/src/server/outcome.ts`) is older than the cards, and writes nothing. `fix` is `upgrade`; `then` is the same `add`, to run after it.
+- A new error code, `UpgradeFirst`: `add` refuses to write dashboard cards onto a project whose card boundary (`apps/web/src/server/outcome.ts`) is older than the cards, and writes nothing. `fix` is `upgrade`; `after` is the same `add`, to run once it is done.
 - `upgrade --json` and `upgrade --check --json` have `notes`, as `add` does.
 
 ### Changed

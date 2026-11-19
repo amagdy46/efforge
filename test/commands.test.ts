@@ -545,7 +545,7 @@ it("add on a project whose card boundary is older than its cards refuses, with u
     fix: "npx -y create-efforge upgrade --json --cwd app",
     file,
     addons: ["extras/realtime"],
-    then: "npx -y create-efforge add realtime --json --no-install --cwd app",
+    after: "npx -y create-efforge add realtime --json --no-install --cwd app",
   })
   // nothing written
   expect(readFileSync(join("app", "apps/web/src/capabilities/registry.ts"), "utf8")).toBe(before)

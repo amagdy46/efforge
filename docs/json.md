@@ -2252,7 +2252,7 @@ npx -y create-efforge add auth/none --json --cwd my-app
 
 `add` would write a dashboard card that the project's card boundary can't typecheck: `apps/web/src/server/outcome.ts` is from an efforge made before server functions returned an `Exit` (a project made between releases). Nothing was written. An add-on without a card is not held up.
 
-Fields: `file` (the boundary file), `addons` (the add-ons whose cards need the newer boundary), `then` (this `add`, to run once `upgrade` is done). `fix`: `upgrade` in the same project (keeping `--cwd` and `--json`), which brings the boundary up to date; then run `then`.
+Fields: `file` (the boundary file), `addons` (the add-ons whose cards need the newer boundary), `after` (this `add`, to run once `upgrade` is done). `fix`: `upgrade` in the same project (keeping `--cwd` and `--json`), which brings the boundary up to date; then run `after`.
 
 <!-- example: UpgradeFirst -->
 
@@ -2273,7 +2273,7 @@ npx -y create-efforge add realtime --json --cwd my-app
     "addons": [
       "extras/realtime"
     ],
-    "then": "npx -y create-efforge add realtime --json --cwd my-app"
+    "after": "npx -y create-efforge add realtime --json --cwd my-app"
   }
 }
 ```

@@ -773,9 +773,10 @@ const upgradingGuide = (): Effect.Effect<void, unknown> =>
     const fixtures = join(repo, "test/fixtures/v0.2.0")
     cpSync(join(fixtures, "d1-effect-sql-auth"), dir, { recursive: true })
     cpSync(join(fixtures, "d1-effect-sql-auth-rest"), dir, { recursive: true })
-    for (const f of filesUnder(dir).filter((f) => f.endsWith("/gitignore")))
-      cpSync(f, f.replace(/gitignore$/, ".gitignore"))
-    for (const f of filesUnder(dir).filter((f) => f.endsWith("/gitignore"))) rmSync(f)
+    for (const stored of filesUnder(dir).filter((f) => f.endsWith("/gitignore"))) {
+      cpSync(stored, stored.replace(/gitignore$/, ".gitignore"))
+      rmSync(stored)
+    }
     const dashboard = join(dir, "apps/web/src/routes/app/index.tsx")
     writeFileSync(
       dashboard,

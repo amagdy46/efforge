@@ -1246,7 +1246,7 @@ export const addFailure = (
         code: "UpgradeFirst",
         message: `${String(e.file)} is from an older efforge: the dashboard ${(e.addons as string[]).length === 1 ? "card" : "cards"} of ${(e.addons as string[]).join(", ")} would not typecheck against it. Nothing was written. Run ${command} first, then this add again.`,
         fix: command,
-        details: { file: String(e.file), addons: e.addons, then: commandLine(args) },
+        details: { file: String(e.file), addons: e.addons, after: commandLine(args) },
       }
     }
     case "OverlayConflict": {
