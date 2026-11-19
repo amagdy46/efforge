@@ -21,5 +21,8 @@ const SendInput = Schema.Struct({
 /** `InvalidAddress` and `MailerError` reach the browser as themselves. */
 export const sendTestEmail = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(SendInput))
-  .handler(({ data }) => runOutcome(sendTestEmailProgram(data.to), InvalidAddress, MailerError))
+  .handler(({ data }) => {
+    const program = sendTestEmailProgram(data.to)
+    return runOutcome(program, InvalidAddress, MailerError)
+  })
 // #endregion

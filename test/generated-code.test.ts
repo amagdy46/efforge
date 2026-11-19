@@ -1,5 +1,5 @@
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { basename, join, posix } from "node:path"
+import { basename, dirname, join, posix } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { afterAll, expect, it } from "@effect/vitest"
 import { Cause, Config, ConfigProvider, Effect, Exit, Layer } from "effect"
@@ -16,13 +16,17 @@ const cache = new URL("../node_modules/.cache/", import.meta.url).pathname
 mkdirSync(cache, { recursive: true })
 const dir = mkdtempSync(join(cache, "efforge-code-"))
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
+/** `path` copied to `<its folder's name>/<its name>`, so `../lib/outcome` resolves, then loaded. */
 const load = async <M>(path: string): Promise<M> => {
-  const copy = join(dir, basename(path))
+  const copy = join(dir, basename(dirname(path)), basename(path))
+  mkdirSync(dirname(copy), { recursive: true })
   copyFileSync(join(templates, path), copy)
   return (await import(copy)) as M
 }
-// what server/manifest.ts reads from efforge.jsonc
-writeFileSync(join(dir, "manifest.ts"), 'export const stack = { infra: "none" }\n')
+// what server/manifest.ts reads from efforge.jsonc, and the module settings.ts takes NotConfigured from
+mkdirSync(join(dir, "server"), { recursive: true })
+writeFileSync(join(dir, "server/manifest.ts"), 'export const stack = { infra: "none" }\n')
+await load("base/files/web/src/lib/outcome.ts")
 
 const { authBaseURL } = await load<{
   authBaseURL: (url: string | undefined, dev: boolean) => unknown
