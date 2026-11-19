@@ -521,7 +521,20 @@ export const addAddons = (
     const seams = new Set<string>()
     for (const t of active) {
       const prev = current
-      current = yield* runTransform(prev, t)
+      // a transform with `ifMissing` is a hardening of a file the user may have from an older
+      // efforge: without its anchor, the add goes on and says what to change by hand
+      const missingNote = t.args.ifMissing
+      const ran =
+        missingNote === undefined
+          ? yield* runTransform(prev, t)
+          : yield* runTransform(prev, t).pipe(
+              Effect.catchTag("TransformAnchorMissing", () => Effect.succeed(undefined)),
+            )
+      if (ran === undefined) {
+        notes.push(missingNote as string)
+        continue
+      }
+      current = ran
       for (const [file, content] of current)
         if (prev.get(file) !== content) {
           seams.add(file)

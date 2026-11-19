@@ -97,7 +97,8 @@
         "name": "upgradeGuards",
         "item": "requireSocketSession",
         "import": "requireSocketSession",
-        "from": "./socket-session"
+        "from": "./socket-session",
+        "ifMissing": "apps/web/src/server/realtime-route.ts has no upgradeGuards list (it predates the session check for WebSockets), so the realtime room still lets anyone join. In realtimeRoute, before connecting, add `const refused = await requireSocketSession(request)` and `if (refused !== undefined) return refused`, with `import { requireSocketSession } from \"./socket-session\"`."
       },
       "when": {
         "auth": [

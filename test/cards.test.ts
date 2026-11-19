@@ -184,6 +184,31 @@ it("auth added later adds the guard to an existing middleware list, and names on
   ])
 })
 
+it("auth added to a realtime project from before the socket check goes on, with a note on the room", async () => {
+  const route = "apps/web/src/server/realtime-route.ts"
+  const { dir, result } = await addLater(d1("none", ["realtime"]), ["auth/better-auth"], (d) =>
+    // the route as efforge wrote it before upgradeGuards existed
+    writeFileSync(
+      join(d, route),
+      readFileSync(join(d, route), "utf8").replaceAll("upgradeGuards", "checks"),
+    ),
+  )
+  expect(readFileSync(join(dir, route), "utf8")).not.toContain("requireSocketSession")
+  expect(result.notes).toEqual([
+    expect.stringMatching(
+      /^apps\/web\/src\/server\/realtime-route\.ts has no upgradeGuards list .*requireSocketSession/,
+    ),
+  ])
+})
+
+it("auth added after realtime puts the session check on the room's upgrade", async () => {
+  const { dir, result } = await addLater(d1("none", ["realtime"]), ["auth/better-auth"])
+  const route = readFileSync(join(dir, "apps/web/src/server/realtime-route.ts"), "utf8")
+  expect(route).toContain('import { requireSocketSession } from "./socket-session"')
+  expect(route).toMatch(/upgradeGuards: ReadonlyArray<WorkerRoute> = \[[^\]]*requireSocketSession/)
+  expect(result.notes).toEqual([])
+})
+
 it("auth added after the cards guards their server functions too", async () => {
   const { dir, result } = await addLater(d1("none", ["realtime"]), ["auth/better-auth"])
   const addons = await run(loadAddons(templates))
