@@ -95,7 +95,7 @@ export const AppLayer = Layer.mergeAll(
   DatabaseLayer.pipe(Layer.provide(WorkerEnvLive)),
   AuthLive,
   /* efforge:layers */
-)
+).pipe(Layer.provideMerge(TelemetryLive))
 ```
 
 `Layer.mergeAll` combines layers into one that provides every service they provide. `DatabaseLayer` comes from `packages/db/src/layer.ts`, and it is `NotesLive` together with the database client it needs:
@@ -108,6 +108,10 @@ export const DatabaseLayer = NotesLive.pipe(Layer.provideMerge(DatabaseLive))
 `Layer.provideMerge(DatabaseLive)` gives `NotesLive` the `Database` it needs and keeps `Database` in the result, so the app gets both services. In `layers.ts`, `Layer.provide(WorkerEnvLive)` gives `DatabaseLayer` what it needs in turn, the Worker's bindings, and unlike `provideMerge` leaves them out of the result. The next section explains `WorkerEnvLive`.
 
 `AppLayer` provides every service the app has. `efforge add` adds layers before the `/* efforge:layers */` marker, so keep the `Layer.mergeAll(...)` shape. To change how a service works, change the layer listed here; code that asks for `Notes` stays the same.
+
+`TelemetryLive`, just above `AppLayer` in the same file, is where a tracer or an exporter goes. It is empty in a new project. `Layer.provideMerge(TelemetryLive)` puts it underneath the merged layers rather than beside them, so a fiber a layer forks while it builds (a server, a queue runner) is traced as well as each request; a tracer merged into the list would miss those fibers. An add-on puts its tracer there with the `addTelemetry` transform.
+
+A layer that needs another service provides that service's own exported layer (`Layer.provide(AuthLive)`, or `DatabaseLayer` and `WorkerEnvLive`), never a copy built inline. Effect builds each layer value once per runtime, so it is the same instance `AppLayer` holds.
 
 ## 4. A test swaps one out
 

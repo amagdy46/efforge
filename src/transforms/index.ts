@@ -6,6 +6,7 @@ import { AUTH_FILE, addAuthPlugin } from "./addAuthPlugin.ts"
 import { addExport } from "./addExport.ts"
 import { addImport } from "./addImport.ts"
 import { addLayer } from "./addLayer.ts"
+import { addTelemetry } from "./addTelemetry.ts"
 import { addRegion } from "./addRegion.ts"
 import { addServerFnMiddleware, unguardedServerFns } from "./addServerFnMiddleware.ts"
 import { addWorkflowSecret, WORKFLOW_FILE } from "./addWorkflowSecret.ts"
@@ -39,6 +40,7 @@ const registry: Readonly<Record<string, Entry>> = {
   addArrayItem: { run: addArrayItem, targets: onFile },
   addExport: { run: addExport, targets: onFile },
   addLayer: { run: addLayer, targets: onFile },
+  addTelemetry: { run: addTelemetry, targets: onFile },
   addAuthPlugin: { run: addAuthPlugin, targets: fixed(AUTH_FILE) },
   appendAgentsSection: { run: appendAgentsSection, targets: fixed(AGENTS_FILE) },
   addAlchemyResource: { run: addAlchemyResource, targets: fixed(ALCHEMY_FILE) },

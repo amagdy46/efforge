@@ -1,8 +1,8 @@
 import { Effect } from "effect"
-import { SyntaxKind } from "ts-morph"
 import {
   addImportText,
   appendListItem,
+  mergeAllOf,
   missing,
   parseTs,
   req,
@@ -24,12 +24,8 @@ export const addLayer: Transform = (tree, args) =>
     if (text === undefined) return yield* missing(file, "file", snippet)
 
     const sf = parseTs(file, text)
-    const call = sf
-      .getVariableDeclaration("AppLayer")
-      ?.getInitializer()
-      ?.asKind(SyntaxKind.CallExpression)
-    if (call === undefined || call.getExpression().getText() !== "Layer.mergeAll")
-      return yield* missing(file, "AppLayer = Layer.mergeAll(...)", snippet)
+    const call = mergeAllOf(sf, "AppLayer")
+    if (call === undefined) return yield* missing(file, "AppLayer = Layer.mergeAll(...)", snippet)
 
     const callArgs = call.getArguments()
     let next = text
