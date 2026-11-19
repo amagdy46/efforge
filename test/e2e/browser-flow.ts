@@ -256,7 +256,8 @@ const cardsFitPhoneWidth = async (page: Page) => {
   await page.goto("/app")
   await hydrated(page)
   const database = page.locator("#database")
-  const note = "n".repeat(180)
+  // unbroken, and unique per run: a database reused from an earlier run has the last one
+  const note = `${"n".repeat(170)}${Date.now()}`
   await database.getByLabel("New note").fill(note)
   await database.getByRole("button", { name: "Add note" }).click()
   await database.getByText(note).waitFor()
