@@ -61,7 +61,7 @@ classes, streams and auth with the least code, for about 64 KiB of gzipped clien
 - About 40 KiB of gzipped JavaScript on the dashboard; none on the landing page (measured).
 - A runtime that cannot start answers `/api/rpc` with a 500, which the client sees as
   `RpcClientError` rather than `NotConfigured`. Server functions keep the better answer.
-- The add-on has three variants of the server file and two of most others. A change to one is a
+- The add-on has four variants of the server file (no database, a database, auth, organizations) and two of most others. A change to one is a
   change to all; `test/rpc-addon.test.ts` and the e2e rows cover the stacks.
 - `@effect/atom-react` is a new pin, held with `effect` by the `@effect/atom-*` override. The
   release history records it at the next release (until then a test allows pins newer than the

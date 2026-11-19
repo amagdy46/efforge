@@ -8,7 +8,8 @@ import { rpcOverHttp } from "../src/rpc"
 import { AppRpcsHandlers } from "../src/rpc-handlers"
 import { makeRpcSession, RpcSession, RpcSessionClient, SessionRpcs } from "../src/rpc-session"
 
-const ada = { userId: "u1", email: "ada@example.com", name: "Ada" }
+/** A signed-in user; `activeOrganizationId` is for a project with organizations. */
+const ada = { userId: "u1", email: "ada@example.com", name: "Ada", activeOrganizationId: null }
 
 /** `RpcSession` that knows one session: the cookie `session=ada`. */
 const RpcSessionTest = Layer.succeed(

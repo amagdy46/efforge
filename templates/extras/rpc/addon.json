@@ -84,7 +84,15 @@
       "target": "apps/web/src/server/rpc.ts",
       "when": {
         "auth": [
-          "better-auth",
+          "better-auth"
+        ]
+      }
+    },
+    {
+      "path": "files/server/rpc-orgs.ts",
+      "target": "apps/web/src/server/rpc.ts",
+      "when": {
+        "auth": [
           "better-auth-orgs"
         ]
       }
