@@ -757,3 +757,10 @@ it("a file efforge no longer generates that you changed is kept, and says so", a
   expect(r.removes.has("apps/web/src/lib/old.ts")).toBe(false)
   expect(r.kept.find((k) => k.path === "apps/web/src/lib/old.ts")?.status).toBe("dropped")
 })
+
+it("upgrade --diff shows what it changed, from before it wrote", async () => {
+  const dir = await project()
+  lowerPnpm(dir)
+  const doc = JSON.parse((await cli(["upgrade", "--json", "--diff", "--no-install"], dir)).stdout)
+  expect(doc.diff).toContain('-  "packageManager": "pnpm@12.4.2"')
+})

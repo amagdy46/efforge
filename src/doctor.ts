@@ -268,7 +268,7 @@ const pnpmCheck: Check = {
   id: "pnpm",
   title: "pnpm version",
   run: (ctx) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       const global = ctx.probe.pnpmVersion()
       const pin = pinnedPnpm(json(ctx.read("package.json"))?.packageManager)
       if (global === undefined)
@@ -288,13 +288,18 @@ const pnpmCheck: Check = {
           fix: ctx.here(`npm pkg set packageManager=pnpm@${pnpmVersion}`),
           details: { pnpm: global },
         }
-      if (compareVersions(pin, pnpmWildcardOverrides) < 0)
+      if (compareVersions(pin, pnpmWildcardOverrides) < 0) {
+        // when upgrade has more to do (the Effect guard it needs), one fix does all of it
+        const plan = yield* ctx.plan
+        const upgrade =
+          plan?.covers.includes("effect-overrides") === true ? upgradeFix(ctx, plan) : null
         return {
           status: "fail" as const,
-          message: `packageManager pins pnpm ${pin}, which ignores the overrides that keep Effect's packages on one version (they work from pnpm ${pnpmWildcardOverrides}).`,
-          fix: ctx.here(`npm pkg set packageManager=pnpm@${pnpmVersion}`, INSTALL),
+          message: `packageManager pins pnpm ${pin}, which ignores the overrides that keep Effect's packages on one version (they work from pnpm ${pnpmWildcardOverrides}).${upgrade === null ? "" : " upgrade raises it with the overrides."}`,
+          fix: upgrade ?? ctx.here(`npm pkg set packageManager=pnpm@${pnpmVersion}`, INSTALL),
           details: { pnpm: global, packageManager: pin },
         }
+      }
       return ok(
         global === pin
           ? `pnpm ${global}, as packageManager pins.`
@@ -497,7 +502,7 @@ const peersCheck: Check = {
   id: "peers",
   title: "Peer dependencies",
   run: (ctx) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       if (!existsSync(join(ctx.dir, "node_modules", ".modules.yaml")))
         return skipped("Nothing is installed yet.")
       const pin = pinnedPnpm(json(ctx.read("package.json"))?.packageManager)
@@ -527,13 +532,21 @@ const peersCheck: Check = {
       } catch {}
       if (report === undefined) return skipped("pnpm peers check didn't run or printed no report.")
       const { unmet, known } = classifyPeers(report)
-      if (unmet.length > 0)
+      if (unmet.length > 0) {
+        // Effect peers out of range are two Effects: upgrade's overrides and pins settle them
+        const effectOnly = unmet.every((u) =>
+          isEffectLockstep(u.split(": ")[1]?.split(" ")[0] ?? ""),
+        )
+        const plan = effectOnly ? yield* ctx.plan : undefined
+        const fix =
+          plan?.covers.includes("effect-overrides") === true ? upgradeFix(ctx, plan) : null
         return {
           status: "fail" as const,
-          message: `${unmet.length} unmet peer ${unmet.length === 1 ? "dependency" : "dependencies"}: ${unmet.slice(0, 3).join("; ")}${unmet.length > 3 ? "; ..." : ""}.`,
-          fix: null,
+          message: `${unmet.length} unmet peer ${unmet.length === 1 ? "dependency" : "dependencies"}: ${unmet.slice(0, 3).join("; ")}${unmet.length > 3 ? "; ..." : ""}.${fix === null ? "" : " They are Effect's: upgrade holds every Effect package at one version."}`,
+          fix,
           details: { unmet, known },
         }
+      }
       return ok(
         known.length === 0
           ? "No unmet peer dependencies."
@@ -1054,6 +1067,14 @@ export const envObjectOf = (file: string, text: string): Set<string> | undefined
   )
 }
 
+const needsLabel: Record<string, string> = {
+  "effect-overrides": "the Effect overrides",
+  "package-manager": "packageManager",
+  "split-set": "a set of pins half moved",
+  "missing-seam": "an import of something missing",
+  install: "an install owed",
+}
+
 const upgradeCheck: Check = {
   id: "upgrade",
   title: "Compared with this efforge",
@@ -1082,7 +1103,7 @@ const upgradeCheck: Check = {
         const fixable = report.needsAction.every((n) => n.fix !== null)
         return {
           status: "fail" as const,
-          message: `${made}; ${report.needsAction.map((n) => n.message).join(" ")}`,
+          message: `${made}; ${report.needsAction.length === 1 ? "1 thing breaks" : `${report.needsAction.length} things break`} the project (${report.needsAction.map((n) => needsLabel[n.id]).join(", ")})${fixable ? ", and upgrade fixes it" : ""}. upgrade --check says more.`,
           fix: fixable ? fix : null,
           details: facts,
         }
@@ -1095,7 +1116,7 @@ const upgradeCheck: Check = {
           details: facts,
         }
       return ok(
-        `${made}; nothing to apply from efforge ${efforgeVersion}${report.kept.length > 0 ? ` (${report.kept.length} ${report.kept.length === 1 ? "file" : "files"} you changed ${report.kept.length === 1 ? "differs" : "differ"} from its templates; upgrade --check lists ${report.kept.length === 1 ? "it" : "them"})` : ""}.`,
+        `${made}; nothing to apply from efforge ${efforgeVersion}${report.kept.length > 0 ? ` (${report.kept.length} ${report.kept.length === 1 ? "file is" : "files are"} kept as ${report.kept.length === 1 ? "it is" : "they are"}; upgrade --check says why)` : ""}.`,
         { status: report.status },
       )
     }),
@@ -1150,9 +1171,12 @@ export const doctorContext = (opts: {
   readonly online: boolean
   readonly probe: Probe
   readonly engines: string
+  /** doctor ran with --json: an efforge fix keeps it. */
+  readonly json?: boolean
 }): DoctorContext => {
   const rel = relative(process.cwd(), opts.dir)
-  const efforge = (args: string) => `${BIN} ${args}${rel === "" ? "" : ` --cwd ${quote(rel)}`}`
+  const efforge = (args: string) =>
+    `${BIN} ${args}${opts.json === true && !args.includes("--json") ? " --json" : ""}${rel === "" ? "" : ` --cwd ${quote(rel)}`}`
   let planned: UpgradeReport | undefined | null = null
   return {
     ...opts,

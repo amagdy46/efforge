@@ -132,7 +132,7 @@ export const renderUpgrade = (
       ? `${pc.red("Needs action:")} ${plural(r.needsAction.length, "thing")} that ${r.needsAction.length === 1 ? "breaks" : "break"} the project.${r.changes.size + r.removes.size > 0 ? ` Behind: ${behind.join(", ") || "efforge.jsonc"}.` : ""}`
       : r.status === "behind"
         ? `${pc.yellow("Behind:")} ${behind.join(", ") || "efforge.jsonc to update"}. Nothing breaks the project.`
-        : `${pc.green("Up to date:")} nothing to apply${r.kept.length > 0 ? `; ${plural(r.kept.length, "file")} you changed ${r.kept.length === 1 ? "differs" : "differ"} from efforge's templates (below)` : ""}.`
+        : `${pc.green("Up to date:")} nothing to apply${r.kept.length > 0 ? `; ${plural(r.kept.length, "file")} ${r.kept.length === 1 ? "is" : "are"} kept as ${r.kept.length === 1 ? "it is" : "they are"} (below)` : ""}.`
   out.push(`${made} ${head}`)
   for (const w of r.warnings) out.push(pc.yellow(w))
 
@@ -175,8 +175,12 @@ export const renderUpgrade = (
   out.push(
     `${pc.bold("Versions")} ${pc.dim(`${moving.length} to move${groups.length > 0 ? ` (${groups.map((g) => g || "others").join(", ")})` : ""}, ${yours.length} yours, ${r.pins.filter((p) => p.status === "same").length} same`)}`,
   )
-  const fileLine = ["current", "refresh", "new", "review", "yours", "deleted", "dropped"]
-    .map((s) => [s, r.files.filter((f) => f.status === s).length] as const)
+  const fileLine = [
+    ...["current", "refresh", "new", "review", "yours", "deleted", "dropped"].map(
+      (s) => [s, r.files.filter((f) => f.status === s && f.held === undefined).length] as const,
+    ),
+    ["held", r.files.filter((f) => f.held !== undefined).length] as const,
+  ]
     .filter(([, n]) => n > 0)
     .map(([s, n]) => `${n} ${s}`)
     .join(", ")
@@ -374,11 +378,35 @@ export const upgradeCommand = Command.make(
       }
 
       // apply: everything was computed in memory; only now touch the disk
-      const created = [...r.changes.keys()].filter((f) => readText(dir, f) === undefined).toSorted()
-      const changed = [...r.changes.keys()].filter((f) => !created.includes(f)).toSorted()
-      const removed = [...r.removes].toSorted()
+      const created = new Set<string>()
+      const changedSet = new Set<string>()
+      const removedSet = new Set<string>()
       const anything = r.changes.size + r.removes.size > 0
-      const installs = input.install && !input.dryRun && r.installOwed
+      let installs = false
+      const io = (target: string) =>
+        Effect.mapError(
+          (e: { message: string }) =>
+            new GenerateError({ reason: "io", path: target, message: e.message }),
+        )
+      const partial = () => ({
+        directory: dir,
+        created: [...created].toSorted(),
+        changed: [...changedSet].toSorted(),
+        removed: [...removedSet].toSorted(),
+        nextSteps: [
+          { command: "pnpm typecheck && pnpm check && pnpm test && pnpm build", cwd: dir },
+        ],
+      })
+      const record = (plan: UpgradeReport) => {
+        for (const f of plan.changes.keys())
+          if (!created.has(f)) (readText(dir, f) === undefined ? created : changedSet).add(f)
+        for (const f of plan.removes) {
+          if (created.delete(f)) continue
+          changedSet.delete(f)
+          removedSet.add(f)
+        }
+      }
+      if (input.dryRun) record(r)
       if (anything && !input.dryRun) {
         if (input.install && r.installOwed && !(yield* has("pnpm"))) return yield* new PnpmMissing()
         if (!input.allowDirty) {
@@ -386,56 +414,65 @@ export const upgradeCommand = Command.make(
           if (dirty !== undefined && dirty.length > 0)
             return yield* new UncommittedChanges({ files: dirty })
         }
-        const io = (target: string) =>
-          Effect.mapError(
-            (e: { message: string }) =>
-              new GenerateError({ reason: "io", path: target, message: e.message }),
-          )
-        for (const f of removed) yield* fs.remove(path.join(dir, f), { force: true }).pipe(io(f))
-        for (const [f, content] of r.changes) {
+      }
+      // before anything is written: the first set against the files as they were
+      const diffs = input.diff
+        ? [...r.changes]
+            .filter(([f]) => only === undefined || f === only)
+            .map(([f, c]) => gitDiff(f, readText(dir, f), c))
+            .filter((d) => d !== "")
+        : []
+      const installedBefore = yield* fs
+        .exists(path.join(dir, "node_modules", ".modules.yaml"))
+        .pipe(Effect.orElseSucceed(() => false))
+      // a round writes one consistent set, then installs; what the install settles (a type that
+      // only matches with the new dependencies) can make more of the plan consistent, so plan again
+      let plan = r
+      let after = r
+      for (let round = 0; round < 3 && !input.dryRun; round++) {
+        if (plan.changes.size + plan.removes.size === 0) break
+        record(plan)
+        for (const f of plan.removes)
+          yield* fs.remove(path.join(dir, f), { force: true }).pipe(io(f))
+        for (const [f, content] of plan.changes) {
           const abs = path.join(dir, f)
           yield* fs.makeDirectory(path.dirname(abs), { recursive: true }).pipe(io(f))
           yield* fs.writeFileString(abs, content).pipe(io(f))
         }
+        const install = input.install && plan.installOwed
+        if (install || installedBefore)
+          yield* Effect.gen(function* () {
+            if (install) {
+              if (!input.json) yield* Console.log(pc.dim(`Installing dependencies (${INSTALL})`))
+              yield* exec("pnpm", [...INSTALL_ARGS], dir)
+              installs = true
+            }
+            yield* generateRouteTree(dir)
+          }).pipe(
+            Effect.catchTag("CommandFailed", (e) =>
+              Effect.fail(
+                new UpgradeIncomplete({ command: e.command, output: e.output, partial: partial() }),
+              ),
+            ),
+          )
+        after = yield* planUpgrade(dir, yield* readManifest(dir), addons, {
+          diff: false,
+          bin,
+          here: (c) => inDir(rel, [c]),
+        })
+        // only another set when this round installed: without an install, nothing it judged changes
+        if (!install || after.needsAction.length > 0) break
+        plan = after
       }
-      const partial = {
-        directory: dir,
-        created,
-        changed,
-        removed,
-        nextSteps: [
-          { command: "pnpm typecheck && pnpm check && pnpm test && pnpm build", cwd: dir },
-        ],
-      }
-      const installedBefore = yield* fs
-        .exists(path.join(dir, "node_modules", ".modules.yaml"))
-        .pipe(Effect.orElseSucceed(() => false))
-      if (!input.dryRun && (installs || (anything && installedBefore)))
-        yield* Effect.gen(function* () {
-          if (installs) {
-            if (!input.json) yield* Console.log(pc.dim(`Installing dependencies (${INSTALL})`))
-            yield* exec("pnpm", [...INSTALL_ARGS], dir)
-          }
-          yield* generateRouteTree(dir)
-        }).pipe(
-          Effect.catchTag("CommandFailed", (e) =>
-            Effect.fail(new UpgradeIncomplete({ command: e.command, output: e.output, partial })),
-          ),
-        )
-      // what is left: the project as it is now (a dry run: as it would be)
-      const after =
-        input.dryRun || !anything
-          ? r
-          : yield* planUpgrade(dir, yield* readManifest(dir), addons, {
-              diff: false,
-              bin,
-              here: (c) => inDir(rel, [c]),
-            })
+      const createdList = [...created].toSorted()
+      const changed = [...changedSet].toSorted()
+      const removed = [...removedSet].toSorted()
       const needsAction = after.needsAction.filter(
         (n) => !(input.dryRun && n.fix === bin("upgrade")),
       )
+      const owesInstall = r.installOwed && anything && !installs
       const nextSteps = [
-        ...(!installs && r.installOwed && anything ? [{ command: INSTALL, cwd: dir }] : []),
+        ...(owesInstall ? [{ command: INSTALL, cwd: dir }] : []),
         ...(anything || after.kept.length > 0
           ? [{ command: "pnpm typecheck && pnpm check && pnpm test && pnpm build", cwd: dir }]
           : []),
@@ -458,7 +495,7 @@ export const upgradeCommand = Command.make(
               ? "needs-action"
               : "current"
             : after.status,
-          created,
+          created: createdList,
           changed,
           removed,
           installed: installs,
@@ -468,10 +505,7 @@ export const upgradeCommand = Command.make(
           warnings: r.warnings,
           ...(input.diff
             ? {
-                diff: [...r.changes]
-                  .filter(([f]) => only === undefined || f === only)
-                  .map(([f, c]) => gitDiff(f, readText(dir, f), c))
-                  .join("\n"),
+                diff: diffs.join("\n"),
               }
             : {}),
         })
@@ -485,9 +519,9 @@ export const upgradeCommand = Command.make(
           )
         else {
           lines.push(
-            `${input.dryRun ? "Would upgrade" : "Upgraded"} from efforge ${r.project.efforgeVersion} to ${efforgeVersion}${input.dryRun ? "" : installs ? ", and installed" : ""}:`,
+            `${input.dryRun ? "Would upgrade" : "Upgraded"} ${r.project.efforgeVersion === efforgeVersion ? `to what efforge ${efforgeVersion} generates today` : `from efforge ${r.project.efforgeVersion} to ${efforgeVersion}`}${input.dryRun ? "" : installs ? ", and installed" : ""}:`,
           )
-          for (const f of created) lines.push(`  ${pc.green("+")} ${f}`)
+          for (const f of createdList) lines.push(`  ${pc.green("+")} ${f}`)
           for (const f of changed)
             lines.push(
               `  ${pc.yellow("~")} ${f}${r.seams.find((s) => s.file === f) === undefined ? "" : pc.dim(` (${r.seams.find((s) => s.file === f)?.missing.join("; ")})`)}`,
@@ -501,7 +535,7 @@ export const upgradeCommand = Command.make(
               `${input.dryRun ? "Would keep" : "Kept"} as ${after.kept.length === 1 ? "it is" : "they are"}`,
             ),
           )
-          for (const k of after.kept) lines.push(`  ${k.path}`, `    ${pc.dim(k.reason)}`)
+          lines.push(...renderKept(after, false).map((l) => l.replace(/^ {3}/, "")))
           lines.push(
             `  ${pc.dim("efforge's version of each:")} ${pc.cyan(bin("upgrade --check --diff --file <path>"))}`,
           )
@@ -516,10 +550,7 @@ export const upgradeCommand = Command.make(
                 : n.lines.split("\n").map((l) => `      ${pc.dim(l)}`)),
             )
         }
-        if (input.diff)
-          for (const [f, c] of r.changes)
-            if (only === undefined || f === only)
-              lines.push("", gitDiff(f, readText(dir, f), c).trimEnd())
+        if (input.diff) for (const d of diffs) lines.push("", d.trimEnd())
         if (nextSteps.length > 0 && !input.dryRun) {
           lines.push("", pc.bold("Next"))
           for (const s of nextSteps) lines.push(`  ${pc.cyan(inDir(rel, [s.command]))}`)

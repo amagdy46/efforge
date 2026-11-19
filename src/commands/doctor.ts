@@ -98,6 +98,7 @@ export const doctorCommand = Command.make(
         manifestProblem: manifest.problem,
         all,
         online: input.online,
+        json: input.json,
         probe: yield* DoctorProbe,
         engines: enginesOf(templates),
       })
