@@ -371,6 +371,7 @@
         "item": "sessionGate",
         "import": "sessionGate",
         "from": "./server/require-session",
+        "at": "start",
         "ifMissing": "apps/web/src/start.ts has no `const functionMiddleware = [...]` list passed to createStart (a project made before efforge 0.3), so server functions are guarded only where they chain `.middleware([requireSession])`, and the project's lint names any that don't. `npx -y create-efforge upgrade` brings the list; or add `functionMiddleware: [sessionGate]` to createStart's options yourself, with `import { sessionGate } from \"./server/require-session\"`."
       }
     },
