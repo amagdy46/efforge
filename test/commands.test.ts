@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -110,8 +111,10 @@ it("info resolves ids the way add does, typo rule included", async () => {
     fix: "npx -y create-efforge list --json",
   })
   const text = await cli(["info", "storage"])
-  expect(text.out).toContain("Storage  extras/storage")
-  expect(text.out).toMatch(/env +STORAGE_SIGNING_SECRET/)
+  // CI=1 turns colours on
+  const shown = stripVTControlCharacters(text.out)
+  expect(shown).toContain("Storage  extras/storage")
+  expect(shown).toMatch(/env +STORAGE_SIGNING_SECRET/)
 })
 
 it("graph reads AppLayer from layers.ts and joins the add-ons' facts", async () => {

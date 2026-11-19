@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -266,7 +267,10 @@ it("a preset picked at the prompt can be changed part by part, with its parts as
     "none",
     ["storage", "email"],
   ])
-  const notes = s.output.filter((o) => o.startsWith("note Your stack"))
+  // CI=1 turns colours on
+  const notes = s.output
+    .map((o) => stripVTControlCharacters(o))
+    .filter((o) => o.startsWith("note Your stack"))
   expect(notes[0]).toContain("note Your stack (the SaaS preset): ")
   expect(notes[0]).toContain("--preset=saas")
   expect(notes[1]).toContain("note Your stack (the SaaS preset, changed): ")
