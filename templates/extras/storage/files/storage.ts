@@ -62,6 +62,7 @@ const make = Effect.gen(function* () {
             uploaded: o.uploaded,
           })),
           Effect.mapError(fail("put")),
+          Effect.withSpan("Storage.put"),
         ),
     get: (key) =>
       Effect.gen(function* () {
@@ -75,7 +76,7 @@ const make = Effect.gen(function* () {
           uploaded: object.uploaded,
           body: object.body,
         })
-      }).pipe(Effect.mapError(fail("get"))),
+      }).pipe(Effect.mapError(fail("get")), Effect.withSpan("Storage.get")),
     list: (prefix) =>
       bucket.list({ prefix, include: ["httpMetadata"] }).pipe(
         Effect.map((page) =>
@@ -87,19 +88,21 @@ const make = Effect.gen(function* () {
           })),
         ),
         Effect.mapError(fail("list")),
+        Effect.withSpan("Storage.list"),
       ),
-    delete: (key) => bucket.delete(key).pipe(Effect.mapError(fail("delete"))),
+    delete: (key) =>
+      bucket.delete(key).pipe(Effect.mapError(fail("delete")), Effect.withSpan("Storage.delete")),
     signedUrl: (key, options) =>
       Effect.gen(function* () {
         const expires = String(Math.floor(Date.now() / 1000) + (options?.expiresInSeconds ?? 3600))
         const signature = yield* Effect.promise(() => signPayload(secret, key, expires))
         return `/files/${encodeURIComponent(key)}?expires=${expires}&signature=${signature}`
-      }).pipe(Effect.mapError(fail("signedUrl"))),
+      }).pipe(Effect.mapError(fail("signedUrl")), Effect.withSpan("Storage.signedUrl")),
     verify: (key, expires, signature) =>
       Effect.gen(function* () {
         if (expires === null || signature === null) return false
         return yield* Effect.promise(() => verifyPayload(secret, key, expires, signature))
-      }).pipe(Effect.mapError(fail("verify"))),
+      }).pipe(Effect.mapError(fail("verify")), Effect.withSpan("Storage.verify")),
   })
 })
 

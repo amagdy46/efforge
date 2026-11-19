@@ -83,7 +83,7 @@ export const AuthLive = Layer.effect(
           name: found.user.name,
           activeOrganizationId: found.session.activeOrganizationId ?? null,
         }
-      }),
+      }).pipe(Effect.withSpan("Auth.currentSession")),
     })
   }),
 ).pipe(Layer.provideMerge(BetterAuthLive))

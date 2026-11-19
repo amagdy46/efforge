@@ -54,9 +54,15 @@ export const LlmLive = Layer.effect(
     const provider = yield* WorkerConfig.provider
     return Llm.of({
       generateText: (prompt) =>
-        loadSettings(provider).pipe(Effect.flatMap((settings) => generateWith(settings, prompt))),
+        loadSettings(provider).pipe(
+          Effect.flatMap((settings) => generateWith(settings, prompt)),
+          Effect.withSpan("Llm.generateText"),
+        ),
       streamText: (prompt) =>
-        loadSettings(provider).pipe(Effect.map((settings) => streamWith(settings, prompt))),
+        loadSettings(provider).pipe(
+          Effect.map((settings) => streamWith(settings, prompt)),
+          Effect.withSpan("Llm.streamText"),
+        ),
     })
   }),
 ).pipe(Layer.provide(WorkerEnvLive))

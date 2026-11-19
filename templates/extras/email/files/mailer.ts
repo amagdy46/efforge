@@ -17,7 +17,7 @@ const ConsoleMailer = (sender: string) => {
       send: (message) =>
         Effect.log(
           `[mail] from ${from} to ${message.to}\nSubject: ${message.subject}\n\n${message.text}`,
-        ),
+        ).pipe(Effect.withSpan("Mailer.send")),
     }),
   )
 }
@@ -42,6 +42,7 @@ const CloudflareMailer = (from: string) =>
                   cause,
                 }),
             ),
+            Effect.withSpan("Mailer.send"),
           ),
       })
     }),
