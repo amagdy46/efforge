@@ -59,9 +59,11 @@ const cardsRequireSession = async (page: Page) => {
   await database.getByRole("alert").getByText("InvalidNote").waitFor()
   if ((await database.getByLabel("New note").inputValue()).length !== 250)
     throw new Error("a failed add cleared the note input")
-  await database.getByLabel("New note").fill("written by Ann")
+  // unique per run: a database reused from an earlier run already has older notes
+  const note = `written by Ann at ${Date.now()}`
+  await database.getByLabel("New note").fill(note)
   await database.getByRole("button", { name: "Add note" }).click()
-  await database.getByText("written by Ann").waitFor()
+  await database.getByText(note).waitFor()
   const realtime = page.locator("#realtime")
   // a signed-in user's socket is let in
   await realtime.getByText("Connected", { exact: true }).waitFor()
