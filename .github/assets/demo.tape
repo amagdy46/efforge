@@ -25,7 +25,7 @@ Set WaitTimeout 90s
 Hide
 Type `export PS1='\[\e[2m\]$\[\e[0m\] ' GIT_PAGER=cat GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=diff.mnemonicPrefix GIT_CONFIG_VALUE_0=false; cd "$(mktemp -d)"`
 Enter
-Type `if [ -n "$EFFORGE_BIN" ]; then npm() { [ "$1" = create ] && { shift 2; node "$EFFORGE_BIN" "$@"; return; }; command npm "$@"; }; npx() { [ "$1" = create-efforge ] && { shift; node "$EFFORGE_BIN" "$@"; return; }; command npx "$@"; }; fi; clear`
+Type `if [ -n "$EFFORGE_BIN" ]; then npm() { [ "$1" = create ] && { shift 2; node "$EFFORGE_BIN" "$@"; return; }; command npm "$@"; }; npx() { [ "$1" = -y ] && [ "$2" = create-efforge ] && { shift 2; node "$EFFORGE_BIN" "$@"; return; }; command npx "$@"; }; fi; clear`
 Enter
 Show
 
@@ -52,7 +52,7 @@ Hide
 Type "clear"
 Enter
 Show
-Type "cd my-app && npx create-efforge add email"
+Type "cd my-app && npx -y create-efforge add email"
 Sleep 300ms
 Enter
 Wait+Line /^\$ *$/

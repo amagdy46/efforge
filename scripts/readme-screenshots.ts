@@ -9,10 +9,10 @@ import { chromium, type Page } from "playwright"
 /**
  * `pnpm readme:screenshots`: the dashboard pictures at the top of README.md, light and dark.
  *
- *   pnpm readme:screenshots [--cli <efforge checkout>] [--out <dir>] [--dir <work dir>] [--keep]
+ *   pnpm readme:screenshots [--out <dir>] [--dir <work dir>] [--keep]
  *
- * It generates `my-app` with D1, Better Auth, AI and every extra (with `node <cli>/src/bin.ts`,
- * default: this checkout), migrates the local D1, starts `pnpm dev` on a free port, signs up, adds
+ * It generates `my-app` with D1, Better Auth, AI and every extra, with the CLI of the checkout it
+ * runs in (`node src/bin.ts`), migrates the local D1, starts `pnpm dev` on a free port, signs up, adds
  * a note, and writes `.github/assets/dashboard-light.png` and `dashboard-dark.png`: the database
  * card, its demo beside the code behind it. Then it stops the server and deletes the project.
  *
@@ -24,7 +24,6 @@ import { chromium, type Page } from "playwright"
 
 const { values } = parseArgs({
   options: {
-    cli: { type: "string" },
     out: { type: "string" },
     dir: { type: "string" },
     keep: { type: "boolean", default: false },
@@ -32,7 +31,6 @@ const { values } = parseArgs({
 })
 
 const repo = join(import.meta.dirname, "..")
-const cli = resolve(values.cli ?? repo)
 const out = resolve(values.out ?? join(repo, ".github/assets"))
 const base = resolve(values.dir ?? tmpdir())
 mkdirSync(base, { recursive: true })
@@ -139,7 +137,7 @@ const optimise = (files: ReadonlyArray<string>) => {
 
 let dev: ReturnType<typeof spawn> | undefined
 try {
-  run("node", [join(cli, "src/bin.ts"), "my-app", ...stack], work)
+  run("node", [join(repo, "src/bin.ts"), "my-app", ...stack], work)
   run("pnpm", ["db:migrate"], app)
   const port = await freePort()
   // its own process group (pnpm -> vite -> workerd), so stopping it stops all of it
