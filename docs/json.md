@@ -2128,7 +2128,7 @@ npx -y create-efforge add --json --cwd my-app
   "ok": false,
   "error": {
     "code": "NoAddonIds",
-    "message": "Name the add-ons to add: infra/alchemy, ai/effect-ai-byok, extras/workflows, extras/realtime, extras/browser, extras/storage, extras/email. What each one adds: npx -y create-efforge list --json --cwd my-app",
+    "message": "Name the add-ons to add: infra/alchemy, ai/effect-ai-byok, extras/workflows, extras/realtime, extras/browser, extras/storage, extras/email, extras/rpc. What each one adds: npx -y create-efforge list --json --cwd my-app",
     "fix": null,
     "available": [
       "infra/alchemy",
@@ -2137,7 +2137,8 @@ npx -y create-efforge add --json --cwd my-app
       "extras/realtime",
       "extras/browser",
       "extras/storage",
-      "extras/email"
+      "extras/email",
+      "extras/rpc"
     ]
   }
 }

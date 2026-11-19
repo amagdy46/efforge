@@ -38,5 +38,6 @@ A slot is one decision about the stack: the database, the ORM, auth, and so on. 
 - [Browser](extras-browser.md) (`extras/browser`): A headless browser: a Browser service on a Cloudflare Container that runs Playwright (apps/browser), and a dashboard card that opens a page.
 - [Email](extras-email.md) (`extras/email`): Transactional email: a Mailer service on Cloudflare Email Service, printed to the console in development, a dashboard card, plus invitation emails with organizations.
 - [Realtime](extras-realtime.md) (`extras/realtime`): WebSockets: a Realtime service, a hibernating Room Durable Object, a useRoom hook and a dashboard card.
+- [Effect RPC](extras-rpc.md) (`extras/rpc`): Call Effect from TanStack Start with Effect RPC: a typed group in packages/core, served at /api/rpc on the app's layers, an AtomRpc client for React with typed errors and streams, and a dashboard card.
 - [Storage](extras-storage.md) (`extras/storage`): Object storage: a Storage service on R2 with Worker-served signed download URLs, and a dashboard card.
 - [Workflows](extras-workflows.md) (`extras/workflows`): Durable background jobs: a Jobs service on Cloudflare Workflows, an example workflow and a dashboard card that follows a run's steps.

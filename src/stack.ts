@@ -8,7 +8,14 @@ export const Orm = Schema.Literals(["drizzle", "effect-sql", "none"])
 export const Auth = Schema.Literals(["better-auth-orgs", "better-auth", "none"])
 export const Infra = Schema.Literals(["none", "alchemy"])
 export const Ai = Schema.Literals(["none", "effect-ai-byok"])
-export const Extra = Schema.Literals(["workflows", "realtime", "browser", "storage", "email"])
+export const Extra = Schema.Literals([
+  "workflows",
+  "realtime",
+  "browser",
+  "storage",
+  "email",
+  "rpc",
+])
 
 export const SlotId = Schema.Literals([
   "runtime",

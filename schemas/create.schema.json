@@ -90,7 +90,8 @@
               "realtime",
               "browser",
               "storage",
-              "email"
+              "email",
+              "rpc"
             ]
           }
         }

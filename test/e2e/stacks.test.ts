@@ -350,7 +350,7 @@ const stacks: Array<[string, Parameters<typeof withDefaults>[0]]> = [
       auth: "none",
       infra: "none",
       ai: "none",
-      extras: ["storage", "workflows", "realtime", "browser"],
+      extras: ["storage", "workflows", "realtime", "browser", "rpc"],
     },
   ],
   [
@@ -429,6 +429,17 @@ const stacks: Array<[string, Parameters<typeof withDefaults>[0]]> = [
       auth: "none",
       infra: "alchemy",
       extras: ["storage", "workflows", "realtime", "browser"],
+    },
+  ],
+  [
+    "d1-auth-alchemy-rpc",
+    {
+      name: "d1-auth-alchemy-rpc",
+      database: "d1",
+      orm: "effect-sql",
+      auth: "better-auth",
+      infra: "alchemy",
+      extras: ["rpc"],
     },
   ],
 ]
@@ -712,7 +723,7 @@ describe.skipIf(process.env.EFFORGE_E2E_BROWSER !== "1")("browser flow", () => {
           auth: "better-auth-orgs",
           infra: "none",
           ai: "effect-ai-byok",
-          extras: ["workflows", "realtime", "browser", "storage", "email"],
+          extras: ["workflows", "realtime", "browser", "storage", "email", "rpc"],
         }),
       ),
     { timeout: 15 * 60 * 1000 },

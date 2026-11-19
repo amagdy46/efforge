@@ -95,6 +95,7 @@ export const slots: ReadonlyArray<SlotDef> = [
       opt("extras", "browser", "Browser rendering"),
       opt("extras", "storage", "Storage"),
       opt("extras", "email", "Email"),
+      opt("extras", "rpc", "Effect RPC", "typed calls and streams"),
     ],
   },
 ]

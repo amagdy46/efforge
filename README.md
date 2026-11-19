@@ -144,7 +144,7 @@ The first question offers a preset, a whole stack in one choice, or each part in
 | Auth | `--auth=better-auth-orgs`, `better-auth`, `none` | `better-auth-orgs` |
 | Infrastructure | `--infra=none` (`wrangler.jsonc`), `alchemy` | `none` |
 | AI | `--ai=none`, `effect-ai-byok` | `none` |
-| Extras | `--extras=workflows,realtime,browser,storage,email` | none |
+| Extras | `--extras=workflows,realtime,browser,storage,email,rpc` | none |
 
 An ORM goes with a database, and auth needs one. Postgres needs Docker on your machine; D1 doesn't. `--yes` takes the defaults for the rest, and `create` ends with the command that makes the same stack again. [The CLI reference](https://github.com/amagdy46/efforge/blob/main/docs/cli.md) has every flag.
 

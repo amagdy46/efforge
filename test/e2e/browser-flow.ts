@@ -44,6 +44,49 @@ const postWithHost = (url: string, host: string, body: string) =>
  * error. Needs no account: R2, email and Workflows are emulated, the AI card has no key (with
  * organizations it says to add one) and containers are off in local dev.
  */
+/**
+ * The RPC card: a value, a typed error with its field, a stream that arrives a number at a time,
+ * and the notes the database card wrote, read through the Notes service over RPC.
+ */
+const useRpcCard = async (page: Page) => {
+  const rpc = page.locator("#rpc")
+  await rpc.getByLabel("Name").fill("Ann")
+  await rpc.getByRole("button", { name: "Call Greet" }).click()
+  await rpc.getByText("Hello, Ann").waitFor()
+  await rpc.getByLabel("Name").fill("")
+  await rpc.getByRole("button", { name: "Call Greet" }).click()
+  const invalid = rpc.getByRole("alert").filter({ hasText: "InvalidName" })
+  await invalid.getByText("length:").waitFor()
+  await rpc.getByRole("button", { name: "Stream a countdown" }).click()
+  // a number shows while the stream is still open, then the stream ends at 0
+  await rpc.getByText("arriving, one every 400 ms").waitFor()
+  await rpc.getByText("the stream ended").waitFor({ timeout: 15_000 })
+  await rpc.getByRole("button", { name: "List notes over RPC" }).click()
+  await rpc.getByText(/newest "written by Ann at \d+"/).waitFor()
+}
+
+/**
+ * Signed out, `/api/rpc` is refused by the session gate (401 `Unauthorized`), and the card's call
+ * fails with the group's `Unauthorized`, marked as rejected.
+ */
+const rpcRefusedSignedOut = async (page: Page, baseURL: string) => {
+  const raw = await fetch(`${baseURL}/api/rpc`, {
+    method: "POST",
+    headers: { "content-type": "application/ndjson" },
+    body: '{"_tag":"Request","id":"1","tag":"Greet","payload":{"name":"x"},"headers":[]}\n',
+  })
+  const body = await raw.text()
+  if (raw.status !== 401 || !body.includes("Unauthorized"))
+    throw new Error(`/api/rpc answered without a session: ${raw.status} ${body.slice(0, 200)}`)
+  await page.goto("/app#rpc")
+  await hydrated(page)
+  await page.context().clearCookies()
+  const rpc = page.locator("#rpc")
+  await rpc.getByRole("button", { name: "Call Greet" }).click()
+  const refused = rpc.getByRole("alert").filter({ hasText: "Unauthorized" })
+  await refused.getByText("The server rejected the call.").waitFor()
+}
+
 const useServiceCards = async (page: Page) => {
   const storage = page.locator("#storage")
   await storage.getByText("No files yet").waitFor()
@@ -329,6 +372,7 @@ const cardsRequireSession = async (page: Page) => {
   await realtime.getByRole("button", { name: "Send from the server" }).click()
   await realtime.getByText(/broadcast it to/).waitFor()
   await useServiceCards(page)
+  await useRpcCard(page)
 
   annWatch = calls.find((c) => serverFnName(c.url()).startsWith("watchWorkflow"))?.url()
   annUpload = calls.find((c) => serverFnName(c.url()).startsWith("listFiles"))?.url()
@@ -473,6 +517,9 @@ export const orgsFlow = async (baseURL: string): Promise<void> => {
       await expectVisible(page, ann.email)
       await expectVisible(page, bob.email)
     }
+
+    // last, since it signs Ann out
+    await rpcRefusedSignedOut(annPage, baseURL)
   } finally {
     await browser.close()
   }

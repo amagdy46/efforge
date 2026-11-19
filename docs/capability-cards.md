@@ -76,7 +76,7 @@ export const realtime: Capability = {
 
 Every field is required except `layer`:
 
-- `id` is the card's id on the landing page too: `lib/stack.ts` links a stack item to `/app#<id>` when the registry has that id. The ids it expects are `runtime`, `database`, `auth`, `ai`, and each extra's own id (`workflows`, `realtime`, `browser`, `storage`, `email`).
+- `id` is the card's id on the landing page too: `lib/stack.ts` links a stack item to `/app#<id>` when the registry has that id. The ids it expects are `runtime`, `database`, `auth`, `ai`, and each extra's own id (`workflows`, `realtime`, `browser`, `storage`, `email`, `rpc`).
 - `layer.name` is the expression's name in `layers.ts` (what `addLayer` added). The layer graph uses it to show `provides` and `needs`, and the card takes that layer's tempering colour. Leave `layer` out for a capability without a layer.
 - `test.name` is the `it.effect` name of a test the card's code is about, one that swaps in a test layer. Every card has one: the add-on ships it (step 4).
 - `agents` is a `##` heading the add-on appends to `AGENTS.md` with `appendAgentsSection`, exactly as written there. Every card's add-on appends one.
@@ -149,7 +149,7 @@ A layer is built once per Worker isolate, inside whichever request comes first. 
 }
 ```
 
-- `files[0]` is the card module and must target `apps/web/src/capabilities/`; `export` is its export.
+- `files[0]` is the card module and must target `apps/web/src/capabilities/`; `export` is its export. A later file with the same target and its own `when` is a variant of the module for other stacks (the rpc card has one with a database and one without); each variant is registered on its stacks.
 - The other files are what only the card uses. Anything that imports the card-era base files (`outcome.ts`, `use-server-call.ts`, `components/demo.tsx`) belongs here, not in `files`. Server functions go in files under `apps/web/src/server/`.
 - A file can carry `when`, like any add-on file. The card is registered when its module's `when` matches.
 - `transforms` (optional) are transforms that edit only the card's own files, for example an `addImport` that depends on the stack. `loadAddons` refuses one that edits any other file: put that under the add-on's `transforms`.

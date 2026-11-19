@@ -15,6 +15,7 @@ export const versions: Record<string, string> = {
   "@effect/ai-anthropic": effect4,
   "@effect/ai-openai": effect4,
   "@effect/ai-openrouter": effect4,
+  "@effect/atom-react": effect4,
   alchemy: "2.0.0-beta.87",
   // the Cloudflare provider, split out of `alchemy` in 2.0.0-beta.87; keep it on the alchemy version
   "@alchemy.run/cloudflare": "2.0.0-beta.87",

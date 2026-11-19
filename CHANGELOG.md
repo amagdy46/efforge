@@ -66,6 +66,9 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - Every service call is a named span (`Notes.list`, `Storage.put`, `Auth.currentSession`, ...) and every server function call is one (`serverFn.addNote`). Nothing records them until a tracer is set; then a trace reads by name.
 - `layers.ts` has a telemetry slot, `TelemetryLive`, underneath `AppLayer`, so a tracer there reaches what a layer forks while it builds as well as each request. Add-ons fill it with the new `addTelemetry` transform.
 - The generated `AGENTS.md` says how to add an error to a service and handle it in a component, to restart `pnpm dev` after adding a dependency, and where the Local Explorer is (`/cdn-cgi/local/explorer/`: D1 rows, R2 objects, Durable Object storage, Workflows, traces).
+- `efforge add rpc` (or `--extras=rpc`): call Effect from TanStack Start with Effect RPC. `AppRpcs` in `packages/core/src/rpc.ts` is one contract for the server and the browser; `RpcLive`, a layer in `AppLayer`, serves it at `POST /api/rpc` from a Start server route, so its handlers run on the same layers as the server functions and each call is a span (`rpc.Greet`). `AppClient` (`AtomRpc`, `@effect/atom-react`) makes each call an atom: a failure arrives as its error's class with its fields, and a stream call streams. With auth, `/api/rpc` needs a session like the rest of `/api/`, and a call without one fails with `Unauthorized`, as a server function's does. A dashboard card calls it, shows the typed error and watches a stream; it adds about 40 KiB of gzipped JavaScript to the dashboard and nothing to the landing page. [docs/rpc.md](docs/rpc.md) compares it with a server function and `HttpApi`.
+- An add-on's card module can have variants for different stacks: a later card file with the same target and its own `when`. Each is registered on its stacks.
+- The dashboard has a tenth layer colour, Moss.
 
 ### Changed
 

@@ -105,7 +105,7 @@ it("ProjectName rejects unscoped slash and empty, accepts scoped", () => {
 it("d1, workflows, realtime and browser require cloudflare", () => {
   const other = { runtime: "other" } as unknown as Parameters<typeof available>[1]
   expect(ids(available("database", other))).toEqual(["postgres", "none"])
-  expect(ids(available("extras", other))).toEqual(["storage", "email"])
+  expect(ids(available("extras", other))).toEqual(["storage", "email", "rpc"])
   const cf = { runtime: "cloudflare" } as const
   expect(ids(available("database", cf))).toContain("d1")
   expect(ids(available("extras", cf))).toEqual([
@@ -114,6 +114,7 @@ it("d1, workflows, realtime and browser require cloudflare", () => {
     "browser",
     "storage",
     "email",
+    "rpc",
   ])
 })
 

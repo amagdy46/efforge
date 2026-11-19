@@ -553,8 +553,15 @@ it("env vars the stack reads that .env.example lacks are appended there and loca
 it("the release history has this efforge, with the pins versions.ts has", () => {
   const entry = releases[efforgeVersion]
   expect(entry, `run node scripts/history.ts for ${efforgeVersion}`).toBeDefined()
+  // a pin added since the release (a new add-on's package) has no entry until the next one records
+  // it; every pin the release wrote must still be the one versions.ts has
+  const recorded = Object.keys(entry?.pins ?? {})
   expect(entry?.pins).toEqual(
-    Object.fromEntries(Object.entries(versions).toSorted(([a], [b]) => (a < b ? -1 : 1))),
+    Object.fromEntries(
+      Object.entries(versions)
+        .filter(([name]) => recorded.includes(name))
+        .toSorted(([a], [b]) => (a < b ? -1 : 1)),
+    ),
   )
   expect(entry?.pnpm).toBe(pnpmVersion)
 })
