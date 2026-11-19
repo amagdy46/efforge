@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { basename, join, posix } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { afterAll, expect, it } from "@effect/vitest"
@@ -60,8 +60,86 @@ it("checkSettings: a layer that misses a setting fails with NotConfigured, namin
     _tag: "NotConfigured",
     setting: "RESEND_API_KEY",
     file: ".dev.vars",
-    message: "RESEND_API_KEY is not set. Add it to .dev.vars and restart pnpm dev.",
+    message: "RESEND_API_KEY is not set. Set RESEND_API_KEY in .dev.vars and restart pnpm dev.",
   })
+})
+
+const { asNotConfigured } = await load<{
+  asNotConfigured: (error: unknown) => { setting: string; problem: string; message: string }
+}>("base/files/web/src/server/settings.ts")
+
+it("asNotConfigured: every configuration error names its setting, and keeps a layer's own reason", () => {
+  // a layer's own error with a `setting` field (StorageConfigError on cards-storage-email)
+  expect(
+    asNotConfigured({
+      _tag: "StorageConfigError",
+      setting: "STORAGE_SIGNING_SECRET",
+      message: "STORAGE_SIGNING_SECRET is too short: use at least 32 characters.",
+    }),
+  ).toMatchObject({
+    setting: "STORAGE_SIGNING_SECRET",
+    problem: "STORAGE_SIGNING_SECRET is too short: use at least 32 characters.",
+  })
+  // one without the field, named only in its message (StorageConfigError on next)
+  expect(
+    asNotConfigured({
+      _tag: "StorageConfigError",
+      message: "STORAGE_SIGNING_SECRET must be at least 32 characters (wrangler secret put ...)",
+    }),
+  ).toMatchObject({ setting: "STORAGE_SIGNING_SECRET" })
+  expect(
+    asNotConfigured({ _tag: "LlmConfigError", message: "LLM_ENCRYPTION_KEY is not a 32-byte key" }),
+  ).toMatchObject({ setting: "LLM_ENCRYPTION_KEY" })
+  expect(asNotConfigured({ _tag: "NotFound", message: "X_Y" })).toBeUndefined()
+})
+
+/**
+ * Every env var an add-on declares and a layer reads produces `NotConfigured` naming it when
+ * missing: the layer reads it with `Config.*("NAME")` (an Effect ConfigError names the key), or
+ * builds a `...ConfigError` that carries it. Read from the add-ons' own files, so a new add-on's
+ * setting is checked without a change here.
+ */
+it("every env var an add-on reads in apps/web is read so that a missing one is named", async () => {
+  const addons = await Effect.runPromise(
+    loadAddons(templates).pipe(Effect.provide(NodeServices.layer)),
+  )
+  let checked = 0
+  for (const { manifest, dir: addonDir } of addons.values()) {
+    const sources = [...manifest.files, ...(manifest.card?.files ?? [])]
+      .filter((f) => f.target.startsWith("apps/web/src/server/"))
+      .map((f) => readFileSync(join(addonDir, f.path), "utf8"))
+      .join("\n")
+    for (const { name } of manifest.envVars) {
+      if (!sources.includes(name)) continue
+      const viaConfig = new RegExp(`Config\\.\\w+\\(\\s*"${name}"`).test(sources)
+      const viaConst =
+        new RegExp(`=\\s*"${name}"`).test(sources) && /Config\.\w+\(\s*[A-Z_]+\s*\)/.test(sources)
+      expect(viaConfig || viaConst, `${manifest.id} reads ${name} without Config`).toBe(true)
+      const missing = asNotConfigured({
+        _tag: "ConfigError",
+        message: `SchemaError(Expected string\n  at ["${name}"])`,
+      })
+      expect(missing.setting).toBe(name)
+      expect(missing.message).toContain(name)
+      checked++
+    }
+    // a layer's own `...ConfigError` must name a declared setting, in `setting` or its message
+    const names = manifest.envVars.map((v) => v.name)
+    for (const m of sources.matchAll(/new (\w+ConfigError)\(\{([\s\S]*?)\}\)/g)) {
+      const message = /message:\s*[`"]([^`"]+)/.exec(m[2] ?? "")?.[1] ?? ""
+      // `setting: "NAME"`, or `setting: SECRET` with `const SECRET = "NAME"`
+      const field = /setting:\s*(?:"([A-Z0-9_]+)"|([A-Za-z_]\w*))/.exec(m[2] ?? "")
+      const setting =
+        field?.[1] ??
+        (field?.[2] === undefined
+          ? undefined
+          : new RegExp(`const ${field[2]} = "([A-Z0-9_]+)"`).exec(sources)?.[1])
+      const named = asNotConfigured({ _tag: m[1], message, ...(setting ? { setting } : {}) })
+      expect(names, `${manifest.id}: ${m[1]} "${message}"`).toContain(named.setting)
+      checked++
+    }
+  }
+  expect(checked).toBeGreaterThanOrEqual(4)
 })
 
 const tagged = (tag: string, message: string) =>
@@ -128,7 +206,36 @@ it("regions: a card gets only the marked region of a file, and a file without on
   expect(await plugin.load.call(context, file)).toBeNull()
   await expect(
     plugin.load.call(context, `${join(dir, "unmarked.ts")}?region=card`),
-  ).rejects.toThrow(/has no "\/\/ #region card"/)
+  ).rejects.toThrow(/has no complete "\/\/ #region card"/)
+  // a region that runs into another region is not one: it would ship that region too
+  expect(
+    region("// #region card\nconst a = 1\n// #region other\nconst b = 2\n// #endregion", "card"),
+  ).toBeUndefined()
+})
+
+const { wholeServerFile, secretValues } = await load<{
+  wholeServerFile: (id: string) => string | undefined
+  secretValues: (dirs: ReadonlyArray<string>) => Array<[string, string]>
+}>("base/files/web/regions.ts")
+
+it("clientGuard: a settings file or a whole server file in the browser build fails it", () => {
+  const web = "/p/apps/web/src"
+  expect(wholeServerFile(`${web}/server/auth-live.ts?raw`)).toMatch(/imported whole \(\?raw\)/)
+  expect(wholeServerFile(`${web}/server/auth-live.ts?raw&region=card`)).toMatch(/\?raw/)
+  expect(wholeServerFile(`${web}/server/notes.ts?url`)).toMatch(/\?url/)
+  expect(wholeServerFile("/p/.dev.vars?raw")).toMatch(/settings file/)
+  expect(wholeServerFile("/p/.env.local")).toMatch(/settings file/)
+  // a server function's stub, a region, and anything outside src/server are fine
+  expect(wholeServerFile(`${web}/server/notes.ts`)).toBeUndefined()
+  expect(wholeServerFile(`${web}/server/notes.ts?region=card`)).toBeUndefined()
+  expect(wholeServerFile(`${web}/styles.css?url`)).toBeUndefined()
+  const settings = join(dir, "settings")
+  mkdirSync(settings, { recursive: true })
+  writeFileSync(
+    join(settings, ".dev.vars"),
+    "# local\nBETTER_AUTH_SECRET=dev-only-secret-0123456789\nBETTER_AUTH_URL=http://localhost:5173\nAPI_KEY=short\n",
+  )
+  expect(secretValues([settings])).toEqual([["BETTER_AUTH_SECRET", "dev-only-secret-0123456789"]])
 })
 
 /** The code panel fits this many characters at 1440 px wide (docs/capability-cards.md). */

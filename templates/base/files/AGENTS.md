@@ -11,11 +11,13 @@ Rules for AI agents (and humans) working in this repo. Read this before changing
 - `apps/web/src/server/routes.ts`: Worker-level routes (`workerRoutes`) tried before TanStack Start.
 - `apps/web/src/routes`: TanStack Router file routes. `routeTree.gen.ts` is generated (and gitignored); never edit it.
 - `apps/web/src/components/ui`: shadcn components.
-- `apps/web/src/capabilities`: the dashboard's cards, listed in `registry.ts`. A card shows the
-  `// #region card` ... `// #endregion` block of a file (`?region=card`, cut at build time by
-  `apps/web/regions.ts`). That block is public, in the browser bundle: never mark a secret. Keep the
-  markers when you edit such a file. With auth, card server functions require `requireSession`.
-- The dashboard is a starter surface. To remove it: replace `routes/app/index.tsx` with your page, delete `capabilities/`, `components/{capability-card,code-block,layer-graph}.tsx`, `lib/{highlight,layer-graph}.ts` and the server files the cards import, make `getStack` in `server/stack.ts` return `cards: []`, then run `pnpm check`.
+- `apps/web/src/capabilities`: the dashboard's cards (`registry.ts`). A card shows a file's
+  `// #region card` block (`?region=card`, cut by `apps/web/regions.ts`), which ships to the
+  browser: never mark a secret, and keep the markers. Lint rejects `?raw` and other whole-file
+  imports; `pnpm build` fails if a server file or a secret would ship.
+- The dashboard is a starter surface. To remove it, replace `routes/app/index.tsx`, delete `capabilities/`, `components/{capability-card,code-block,layer-graph}.tsx`, `lib/{highlight,layer-graph}.ts`
+  and the `@/server/...` files the cards import (`greeting.ts`, `notes.ts`, ..., not `stack.ts`),
+  and in `server/stack.ts` drop the registry import and return `cards: []`. Run `pnpm typecheck`.
 - `apps/web/src/server/outcome.ts`: `runOutcome` runs an Effect for a server function and returns
   its tagged error as data (`{ ok: false, error: { _tag, message } }`), so the UI can match on it.
 - `efforge.jsonc`: the stack choices. `efforge add` reads it; leave it alone. To add a capability (email, storage, a database, auth, AI), run `npx -y create-efforge@latest add <id> --json` from the project root instead of wiring it by hand; `npx -y create-efforge@latest list --json` lists the ids.

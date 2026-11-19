@@ -7,6 +7,7 @@ import {
   TransformAnchorMissing,
   type TransformCall,
   UnknownTransform,
+  unguardedServerFns,
 } from "../src/transforms/index.ts"
 import type { Tree } from "../src/tree.ts"
 
@@ -550,12 +551,39 @@ it("addServerFnMiddleware gates every server fn once and adds the import", async
   expect(text).toContain('import { requireSession } from "./rs"')
 })
 
-it("addServerFnMiddleware leaves an already gated server fn alone and reports missing anchors", async () => {
-  const gated = "export const a = createServerFn().middleware([mine]).handler(() => 1)\n"
-  const t = await once({ "f.ts": gated }, gate)
-  expect(t.get("f.ts")).not.toContain("requireSession]")
+it("addServerFnMiddleware adds the middleware first to a chain's existing list, once", async () => {
+  const source = [
+    "export const a = createServerFn().middleware([timing]).handler(() => 1)",
+    "export const b = createServerFn().middleware([]).handler(() => 2)",
+    "export const c = createServerFn().middleware([requireSession, timing]).handler(() => 3)",
+    "",
+  ].join("\n")
+  const t = await once({ "f.ts": source }, gate)
+  expect(t.get("f.ts")).toBe(
+    [
+      'import { requireSession } from "./rs"',
+      "export const a = createServerFn().middleware([requireSession, timing]).handler(() => 1)",
+      "export const b = createServerFn().middleware([requireSession]).handler(() => 2)",
+      "export const c = createServerFn().middleware([requireSession, timing]).handler(() => 3)",
+      "",
+    ].join("\n"),
+  )
+  expect(unguardedServerFns("f.ts", t.get("f.ts") ?? "", "requireSession")).toEqual([])
+})
+
+it("addServerFnMiddleware leaves a middleware it cannot edit, and unguardedServerFns names it", async () => {
+  const source = "export const send = createServerFn().middleware(shared).handler(() => 1)\n"
+  const t = await once({ "f.ts": source }, gate)
+  expect(t.get("f.ts")).toBe(source)
+  expect(unguardedServerFns("f.ts", source, "requireSession")).toEqual(["send"])
+})
+
+it("addServerFnMiddleware fails on a file without a server function, unless ifAny", async () => {
   const e = await fail(new Map([["f.ts", "export const x = 1\n"]]), gate)
   expect(e).toBeInstanceOf(TransformAnchorMissing)
+  const plain = new Map([["f.ts", "export const x = 1\n"]])
+  const t = await run(plain, { ...gate, args: { ...gate.args, ifAny: "true" } })
+  expect(t.get("f.ts")).toBe("export const x = 1\n")
 })
 
 it("addServerFnMiddleware puts a one-line chain one call per line, as the formatter would", async () => {

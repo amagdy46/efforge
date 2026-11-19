@@ -11,6 +11,7 @@ pnpm test:e2e -t "^stacks build > minimal$"  # one case; a filter that matches n
 node src/bin.ts my-app --dry-run     # run the CLI from source
 node scripts/bump.ts [--write]       # pins vs npm latest
 node scripts/smoke-pack.ts           # pack, install like npm create, create + build + add
+node scripts/cold-start.ts <project> --server=vite|alchemy|preview --scenario=all  # Better Auth on a cold Worker, 20 rounds
 ```
 
 efforge lints and formats itself with Vite+ (`pnpm lint`, `pnpm format`, `pnpm check`). CI runs the unit checks, one e2e job per stack in `scripts/e2e-cases.ts`, a packed-tarball smoke test (`scripts/smoke-pack.ts`), a browser-image build and the browser flow against Postgres. It also runs daily and on demand, without the pnpm cache, so a dependency release that breaks new projects shows up within a day.

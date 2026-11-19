@@ -56,6 +56,10 @@
       "target": "lint/effect-tests.js"
     },
     {
+      "path": "files/root/lint/efforge.js",
+      "target": "lint/efforge.js"
+    },
+    {
       "path": "files/web/components.json",
       "target": "apps/web/components.json"
     },

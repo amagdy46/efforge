@@ -55,6 +55,7 @@ import {
 import { WRANGLER_FILE } from "../transforms/addWranglerBinding.ts"
 import {
   runTransform,
+  unguardedServerFns,
   transformTargets,
   type TransformAnchorMissing,
   type UnknownTransform,
@@ -548,7 +549,20 @@ export const addAddons = (
     const seams = new Set<string>()
     for (const t of active) {
       const prev = current
-      current = yield* runTransform(prev, t)
+      // a transform with `ifMissing` is a hardening of a file the user may have from an older
+      // efforge: without its anchor, the add goes on and says what to change by hand
+      const ifMissing = t.args.ifMissing
+      if (ifMissing === undefined) current = yield* runTransform(prev, t)
+      else {
+        const ran = yield* runTransform(prev, t).pipe(
+          Effect.catchTag("TransformAnchorMissing", () => Effect.succeed(undefined)),
+        )
+        if (ran === undefined) {
+          notes.push(ifMissing)
+          continue
+        }
+        current = ran
+      }
       for (const [file, content] of current)
         if (prev.get(file) !== content) {
           seams.add(file)
@@ -568,6 +582,18 @@ export const addAddons = (
           else out.delete(AGENTS_FILE)
         }
       }
+    }
+    // a server function the guard could not reach (its `.middleware(...)` is not a written-out
+    // list) is named, with the fix; the project's own lint rule fails on it until then
+    for (const t of active) {
+      if (t.name !== "addServerFnMiddleware" || t.args.file === undefined) continue
+      const text = current.get(t.args.file)
+      if (text === undefined) continue
+      const middleware = t.args.middleware ?? "requireSession"
+      for (const fn of unguardedServerFns(t.args.file, text, middleware))
+        notes.push(
+          `${fn} in ${t.args.file} is not guarded: its .middleware(...) is not a list efforge can add to. Put ${middleware} first in it, as .middleware([${middleware}, ...]), and import it from "${t.args.from ?? "./require-session"}". Until then it answers signed-out requests, and pnpm check fails (efforge/server-fn-session).`,
+        )
     }
     const transformed = new Set<string>()
     for (const file of seams) {

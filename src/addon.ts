@@ -1,5 +1,5 @@
 import { Effect, FileSystem, Path, Schema } from "effect"
-import { CARDS_DIR, SERVER_DIR } from "./cards.ts"
+import { CARDS_DIR, needsGuard, SERVER_DIR, sessionGuard } from "./cards.ts"
 import { transformTargets } from "./transforms/index.ts"
 import { slots } from "./slots.ts"
 import { SlotId, type StackConfig } from "./stack.ts"
@@ -195,6 +195,27 @@ export const loadAddons = (
         )
         if (message !== undefined) return yield* fail(manifest.id, "invalid-card", message)
       }
+      // every server function an add-on writes requires a session on auth stacks, wherever the
+      // add-on lists its file: the guard is derived here, so an add-on never has to declare it
+      const guarded = new Set(
+        manifest.transforms
+          .filter((t) => t.name === "addServerFnMiddleware")
+          .map((t) => t.args.file),
+      )
+      const guards: AddonTransform[] = []
+      for (const f of manifest.files)
+        if (
+          !guarded.has(f.target) &&
+          needsGuard(f.target, yield* io(manifest.id, fs.readFileString(path.join(dir, f.path))))
+        ) {
+          guarded.add(f.target)
+          guards.push(sessionGuard(f))
+        }
+      if (guards.length > 0)
+        addons.set(manifest.id, {
+          manifest: { ...manifest, transforms: [...manifest.transforms, ...guards] },
+          dir,
+        })
     }
     return addons
   })

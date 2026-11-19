@@ -37,6 +37,10 @@
       "target": "apps/web/src/server/require-session.ts"
     },
     {
+      "path": "../better-auth/files/shared/server/socket-session.ts",
+      "target": "apps/web/src/server/socket-session.ts"
+    },
+    {
       "path": "files/lib/auth-client.ts",
       "target": "apps/web/src/lib/auth-client.ts"
     },
@@ -432,7 +436,7 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "auth",
-        "content": "## Auth (Better Auth)\n\n- Server: `apps/web/src/server/auth.ts` builds the Better Auth instance (`makeAuth`); `auth-live.ts` provides it and the `Auth` service from `@repo/core`. Read the session in Effect code through `Auth.currentSession`, never from cookies directly.\n- `/api/auth/*` is served by `auth-route.ts` (a `workerRoutes` entry). Client: `authClient` in `apps/web/src/lib/auth-client.ts`.\n- Route guard: `routes/app.tsx` redirects signed-out visitors to `/sign-in?redirect=...`; build redirects with `safeRedirect`, never from raw input."
+        "content": "## Auth (Better Auth)\n\n- Server: `apps/web/src/server/auth.ts` builds the Better Auth instance (`makeAuth`); `auth-live.ts` provides it and the `Auth` service from `@repo/core`. Read the session in Effect code through `Auth.currentSession`, never from cookies directly.\n- `/api/auth/*` is served by `auth-route.ts` (a `workerRoutes` entry). Client: `authClient` in `apps/web/src/lib/auth-client.ts`.\n- Route guard: `routes/app.tsx` redirects signed-out visitors to `/sign-in?redirect=...`; build redirects with `safeRedirect`, never from raw input.\n- Server functions: every one requires a session through `.middleware([requireSession])` (`require-session.ts`), except the few on the `public` list of `efforge/server-fn-session` in `vite.config.ts`. A Worker route (a WebSocket upgrade) checks with `requireSocketSession` from `socket-session.ts`, which closes a socket without a session with 4401 \"Not signed in\". Keep `socket-session.ts` out of anything the browser loads.\n- Start-up on Workers: never await a promise that outlives the request that made it, and never await one across requests. Better Auth finishes starting in a promise (`auth.$context`) that, under `pnpm dev`, loads a module (I/O owned by the request that started it). `auth-live.ts` hands it to `waitUntil` instead of awaiting it while building the layer: the layer is built once per isolate, so an await there makes every request that arrives meanwhile wait on another request's work, which workerd fails with \"the Worker's code had hung\", and a request that ends first would leave the promise cancelled. Keep layer construction synchronous; pass slow start-up work to `waitUntil`."
       }
     },
     {

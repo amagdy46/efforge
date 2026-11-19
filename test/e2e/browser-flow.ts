@@ -1,5 +1,9 @@
 import { request as httpRequest } from "node:http"
 import { chromium, type Page, type Request } from "playwright"
+import { PUBLIC_SERVER_FNS } from "../../src/cards.ts"
+
+/** Server functions signed-out visitors must reach (the route guard, the landing page). */
+const PUBLIC = new Set(Object.values(PUBLIC_SERVER_FNS).flat())
 
 const password = "correct-horse-battery"
 
@@ -55,10 +59,14 @@ const cardsRequireSession = async (page: Page) => {
   await database.getByRole("alert").getByText("InvalidNote").waitFor()
   if ((await database.getByLabel("New note").inputValue()).length !== 250)
     throw new Error("a failed add cleared the note input")
-  await database.getByLabel("New note").fill("written by Ann")
+  // unique per run: a database reused from an earlier run already has older notes
+  const note = `written by Ann at ${Date.now()}`
+  await database.getByLabel("New note").fill(note)
   await database.getByRole("button", { name: "Add note" }).click()
-  await database.getByText("written by Ann").waitFor()
+  await database.getByText(note).waitFor()
   const realtime = page.locator("#realtime")
+  // a signed-in user's socket is let in
+  await realtime.getByText("Connected", { exact: true }).waitFor()
   await realtime.getByRole("button", { name: "Send from the server" }).click()
   await realtime.getByText(/broadcast it to/).waitFor()
 
@@ -76,12 +84,33 @@ const cardsRequireSession = async (page: Page) => {
     const name = JSON.parse(
       Buffer.from(call.url().split("/_serverFn/")[1]?.split("?")[0] ?? "", "base64url").toString(),
     ).export as string
-    names.add(name.split("_")[0] as string)
-    if (!body.includes("Unauthorized"))
+    const fn = name.split("_")[0] as string
+    names.add(fn)
+    // public by design (the realtime card reads getStack): it answers without a session
+    if (PUBLIC.has(fn)) continue
+    // the guard's own refusal: its tag and its message, not merely the word somewhere in the body
+    if (!body.includes("Unauthorized") || !body.includes("Not signed in"))
       throw new Error(
         `${name} answered a request without a session: ${response.status} ${body.slice(0, 200)}`,
       )
   }
+  // the realtime room refuses a socket without a session, with a close code the card can show
+  const socket = new WebSocket(
+    `${page
+      .url()
+      .replace(/^http/, "ws")
+      .replace(/\/app.*$/, "")}/ws/rooms/demo`,
+  )
+  const closed = await new Promise<{ code: number; reason: string }>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("an anonymous socket was not closed")), 15_000)
+    socket.addEventListener("message", () => reject(new Error("an anonymous socket got a message")))
+    socket.addEventListener("close", ({ code, reason }) => {
+      clearTimeout(timer)
+      resolve({ code, reason })
+    })
+  })
+  if (closed.code !== 4401)
+    throw new Error(`an anonymous socket closed with ${closed.code} ${closed.reason}, not 4401`)
   for (const fn of ["greet", "listNotes", "addNote", "announce"])
     if (!names.has(fn))
       throw new Error(`the dashboard never called ${fn}; replayed ${[...names].join(", ")}`)

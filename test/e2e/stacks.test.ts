@@ -181,7 +181,11 @@ const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
     if (config.orm === "drizzle") yield* Effect.try(() => checkDbGenerate(dir))
     yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
     // a minimal stack's card files may have nothing outside their regions; auth and database ones do
-    yield* Effect.try(() => checkRegionsOnly(dir))
+    const checked = yield* Effect.try(() => checkRegionsOnly(dir))
+    if (checked === 0 && (config.auth !== "none" || config.database !== "none"))
+      return yield* Effect.fail(
+        new Error(`checkRegionsOnly checked no lines on ${JSON.stringify(config)}`),
+      )
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -419,7 +423,7 @@ describe("add on a real project", () => {
 
 describe.skipIf(process.env.EFFORGE_E2E_BROWSER !== "1")("browser flow", () => {
   it.effect(
-    "pg-drizzle-orgs + realtime: sign up, create org, see the widgets, invite, accept, both members visible",
+    "pg-drizzle-orgs + realtime: sign up, create org, see the cards, invite, accept, both members visible",
     () =>
       browserFlow(
         withDefaults({
