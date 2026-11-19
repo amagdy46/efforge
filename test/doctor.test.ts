@@ -131,6 +131,7 @@ it("every check has a stable, unique id", () => {
     "peers",
     "env",
     "bindings",
+    "durable-objects",
     "migrations",
     "postgres",
     "layers",
@@ -380,6 +381,33 @@ it("bindings: with Alchemy, a deleted resource fails", async () => {
   const r = get(await doctor(dir), "bindings")
   expect(r.status).toBe("fail")
   expect(r.message).toContain("STORAGE")
+})
+
+it("durable-objects: a class without its migration or its export from the Worker entry fails", async () => {
+  const dir = await project({ extras: ["realtime", "cluster"] })
+  expect(get(await doctor(dir), "durable-objects").status).toBe("ok")
+  // the cluster migration no longer creates ClusterWorkflow (its binding stays)
+  edit(dir, "wrangler.jsonc", (t) =>
+    t.replace(/"ClusterEntity",\s*"ClusterWorkflow",/, '"ClusterEntity",'),
+  )
+  edit(dir, "apps/web/src/server.ts", (t) => t.replace("  ClusterEntity,\n", ""))
+  const r = get(await doctor(dir), "durable-objects")
+  expect(r.status).toBe("fail")
+  expect(r.message).toContain("doesn't export ClusterEntity (extras/cluster)")
+  expect(r.details).toMatchObject({ unexported: ["ClusterEntity"] })
+  expect(r.details?.unmigrated).toContain("ClusterWorkflow")
+})
+
+it("durable-objects: with Alchemy, the export is checked and the migrations are Alchemy's", async () => {
+  const dir = await project({ infra: "alchemy", extras: ["cluster"] })
+  expect(get(await doctor(dir), "durable-objects").message).toContain(
+    "Alchemy writes their migrations",
+  )
+  edit(dir, "apps/web/src/server.ts", (t) => t.replace("  ClusterDurableQueue,\n", ""))
+  expect(get(await doctor(dir), "durable-objects").details).toMatchObject({
+    unexported: ["ClusterDurableQueue"],
+    unmigrated: [],
+  })
 })
 
 // ruling 10: read as code, not text

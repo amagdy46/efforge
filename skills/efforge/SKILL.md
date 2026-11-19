@@ -37,7 +37,7 @@ It writes `./my-app`, runs `pnpm install`, formats, and makes the first git comm
 | `--auth` | `better-auth-orgs` (users plus organizations, members and invitations), `better-auth` (users and sessions only), `none` | `better-auth-orgs` |
 | `--infra` | `none` (`wrangler.jsonc`), `alchemy` | `none` |
 | `--ai` | `none`, `effect-ai-byok` | `none` |
-| `--extras` | comma-separated: `workflows`, `realtime`, `browser`, `storage`, `email` | none |
+| `--extras` | comma-separated: `workflows`, `realtime`, `browser`, `storage`, `email`, `cluster` (experimental) | none |
 
 Rules: `orm` is `none` exactly when `database` is `none`, and `auth` needs a database. A flag you leave out takes its default. Postgres needs Docker for local development; D1 doesn't, so prefer `--database=d1` unless the user asked for Postgres.
 
@@ -79,7 +79,7 @@ npx -y create-efforge@latest info email --json --cwd my-app
 npx -y create-efforge@latest add email --json --cwd my-app
 ```
 
-Ids: `email`, `storage`, `realtime`, `workflows`, `browser`, `ai`, `infra/alchemy`, `database/d1`, `database/postgres`, `orm/drizzle`, `orm/effect-sql`, `auth/better-auth`, `auth/better-auth-orgs`. Several at once is fine: `add email storage`. On a project without a database, add the database, an ORM and auth in one command: `add database/d1 orm/effect-sql auth/better-auth`.
+Ids: `email`, `storage`, `realtime`, `workflows`, `browser`, `cluster` (experimental: Effect Cluster on Durable Objects; its limits are in the project's `AGENTS.md`), `ai`, `infra/alchemy`, `database/d1`, `database/postgres`, `orm/drizzle`, `orm/effect-sql`, `auth/better-auth`, `auth/better-auth-orgs`. Several at once is fine: `add email storage`. On a project without a database, add the database, an ORM and auth in one command: `add database/d1 orm/effect-sql auth/better-auth`.
 
 The result lists `created`, `changed` and `removed` files, the new `env` vars, and `nextSteps` (often `pnpm install --no-frozen-lockfile` or `pnpm db:migrate`). Run the `nextSteps`. `notes` is work `add` left for you, one line each (for example, a line to add to a dashboard the user edited): do each one, or tell the user why you didn't. Read `warnings` and pass them on to the user. `add` checks everything before it writes: an error before the write (`UnknownAddon`, `IncompatibleStack`, `OverlayConflict`, ...) leaves the project as it was. A failed install afterwards (`CommandFailed`) leaves the files written. Commit before you run it, so `git diff` shows only its changes.
 
