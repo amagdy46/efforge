@@ -1,5 +1,13 @@
 import { expect, it } from "@effect/vitest"
-import { applyBumps, compareVersions, diffPins, formatReport } from "../scripts/bump.ts"
+import {
+  applyBumps,
+  checkToolchain,
+  heldPins,
+  compareVersions,
+  diffPins,
+  formatReport,
+  parseTsgoSupport,
+} from "../scripts/bump.ts"
 import { e2eCases } from "../scripts/e2e-cases.ts"
 
 it("orders versions, releases above pre-releases", () => {
@@ -52,4 +60,72 @@ it("--write only moves literal pins to a stable newer latest", () => {
 it("derives e2e case names from the stacks table", () => {
   const src = `const stacks = [\n  [\n    "minimal",\n    {},\n  ],\n  ["pg-drizzle", { a: 1 }],\n]\ndescribe("stacks build", () => {})`
   expect(e2eCases(src)).toEqual(["minimal", "pg-drizzle"])
+})
+
+it("reads @effect/tsgo's supported-components table", () => {
+  const readme = [
+    "intro | not | a table |",
+    "<!-- supported-components:start -->",
+    "| Component | Supported versions |",
+    "|---|---|",
+    "| TypeScript | `7.0.2`, `7.1.0-beta` |",
+    "| tsrs | `0.25.0` |",
+    "| Oxlint | `1.93.0`, `1.94.0` |",
+    "| oxlint-tsgolint | `7.0.2007` |",
+    "<!-- supported-components:end -->",
+  ].join("\n")
+  expect(parseTsgoSupport(readme)).toEqual({
+    typescript: ["7.0.2", "7.1.0-beta"],
+    oxlint: ["1.93.0", "1.94.0"],
+    "oxlint-tsgolint": ["7.0.2007"],
+  })
+  expect(parseTsgoSupport("no table")).toEqual({})
+})
+
+it("flags lint-toolchain pins outside tsgo's table or vite-plus's bundle", () => {
+  const support = { typescript: ["7.0.2"], oxlint: ["1.94.0"], "oxlint-tsgolint": ["7.0.2007"] }
+  const bundle = { oxlint: "=1.94.0", vitest: "5.1.0" }
+  const pins = {
+    "@effect/tsgo": "0.70.0",
+    "vite-plus": "1.7.0",
+    typescript: "7.0.2",
+    oxlint: "1.94.0",
+    "oxlint-tsgolint": "7.0.2007",
+    vitest: "5.1.0",
+  }
+  expect(checkToolchain(pins, support, bundle)).toEqual([])
+  expect(checkToolchain({ ...pins, oxlint: "1.88.0", vitest: "5.1.1" }, support, bundle)).toEqual([
+    "oxlint 1.88.0 is not supported by @effect/tsgo 0.70.0 (1.94.0)",
+    "oxlint 1.88.0 differs from vite-plus 1.7.0's 1.94.0",
+    "vitest 5.1.1 differs from vite-plus 1.7.0's 5.1.0",
+  ])
+  expect(checkToolchain(pins, {}, bundle)).toHaveLength(3)
+})
+
+it("--write holds a pin the lint toolchain fixes, and says why", () => {
+  const support = { typescript: ["7.0.2"], oxlint: ["1.94.0"], "oxlint-tsgolint": ["7.0.2007"] }
+  const bundle = { oxlint: "=1.94.0", vitest: "5.1.0" }
+  const pins = {
+    "@effect/tsgo": "0.70.0",
+    "vite-plus": "1.7.0",
+    typescript: "7.0.2",
+    oxlint: "1.94.0",
+    "oxlint-tsgolint": "7.0.2007",
+    vitest: "5.1.0",
+    react: "19.3.1",
+  }
+  const lines = diffPins([
+    { pkg: "vitest", pin: "5.1.0", latest: "5.1.1" },
+    { pkg: "react", pin: "19.3.1", latest: "19.3.2" },
+  ])
+  const held = heldPins(lines, pins, support, bundle)
+  expect([...held.keys()]).toEqual(["vitest"])
+  const src = `{\n  react: "19.3.1",\n  vitest: "5.1.0",\n}`
+  const { source, applied, skipped } = applyBumps(src, lines, held)
+  expect(applied).toEqual(["react 19.3.1 -> 19.3.2"])
+  expect(skipped).toEqual([
+    "vitest 5.1.0 -> 5.1.1: vitest 5.1.1 differs from vite-plus 1.7.0's 5.1.0",
+  ])
+  expect(source).toContain('vitest: "5.1.0"')
+  expect(checkToolchain({ ...pins, vitest: "5.1.0" }, support, bundle)).toEqual([])
 })

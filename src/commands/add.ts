@@ -22,7 +22,15 @@ import {
   type UnknownTransform,
 } from "../transforms/index.ts"
 import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
-import { efforgeVersion, versions } from "../versions.ts"
+import {
+  effectOverrides,
+  effectVersion,
+  efforgeVersion,
+  isEffectLockstep,
+  pnpmVersion,
+  pnpmWildcardOverrides,
+  versions,
+} from "../versions.ts"
 import { PnpmMissing, TemplatesDir } from "./create.ts"
 
 export class NotAnEfforgeProject extends Schema.TaggedError<NotAnEfforgeProject>()(
@@ -70,7 +78,20 @@ export interface AddResult {
   readonly envVars: ReadonlyArray<{ readonly name: string; readonly description: string }>
   /** `<package.json>: <script>` entries whose existing command an add-on replaced. */
   readonly replacedScripts: string[]
+  /** The root `packageManager`, when this run raised it so pnpm honours the Effect overrides. */
+  readonly packageManager: { readonly from: string; readonly to: string } | null
+  /** Things left for you to do by hand, one line each. */
+  readonly notes: string[]
 }
+
+/**
+ * `add` has just changed dependencies, so the lockfile must be rewritten. With `CI` set (CI, and many
+ * agent sandboxes) pnpm installs with a frozen lockfile by default and fails with OUTDATED_LOCKFILE.
+ */
+const INSTALL_ARGS = ["install", "--no-frozen-lockfile"]
+
+const DASHBOARD = "apps/web/src/routes/app/index.tsx"
+const WIDGETS = "apps/web/src/components/widgets.tsx"
 
 export type AddError =
   | NotAnEfforgeProject
@@ -165,7 +186,7 @@ const parseId = (raw: string): Effect.Effect<{ slot: SlotDef; option: string }, 
       ? id.split("/", 2)
       : [undefined, id]
   const unknown = (message: string) => Effect.fail(new UnknownAddon({ id: raw, message }))
-  if (option === "none") return unknown(`Removing an add-on isn't supported in v0.1 ("${raw}").`)
+  if (option === "none") return unknown(`Removing an add-on isn't supported yet ("${raw}").`)
   const candidates = slots.filter(
     (s) => (slotPart === undefined || s.id === slotPart) && s.options.some((o) => o.id === option),
   )
@@ -212,7 +233,7 @@ const applyIds = (
           slot.id,
           option,
           [current],
-          `${slot.id} is already "${current}"; swapping an existing choice isn't supported in v0.1. Create a new project to use a different ${slot.id}.`,
+          `${slot.id} is already "${current}"; swapping an existing choice isn't supported yet. Create a new project to use a different ${slot.id}.`,
         )
     }
     const valid = yield* validate(next).pipe(
@@ -434,6 +455,26 @@ export const addAddons = (
           else out.delete(file)
         }
     }
+    // 3b. dashboards from efforge 0.2.0 with a database or auth don't render the add-on widgets:
+    // replace one that is still what efforge generated, else say what to add
+    const notes: string[] = []
+    if (seams.has(WIDGETS)) {
+      const existing = yield* read(DASHBOARD)
+      if (existing !== undefined && !existing.includes("widgets") && !out.has(DASHBOARD)) {
+        const generated = (yield* generate(stack, addons)).get(DASHBOARD)
+        if (generated?.includes("{widgets}")) {
+          if (opts.overwrite || manifest.files[DASHBOARD] === hash(existing)) {
+            out.set(DASHBOARD, generated)
+            written.add(DASHBOARD)
+            hashes[DASHBOARD] = hash(generated)
+          } else
+            notes.push(
+              `${DASHBOARD} doesn't render the add-on widgets, so their demo won't show on /app. Add \`import { widgets } from "@/components/widgets"\` and put {widgets} in the page.`,
+            )
+        }
+      }
+    }
+
     const transformed = new Set<string>()
     for (const file of seams) {
       // seam files are re-edited by transforms on every add, never hash-checked
@@ -524,22 +565,57 @@ export const addAddons = (
       written.add(target)
     }
 
-    // 5. pnpm catalog
-    if (used.size > 0) {
+    // 5. pnpm catalog, and the overrides that hold every Effect package at the project's `effect`
+    // version (added to projects made before efforge wrote them)
+    {
       const text = (yield* read("pnpm-workspace.yaml")) ?? "packages:\n  - apps/*\n  - packages/*\n"
       const doc = parseDocument(text)
       const catalog = {
         ...(doc.getIn(["catalog"]) as { toJSON(): Record<string, string> } | null)?.toJSON(),
       }
-      for (const name of used) catalog[name] ??= versions[name] as string
-      doc.setIn(
-        ["catalog"],
-        Object.fromEntries(Object.entries(catalog).toSorted(([a], [b]) => byName(a, b))),
-      )
+      const effect = catalog.effect ?? effectVersion
+      // a new Effect package joins at the project's `effect` version, not at efforge's newest pin
+      for (const name of used)
+        catalog[name] ??= isEffectLockstep(name) ? effect : (versions[name] as string)
+      if (used.size > 0)
+        doc.setIn(
+          ["catalog"],
+          Object.fromEntries(Object.entries(catalog).toSorted(([a], [b]) => byName(a, b))),
+        )
+      for (const [name, version] of Object.entries(effectOverrides(effect)))
+        // an unscoped `effect` key (written by hand) already covers the scoped one
+        if (
+          !doc.hasIn(["overrides", name]) &&
+          !(name.startsWith("effect@") && doc.hasIn(["overrides", "effect"]))
+        )
+          doc.setIn(["overrides", name], version)
       const next = doc.toString()
       if (next !== text) {
         out.set("pnpm-workspace.yaml", next)
         written.add("pnpm-workspace.yaml")
+      }
+    }
+
+    // 5b. pnpm before 12.17 accepts the wildcard overrides and ignores them, which leaves a 0.2.0
+    // project on mismatched Effect packages: raise `packageManager` to the generated pin, never lower it
+    let packageManager: AddResult["packageManager"] = null
+    {
+      const text = out.get("package.json") ?? (yield* read("package.json"))
+      let pkg: Record<string, unknown> | undefined
+      try {
+        pkg = text === undefined ? undefined : (JSON.parse(text) as Record<string, unknown>)
+      } catch {} // not JSON: leave it alone (step 4 reports it when an add-on needs it)
+      const from = typeof pkg?.packageManager === "string" ? pkg.packageManager : undefined
+      const pinned = from === undefined ? undefined : /^pnpm@(\d+\.\d+\.\d+)/.exec(from)?.[1]
+      if (text !== undefined && pinned !== undefined && newer(pnpmWildcardOverrides, pinned)) {
+        const to = `pnpm@${pnpmVersion}`
+        const indent = /^([ \t]+)"/m.exec(text)?.[1] ?? "  "
+        out.set(
+          "package.json",
+          `${JSON.stringify({ ...pkg, packageManager: to }, null, indent)}${text.endsWith("\n") ? "\n" : ""}`,
+        )
+        written.add("package.json")
+        packageManager = { from: from as string, to }
       }
     }
 
@@ -594,6 +670,8 @@ export const addAddons = (
       ),
       envVars,
       replacedScripts,
+      packageManager,
+      notes,
     }
     if (opts.dryRun) return result
 
@@ -605,7 +683,7 @@ export const addAddons = (
       yield* fs.writeFileString(abs, content).pipe(io(rel))
     }
     if ((out.size > 0 || removed.size > 0) && opts.install !== false) {
-      yield* exec("pnpm", ["install"], dir)
+      yield* exec("pnpm", INSTALL_ARGS, dir)
       // add-ons may add or replace routes
       yield* generateRouteTree(dir)
     }
@@ -702,6 +780,7 @@ export const addHandler = (input: {
 }) =>
   Effect.gen(function* () {
     const path = yield* Path.Path
+    const fs = yield* FileSystem.FileSystem
     const live = yield* PromptIO
     const dir = path.resolve(input.cwd)
     // --json keeps stdout to the one JSON document: steps still run, silently
@@ -724,8 +803,7 @@ export const addHandler = (input: {
       )
     const opts = { overwrite: input.overwrite, install: false }
     // checked before anything is written: install and the route tree both need pnpm
-    if (input.install && !input.dryRun && !(yield* has("pnpm", dir)))
-      return yield* new PnpmMissing()
+    if (input.install && !input.dryRun && !(yield* has("pnpm"))) return yield* new PnpmMissing()
     // plan first (in memory): the dirty-tree warning only matters when something will change
     const plan = yield* addAddons(dir, input.ids, { ...opts, dryRun: true })
     const changes = plan.written.length + plan.transformed.length + plan.removed.length > 0
@@ -745,18 +823,34 @@ export const addHandler = (input: {
     const depsChanged = result.written.some(
       (f) => f.endsWith("package.json") || f === "pnpm-workspace.yaml",
     )
+    // a project created with --no-install has no node_modules yet, so no route-tree generator
+    const installed = yield* fs
+      .exists(path.join(dir, "node_modules"))
+      .pipe(Effect.orElseSucceed(() => false))
+    const installs = input.install && changes && depsChanged
     const finish = Effect.gen(function* () {
       if (!input.install || input.dryRun || !changes) return
-      if (depsChanged)
+      if (installs)
         yield* io.task("Installing dependencies (pnpm install)", (log) =>
-          exec("pnpm", ["install"], dir, log),
+          exec("pnpm", INSTALL_ARGS, dir, log),
         )
-      // add-ons may add or replace routes
-      yield* io.step("Generating the route tree", generateRouteTree(dir))
+      // add-ons may add or replace routes; without an install, `pnpm typecheck` regenerates it later
+      if (installs || installed) yield* io.step("Generating the route tree", generateRouteTree(dir))
     })
+    // a new database needs its tables before the app (or sign-up) can use it
+    const database = result.added.find((a) => a.id.startsWith("database/"))?.id.split("/")[1]
+    const alchemy =
+      manifest.stack.infra === "alchemy" || result.added.some((a) => a.id === "infra/alchemy")
+    const commands = [
+      ...(changes && !installs && (depsChanged || !installed) ? ["pnpm install"] : []),
+      ...(database === "postgres" ? ["docker compose up -d --wait", "pnpm db:migrate"] : []),
+      ...(database === "d1" && !alchemy ? ["pnpm db:migrate"] : []),
+    ]
     if (input.json) {
       yield* finish
-      return yield* Console.log(JSON.stringify({ dryRun: input.dryRun, ...result }, null, 2))
+      return yield* Console.log(
+        JSON.stringify({ dryRun: input.dryRun, ...result, nextSteps: commands }, null, 2),
+      )
     }
 
     const changed = result.written.length + result.transformed.length + result.removed.length > 0
@@ -786,18 +880,14 @@ export const addHandler = (input: {
       yield* io.warn(
         `${input.dryRun ? "Would replace" : "Replaced"} existing package scripts:\n${result.replacedScripts.map((x) => `  ${x}`).join("\n")}`,
       )
+    if (result.packageManager !== null)
+      yield* io.info(
+        `${input.dryRun ? "Would raise" : "Raised"} packageManager from ${result.packageManager.from} to ${result.packageManager.to}: older pnpm ignores the overrides that keep Effect's packages on one version.`,
+      )
+    for (const note of result.notes) yield* io.warn(note)
     if (input.dryRun) return yield* io.outro(pc.dim("dry run: nothing written"))
 
     yield* finish
-    // a new database needs its tables before the app (or sign-up) can use it
-    const database = result.added.find((a) => a.id.startsWith("database/"))?.id.split("/")[1]
-    const alchemy =
-      manifest.stack.infra === "alchemy" || result.added.some((a) => a.id === "infra/alchemy")
-    const commands = [
-      ...(input.install || !depsChanged ? [] : ["pnpm install"]),
-      ...(database === "postgres" ? ["docker compose up -d --wait", "pnpm db:migrate"] : []),
-      ...(database === "d1" && !alchemy ? ["pnpm db:migrate"] : []),
-    ]
     const width = Math.max(0, ...result.envVars.map((x) => x.name.length))
     const room = Math.max(30, (process.stdout.columns || 80) - 14)
     const steps = [

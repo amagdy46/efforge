@@ -1,6 +1,4 @@
 import { readdirSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
 import { Console, Context, Effect, Option, Path, Schema } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import pc from "picocolors"
@@ -13,15 +11,11 @@ import { projectDirName } from "../projectName.ts"
 import { generateRouteTree } from "../routeTree.ts"
 import { slots } from "../slots.ts"
 import { type StackConfig, toCommand } from "../stack.ts"
+import { templatesDir as packageTemplatesDir } from "../versions.ts"
 import { TargetNotEmpty, writeTree } from "../write.ts"
 
-/** The package's `templates/` dir, resolved relative to this module (same depth in `src/` and `dist/`). */
-export const defaultTemplatesDir: string = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "..",
-  "templates",
-)
+/** The package's `templates/` dir. */
+export const defaultTemplatesDir: string = packageTemplatesDir
 
 /** Where add-on templates live; tests point it at fixtures. */
 export const TemplatesDir = Context.Reference<string>("efforge/TemplatesDir", {
@@ -88,7 +82,7 @@ export const nextSteps = (
   if (!o.installed) steps.push(["pnpm install"])
   if (stack.infra === "alchemy") {
     steps.push(["cp .env.example .env", "local values for Alchemy"])
-    // D1 migrations still need wrangler.jsonc under Alchemy (a known v0.1 gap, docs/limits.md)
+    // D1 migrations still need wrangler.jsonc under Alchemy (a known gap, docs/limits.md)
     if (stack.database === "postgres") {
       steps.push(["docker compose up -d --wait", "local Postgres"])
       steps.push(["pnpm db:migrate"])
@@ -135,8 +129,8 @@ export const create = (opts: CreateOptions) =>
         yield* io.warn(
           `Node ${process.version} isn't supported by the generated project (Vite+ needs Node 24.11+ or 26+).`,
         )
-      if (opts.install && !(yield* has("pnpm", process.cwd()))) return yield* new PnpmMissing()
-      if (git && !(yield* has("git", process.cwd()))) {
+      if (opts.install && !(yield* has("pnpm"))) return yield* new PnpmMissing()
+      if (git && !(yield* has("git"))) {
         yield* io.warn("git isn't installed: skipping git init and the initial commit.")
         git = false
       }

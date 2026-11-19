@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 
-const effect4 = "4.0.5"
+/** `effect` and every package released with it (see `effectLockstep`). */
+export const effectVersion = "4.1.4"
+const effect4 = effectVersion
 
 /** Exact pins for every package templates may depend on. The only place versions live. */
 export const versions: Record<string, string> = {
@@ -13,52 +15,103 @@ export const versions: Record<string, string> = {
   "@effect/ai-anthropic": effect4,
   "@effect/ai-openai": effect4,
   "@effect/ai-openrouter": effect4,
-  alchemy: "2.0.0-beta.83",
-  "better-auth": "1.7.10",
-  "@tanstack/react-start": "1.169.3",
-  "effect-cf": "0.56.7",
-  "drizzle-orm": "1.0.0-rc.5-5935859",
-  "drizzle-kit": "1.0.0-rc.5-5935859",
-  "@clack/prompts": "1.8.1",
+  alchemy: "2.0.0-beta.87",
+  // the Cloudflare provider, split out of `alchemy` in 2.0.0-beta.87; keep it on the alchemy version
+  "@alchemy.run/cloudflare": "2.0.0-beta.87",
+  "better-auth": "1.7.25",
+  "@tanstack/react-start": "1.169.5",
+  "effect-cf": "0.59.0",
+  "drizzle-orm": "1.0.0-rc.5",
+  "drizzle-kit": "1.0.0-rc.5",
+  "@clack/prompts": "1.9.0",
   magicast: "0.5.5",
   "ts-morph": "28.0.0",
-  "vite-plus": "1.3.0",
-  oxlint: "1.88.0",
-  "oxlint-tsgolint": "7.0.2004",
-  "@effect/tsgo": "0.53.4",
+  "vite-plus": "1.7.0",
+  oxlint: "1.94.0",
+  "oxlint-tsgolint": "7.0.2007",
+  "@effect/tsgo": "0.70.0",
   "@cloudflare/containers": "0.3.7",
-  "@cloudflare/vite-plugin": "1.64.0",
-  "@cloudflare/workers-types": "5.20261016.1",
-  "@tailwindcss/vite": "4.3.3",
-  "@tanstack/react-router": "1.170.45",
-  // router-cli is versioned with @tanstack/router-generator (1.167.x), the generator @tanstack/react-start's plugin pins
-  "@tanstack/router-cli": "1.167.45",
-  "@types/node": "26.6.5",
+  "@cloudflare/vite-plugin": "1.70.0",
+  "@cloudflare/workers-types": "5.20261118.1",
+  "@tailwindcss/vite": "4.3.5",
+  "@tanstack/react-router": "1.170.46",
+  // router-cli is versioned with @tanstack/router-generator; keep it on the generator @tanstack/react-start depends on
+  "@tanstack/router-cli": "1.168.0",
+  "@types/node": "26.6.6",
   "@types/pg": "8.23.1",
   "@types/react": "19.3.0",
   "@types/react-dom": "19.3.0",
-  "@vitejs/plugin-react": "6.1.2",
+  "@vitejs/plugin-react": "6.3.0",
   "class-variance-authority": "0.7.1",
   clsx: "2.1.1",
-  "lucide-react": "1.59.0",
+  "lucide-react": "1.75.0",
   "radix-ui": "1.8.1",
   pg: "8.23.1",
-  playwright: "1.64.1",
+  playwright: "1.65.1",
   react: "19.3.1",
   "react-dom": "19.3.1",
   sonner: "2.0.8",
   "tailwind-merge": "3.7.0",
-  tailwindcss: "4.3.3",
+  tailwindcss: "4.3.5",
   "tw-animate-css": "1.4.0",
-  turbo: "2.11.9",
+  turbo: "2.11.13",
   typescript: "7.0.2",
-  vite: "8.3.4",
-  vitest: "5.0.5",
-  wrangler: "4.151.1",
+  vite: "8.3.8",
+  // the vitest vite-plus bundles (one copy in the install); bump.ts fails if they differ
+  vitest: "5.1.0",
+  wrangler: "4.164.0",
 }
 
-/** Walks up from this file (src/ or dist/) to efforge's own package.json. */
-const readVersion = (): string => {
+/**
+ * Packages released in lockstep with `effect` (Effect-TS/effect-smol `packages/`): any two must be
+ * the same version. `@effect/tsgo` and `@effect/language-service` are versioned on their own.
+ * Patterns use pnpm's override wildcard (`*`).
+ */
+export const effectLockstep: ReadonlyArray<string> = [
+  "effect",
+  "@effect/ai-*",
+  "@effect/atom-*",
+  "@effect/openapi-generator",
+  "@effect/opentelemetry",
+  "@effect/platform-*",
+  "@effect/sql-*",
+  "@effect/vitest",
+]
+
+const matchesPattern = (name: string, pattern: string): boolean =>
+  pattern.endsWith("*") ? name.startsWith(pattern.slice(0, -1)) : name === pattern
+
+/** True for a package that must carry the same version as `effect`. */
+export const isEffectLockstep = (name: string): boolean =>
+  effectLockstep.some((p) => matchesPattern(name, p))
+
+/**
+ * The override key for each lockstep pattern. `effect` is scoped to Effect 4, so a library that
+ * depends on Effect 3 (uploadthing, @prisma/config) keeps its own copy instead of getting Effect 4.
+ */
+export const overrideKey = (pattern: string): string =>
+  pattern === "effect" ? "effect@>=4.0.0-0" : pattern
+
+/**
+ * The generated `pnpm-workspace.yaml` overrides that hold every lockstep package at `version`,
+ * including ones nothing in the project names directly and that only arrive as another
+ * package's dependency or auto-installed peer (drizzle-orm and effect-cf peer on `@effect/sql-*`).
+ */
+export const effectOverrides = (version: string): Record<string, string> =>
+  Object.fromEntries(effectLockstep.map((p) => [overrideKey(p), version]))
+
+/** The pnpm generated projects pin in `packageManager` (templates/base/files/root/package.json). */
+export const pnpmVersion = "12.21.0"
+
+/** pnpm accepts wildcard override keys before this version and ignores them (ADR 0005). */
+export const pnpmWildcardOverrides = "12.17.0"
+
+/**
+ * efforge's own package root: the nearest directory above this module whose package.json is
+ * create-efforge. Works from `src/` (tests, `node src/bin.ts`) and from the single bundled
+ * `dist/bin.js`, whatever their depth.
+ */
+const findPackageRoot = (): { readonly dir: string; readonly version: string } | undefined => {
   let dir = import.meta.dirname
   for (;;) {
     try {
@@ -66,12 +119,18 @@ const readVersion = (): string => {
         name?: string
         version?: string
       }
-      if (pkg.name === "create-efforge" && pkg.version !== undefined) return pkg.version
+      if (pkg.name === "create-efforge" && pkg.version !== undefined)
+        return { dir, version: pkg.version }
     } catch {}
     const parent = dirname(dir)
-    if (parent === dir) return "0.0.0"
+    if (parent === dir) return undefined
     dir = parent
   }
 }
 
-export const efforgeVersion: string = readVersion()
+const packageRoot = findPackageRoot()
+
+export const efforgeVersion: string = packageRoot?.version ?? "0.0.0"
+
+/** The shipped `templates/` dir, next to `src/` and `dist/`. */
+export const templatesDir: string = join(packageRoot?.dir ?? import.meta.dirname, "templates")

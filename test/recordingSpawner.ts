@@ -1,13 +1,21 @@
 import { Effect, Layer, Sink, Stream } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 
-/** A spawner that records `cmd args` and succeeds, so create's step order can be asserted. */
-export const recordingSpawner = (calls: string[]) =>
+/**
+ * A spawner that records `cmd args` and succeeds, so create's step order can be asserted.
+ * `cwds`, when given, gets each call's working directory at the same index.
+ */
+export const recordingSpawner = (calls: string[], cwds?: Array<string | undefined>) =>
   Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make((command) => {
-      const c = command as unknown as { command: string; args: string[] }
+      const c = command as unknown as {
+        command: string
+        args: string[]
+        options: { cwd?: string }
+      }
       calls.push([c.command, ...c.args].join(" "))
+      cwds?.push(c.options.cwd)
       return Effect.succeed(
         ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(1),

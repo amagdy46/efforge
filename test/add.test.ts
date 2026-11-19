@@ -8,6 +8,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs"
+import { execFileSync } from "node:child_process"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
@@ -18,13 +19,24 @@ import { runWith } from "../src/cli.ts"
 import { addAddons } from "../src/commands/add.ts"
 import { TemplatesDir } from "../src/commands/create.ts"
 import { unifiedDiff } from "../src/diff.ts"
+import { has } from "../src/exec.ts"
 import { generate } from "../src/generate.ts"
 import { hash } from "../src/manifest.ts"
 import { scriptedPromptIO } from "../src/prompts/navigable.ts"
 import { ROUTE_TREE_COMMAND } from "../src/routeTree.ts"
+import { pnpmVersion } from "../src/versions.ts"
 import { withDefaults } from "../src/stack.ts"
 import { writeTree } from "../src/write.ts"
 import { recordingSpawner } from "./recordingSpawner.ts"
+
+const spawnSyncFails = (cmd: string) => {
+  try {
+    execFileSync(cmd, ["--version"], { cwd: tmpdir(), stdio: "ignore" })
+    return false
+  } catch {
+    return true
+  }
+}
 
 const fixtures = new URL("./fixtures/templates", import.meta.url).pathname
 const env = Layer.mergeAll(NodeServices.layer, Layer.succeed(TemplatesDir, fixtures))
@@ -223,7 +235,8 @@ it("after installing, add generates the route tree (and does neither with --no-i
     recordingSpawner(calls),
   )
   await runIn(recorded as never, addAddons(dir, ["email"], { overwrite: false, dryRun: false }))
-  expect(calls).toEqual(["pnpm install", ROUTE_TREE_COMMAND])
+  // not a frozen install: add changed dependencies, and with CI set pnpm would refuse to update the lockfile
+  expect(calls).toEqual(["pnpm install --no-frozen-lockfile", ROUTE_TREE_COMMAND])
   calls.length = 0
   await runIn(
     recorded as never,
@@ -245,6 +258,8 @@ it("a second add is a no-op: all skipped, no install", async () => {
     added: [],
     envVars: [],
     replacedScripts: [],
+    packageManager: null,
+    notes: [],
   })
   expect(snapshot()).toEqual(first)
 })
@@ -291,4 +306,104 @@ it("rejects add-on targets that escape the project", async () => {
     expect(existsSync(join(tmp, "outside.ts"))).toBe(false)
     expect(existsSync("/tmp/efforge-abs-outside.ts")).toBe(false)
   }
+})
+
+const addRecorded = async (args: string[]) => {
+  const calls: string[] = []
+  const cwds: Array<string | undefined> = []
+  const logs: string[] = []
+  vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => void logs.push(a.join(" ")))
+  await runWith(["add", ...args, "--json", "--cwd", dir]).pipe(
+    Effect.provide(Layer.mergeAll(env, scriptedPromptIO([]).layer, recordingSpawner(calls, cwds))),
+    Effect.runPromise,
+  )
+  vi.restoreAllMocks()
+  return { calls, cwds, out: JSON.parse(logs.join("\n")) }
+}
+
+it("add checks for pnpm outside the project, so pnpm can't write a lockfile into it", async () => {
+  const { calls, cwds } = await addRecorded(["email"])
+  expect(calls[0]).toBe("pnpm --version")
+  expect(cwds[0]).toBe(tmpdir())
+  // everything else runs in the project
+  expect(cwds.slice(1).every((c) => c === dir)).toBe(true)
+})
+
+it.skipIf(spawnSyncFails("pnpm"))(
+  "the pnpm check leaves a project with a packageManager field untouched",
+  async () => {
+    const version = execFileSync("pnpm", ["--version"], { cwd: tmpdir(), encoding: "utf8" }).trim()
+    put("package.json", JSON.stringify({ name: "app", packageManager: `pnpm@${version}` }))
+    const cwd = process.cwd()
+    process.chdir(dir)
+    try {
+      expect(await Effect.runPromise(has("pnpm").pipe(Effect.provide(NodeServices.layer)))).toBe(
+        true,
+      )
+    } finally {
+      process.chdir(cwd)
+    }
+    expect(existsSync(join(dir, "pnpm-lock.yaml"))).toBe(false)
+  },
+)
+
+it.skipIf(spawnSyncFails("pnpm") || spawnSyncFails("git"))(
+  "add on a never-installed project: git status shows only efforge's edits, and no dirty-tree warning",
+  async () => {
+    // the pnpm generated projects pin; run inside the project, pnpm switches to it
+    const pkg = JSON.parse(file("package.json")) as Record<string, unknown>
+    put(
+      "package.json",
+      `${JSON.stringify({ ...pkg, packageManager: `pnpm@${pnpmVersion}` }, null, 2)}\n`,
+    )
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, encoding: "utf8" })
+    git("init", "-q")
+    git("add", "-A")
+    git(
+      "-c",
+      "user.name=efforge-test",
+      "-c",
+      "user.email=test@example.invalid",
+      "commit",
+      "-qm",
+      "init",
+    )
+    const plan = await run(
+      addAddons(dir, ["ai/effect-ai-byok"], { overwrite: false, dryRun: true }),
+    )
+    const io = scriptedPromptIO([])
+    // run from inside the project, as a user does: that is where pnpm 12 wrote its lockfile
+    const cwd = process.cwd()
+    process.chdir(dir)
+    try {
+      await runWith(["add", "ai/effect-ai-byok"]).pipe(
+        Effect.provide(Layer.mergeAll(env, io.layer)),
+        Effect.runPromise,
+      )
+    } finally {
+      process.chdir(cwd)
+    }
+    expect(io.output.filter((l) => l.includes("uncommitted changes"))).toEqual([])
+    const changed = git("status", "--porcelain", "-uall")
+      .split("\n")
+      .filter((l) => l !== "")
+      .map((l) => l.slice(3))
+    expect(changed.toSorted()).toEqual([...plan.written, ...plan.transformed].toSorted())
+    expect(changed).not.toContain("pnpm-lock.yaml")
+  },
+)
+
+it("on a never-installed project, add skips the route tree and says to run pnpm install", async () => {
+  // ai/effect-ai-byok changes no dependencies in the fixtures, so nothing triggers an install
+  const { calls, out } = await addRecorded(["ai/effect-ai-byok"])
+  expect(out.written.length).toBeGreaterThan(0)
+  expect(calls).toEqual(["pnpm --version"])
+  expect(out.nextSteps).toEqual(["pnpm install"])
+})
+
+it("on an installed project, add regenerates the route tree and needs no install", async () => {
+  mkdirSync(join(dir, "node_modules"))
+  const { calls, out } = await addRecorded(["ai/effect-ai-byok"])
+  expect(calls).toEqual(["pnpm --version", ROUTE_TREE_COMMAND])
+  expect(out.nextSteps).toEqual([])
 })

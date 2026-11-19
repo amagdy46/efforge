@@ -168,7 +168,10 @@ it("every template file survives pnpm pack", async () => {
   // published CLI then fails to load its templates, so check the real file list.
   const root = new URL("..", import.meta.url).pathname
   const packed = JSON.parse(
-    execFileSync("pnpm", ["pack", "--dry-run", "--json"], { cwd: root, encoding: "utf8" }),
+    execFileSync("pnpm", ["pack", "--dry-run", "--ignore-scripts", "--json"], {
+      cwd: root,
+      encoding: "utf8",
+    }),
   ) as { files: { path: string }[] }
   const shipped = new Set(packed.files.map((f) => f.path))
   const addons = await run(loadAddons(real))

@@ -11,7 +11,14 @@
   ],
   "dependencies": {},
   "devDependencies": {
-    ".": ["alchemy", "effect", "@effect/platform-node", "@types/node", "typescript"]
+    ".": [
+      "alchemy",
+      "@alchemy.run/cloudflare",
+      "effect",
+      "@effect/platform-node",
+      "@types/node",
+      "typescript"
+    ]
   },
   "envVars": [
     {
