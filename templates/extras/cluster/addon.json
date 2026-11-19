@@ -1,0 +1,227 @@
+{
+  "id": "extras/cluster",
+  "title": "Cluster (experimental)",
+  "description": "Experimental: Effect Cluster entities, an Effect Workflow and a durable queue on Durable Objects (@effect/platform-cloudflare), with a dashboard card.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-cluster.md",
+  "files": [
+    {
+      "path": "../../base/files/core/src/server-only.ts",
+      "target": "packages/core/src/server-only.ts",
+      "ifAbsent": true
+    },
+    {
+      "path": "files/core-cluster-errors.ts",
+      "target": "packages/core/src/cluster-errors.ts"
+    },
+    {
+      "path": "files/core-cluster.ts",
+      "target": "packages/core/src/cluster.ts"
+    },
+    {
+      "path": "files/cluster-handlers.ts",
+      "target": "packages/core/src/cluster-handlers.ts"
+    },
+    {
+      "path": "files/cluster.test.ts",
+      "target": "packages/core/test/cluster.test.ts"
+    },
+    {
+      "path": "files/cluster.ts",
+      "target": "apps/web/src/server/cluster.ts"
+    },
+    {
+      "path": "files/objects.ts",
+      "target": "apps/web/src/cluster/objects.ts"
+    }
+  ],
+  "card": {
+    "export": "cluster",
+    "files": [
+      {
+        "path": "files/card/cluster.tsx",
+        "target": "apps/web/src/capabilities/cluster.tsx"
+      },
+      {
+        "path": "files/card/cluster-demo.ts",
+        "target": "apps/web/src/server/cluster-demo.ts"
+      }
+    ]
+  },
+  "dependencies": {
+    "apps/web": [
+      "@effect/platform-cloudflare"
+    ],
+    "packages/core": [
+      "@effect/platform-cloudflare"
+    ]
+  },
+  "devDependencies": {
+    "packages/core": [
+      "@effect/sql-sqlite-node"
+    ]
+  },
+  "envVars": [],
+  "requires": [],
+  "conflicts": [],
+  "guide": {
+    "purpose": "Effect Cluster on Cloudflare Durable Objects, through Effect's `@effect/platform-cloudflare`: an entity that keeps its state in its own SQLite (`Counter`), a workflow with two activities around a durable wait (`Review`), and a durable queue with a worker (`GreetingQueue`). It is experimental upstream, so efforge pins it exactly and labels it. `docs/cluster.md` in the efforge repo walks through it.",
+    "swap": "There is no service to swap: entities and workflows are the contracts. Tests run the handlers on `TestRunner`, SQLite in memory and `WorkflowEngine.layerMemory` (`packages/core/test/cluster.test.ts`).",
+    "limits": [
+      "Experimental upstream: `@effect/platform-cloudflare` may change in a patch release. It is pinned with `effect`.",
+      "A durable sleep that is the first thing a run awaits wakes about a minute late (4.1.4); the demo waits on an approval instead.",
+      "Nothing runs a queue worker in the background: the request that offers runs it, for up to 10 seconds. A Cron Trigger is not wired.",
+      "Restart `pnpm dev` after changing a handler; a Durable Object keeps the handlers it started with.",
+      "Deploys, eviction, hibernation, several isolates and production alarm timing cannot be tested locally and are unverified."
+    ]
+  },
+  "transforms": [
+    {
+      "name": "addExport",
+      "args": {
+        "file": "apps/web/src/server.ts",
+        "export": "ClusterDurableQueue, ClusterEntity, ClusterSingleton, ClusterWorkflow",
+        "from": "./cluster/objects"
+      }
+    },
+    {
+      "name": "addLayer",
+      "args": {
+        "file": "apps/web/src/server/layers.ts",
+        "import": "ClusterLive",
+        "from": "./cluster",
+        "layer": "ClusterLive"
+      }
+    },
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "durable_objects.bindings",
+        "value": "{\"name\":\"CLUSTER_ENTITY\",\"class_name\":\"ClusterEntity\"}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "durable_objects.bindings",
+        "value": "{\"name\":\"CLUSTER_WORKFLOW\",\"class_name\":\"ClusterWorkflow\"}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "durable_objects.bindings",
+        "value": "{\"name\":\"CLUSTER_QUEUE\",\"class_name\":\"ClusterDurableQueue\"}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "durable_objects.bindings",
+        "value": "{\"name\":\"CLUSTER_SINGLETON\",\"class_name\":\"ClusterSingleton\"}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "addWranglerBinding",
+      "args": {
+        "key": "migrations",
+        "value": "{\"tag\":\"cluster-v1\",\"new_sqlite_classes\":[\"ClusterEntity\",\"ClusterWorkflow\",\"ClusterDurableQueue\",\"ClusterSingleton\"]}"
+      },
+      "when": {
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "clusterEntity",
+        "code": "const clusterEntity = Cloudflare.DurableObject(\"ClusterEntity\")",
+        "binding": "CLUSTER_ENTITY"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "clusterWorkflow",
+        "code": "const clusterWorkflow = Cloudflare.DurableObject(\"ClusterWorkflow\")",
+        "binding": "CLUSTER_WORKFLOW"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "clusterQueue",
+        "code": "const clusterQueue = Cloudflare.DurableObject(\"ClusterDurableQueue\")",
+        "binding": "CLUSTER_QUEUE"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addAlchemyResource",
+      "args": {
+        "name": "clusterSingleton",
+        "code": "const clusterSingleton = Cloudflare.DurableObject(\"ClusterSingleton\")",
+        "binding": "CLUSTER_SINGLETON"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "cluster",
+        "content": "## Cluster (experimental)\n\n- Effect Cluster, Effect Workflow and durable queues on Durable Objects, through `@effect/platform-cloudflare` (pinned exactly: it is experimental and its API may change in a patch release; `efforge upgrade` moves it with `effect`). Definitions are in `packages/core/src/cluster.ts` (the `Counter` entity, the `Review` workflow, `GreetingQueue` and the `Greet` workflow that uses it), their handlers in `packages/core/src/cluster-handlers.ts`, and `ClusterLive` in `apps/web/src/server/cluster.ts` registers them on the four Durable Object classes (`CLUSTER_ENTITY`, `CLUSTER_WORKFLOW`, `CLUSTER_QUEUE`, `CLUSTER_SINGLETON`), which `apps/web/src/cluster/objects.ts` re-exports through `src/server.ts`.\n- Call an entity with `(yield* Counter.client)(id).Increment(...)` and a workflow with `Review.execute(payload)` / `Review.poll(executionId)`, from any server function: `ClusterLive` is in `AppLayer`. To add an entity, add it to `entities` in `server/cluster.ts` and its handler layer to `ClusterHandlers`.\n- Import `@effect/platform-cloudflare/CloudflareCluster` in code under `packages/`, never the package root: the root loads the Durable Object classes, which import `cloudflare:workers`, and the tests run in Node.\n- A durable sleep (`DurableClock.sleep`) wakes about a minute late when it is the first thing a run awaits (a race between two alarms in 4.1.4; efforge's `docs/cluster.md` has the details). The `Review` workflow waits on an approval (`DurableDeferred`) instead, which wakes at once. Do not rely on a durable sleep's timing until upstream fixes it; a sleep under a minute with `inMemoryThreshold` set runs in memory and is on time.\n- Nothing runs a queue worker in the background on Workers. `greet` offers an item, then runs `DurableQueue.makeWorker` in the same request until its item is written (10 seconds at most); an item whose request ended early waits for the next offer, whose worker takes it first. The queue is one Durable Object shared by every user. For work that must finish without a visitor, add a Cron Trigger whose `scheduled` handler runs the worker for a bounded time (the upstream README shows the shape).\n- Whose data: counters and review runs are keyed by a hash of `currentOwner` (`apps/web/src/server/owner.ts`), so each user's are their own; `watchReview` and `approveReview` answer `UnknownExecution` for someone else's run. Greetings in the queue are shared.\n- Restart `pnpm dev` after changing a handler: a Durable Object keeps the handlers it started with. `objects.ts` keeps `pnpm dev` working after an edit (`setInitializer` may run once per isolate).\n- Each cold Durable Object builds the whole `AppLayer` before it answers (`objects.ts`), inside a 15 second limit. Keep layer construction fast.\n- Tests: `packages/core/test/cluster.test.ts` runs the same programs and handlers on `TestRunner`, SQLite in memory and `WorkflowEngine.layerMemory`. They prove the code, not Durable Objects: timing, eviction and deploys only show on Cloudflare.\n- When to use what: `extras/workflows` (Cloudflare Workflows behind `Jobs`) is Cloudflare's GA product, with retries per step, a dashboard and on-time sleeps; use it for background jobs. This add-on is portable Effect code (entities with state, workflows with activities, deferreds and queues), experimental. A WebSocket room is `extras/realtime`'s `Room`: cluster entities are request and response only."
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "cluster-without-auth",
+        "content": "### Cluster without auth\n\n- This project has no auth, so the card's server functions in `apps/web/src/server/cluster-demo.ts` are open: anyone who can reach the app shares the same counters and can start, watch and approve any review run. Add auth (`efforge add auth/better-auth`, which guards them) or remove the demo before deploying."
+      },
+      "when": {
+        "auth": [
+          "none"
+        ]
+      }
+    }
+  ]
+}
