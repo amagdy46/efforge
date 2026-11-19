@@ -68,7 +68,7 @@
     "swap": "There is no service to swap: entities and workflows are the contracts. Tests run the handlers on `TestRunner`, SQLite in memory and `WorkflowEngine.layerMemory` (`packages/core/test/cluster.test.ts`).",
     "limits": [
       "Experimental upstream: `@effect/platform-cloudflare` may change in a patch release. It is pinned with `effect`.",
-      "A durable sleep that is the first thing a run awaits wakes about a minute late (4.1.4); the demo waits on an approval instead.",
+      "A durable sleep that is the first thing a run awaits wakes about a minute late; the demo waits on an approval instead.",
       "Nothing runs a queue worker in the background: the request that offers runs it, for up to 10 seconds. A Cron Trigger is not wired.",
       "Restart `pnpm dev` after changing a handler; a Durable Object keeps the handlers it started with.",
       "Deploys, eviction, hibernation, several isolates and production alarm timing cannot be tested locally and are unverified."

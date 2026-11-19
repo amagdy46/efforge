@@ -388,6 +388,10 @@ export const deployResources = (stack: StackConfig): Record<string, DeployResour
     alchemy: "an Email Sending binding",
     wrangler: "wrangler email sending enable",
   },
+  "extras/cluster": {
+    alchemy: "the four cluster Durable Objects",
+    wrangler: "registers the four cluster Durable Objects (`cluster-v1`)",
+  },
 })
 
 /**
@@ -429,7 +433,9 @@ const deployWrangler = (input: ReadmeInput): string => {
       `Write the production values of ${and(secrets.map(code))} to \`.env.production\` (gitignored; \`.env.example\` says what each is), then upload them: \`pnpm exec wrangler secret bulk .env.production\` (before the first deploy, wrangler asks to create the Worker: answer yes).${secrets.includes("BETTER_AUTH_URL") ? " `BETTER_AUTH_URL` can stay empty until the first deploy prints the URL." : ""}`,
     )
   const resources = deployResources(stack)
-  const notes = (["extras/storage", "extras/realtime", "extras/workflows"] as const)
+  const notes = (
+    ["extras/storage", "extras/realtime", "extras/workflows", "extras/cluster"] as const
+  )
     .filter((id) => ids.includes(id))
     .flatMap((id) => resources[id]?.wrangler ?? [])
   steps.push(

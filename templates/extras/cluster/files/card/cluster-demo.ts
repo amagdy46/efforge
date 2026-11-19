@@ -28,9 +28,8 @@ const CounterInput = Schema.Struct({
 export const incrementCounter = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(CounterInput))
   .handler(({ data }) => {
-    const program = Effect.flatMap(currentOwner, (owner) =>
-      increment(owner, data.name),
-    )
+    const add = (owner: string) => increment(owner, data.name)
+    const program = Effect.flatMap(currentOwner, add)
     return runOutcome(program, InvalidCounterName, ClusterError)
   })
 // #endregion

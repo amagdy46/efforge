@@ -86,8 +86,10 @@ export const increment = (owner: string, name: string) =>
         message: `A counter name is 1 to ${MAX_COUNTER_NAME} characters.`,
         limit: MAX_COUNTER_NAME,
       })
-    const counter = (yield* Counter.client)(`${yield* ownerKey(owner)}/${trimmed}`)
-    return yield* counter.Increment({ by: 1 }).pipe(Effect.mapError(failed("Counter.Increment")))
+    const id = `${yield* ownerKey(owner)}/${trimmed}`
+    const counter = (yield* Counter.client)(id)
+    const added = counter.Increment({ by: 1 })
+    return yield* Effect.mapError(added, failed("Counter.Increment"))
   })
 // #endregion
 

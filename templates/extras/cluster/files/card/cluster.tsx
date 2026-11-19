@@ -40,10 +40,10 @@ function CounterRow() {
         Entity <code className="font-mono font-normal">Counter</code>
       </h4>
       <form onSubmit={submit} className="space-y-2">
-        <Label htmlFor="cluster-counter">Counter name</Label>
+        <Label htmlFor="cluster-counter-name">Counter name</Label>
         <div className="flex gap-2">
           <Input
-            id="cluster-counter"
+            id="cluster-counter-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={MAX_COUNTER_NAME}
@@ -135,10 +135,10 @@ function ReviewRow() {
         Workflow <code className="font-mono font-normal">Review</code>
       </h4>
       <form onSubmit={submit} className="space-y-2">
-        <Label htmlFor="cluster-title">Title</Label>
+        <Label htmlFor="cluster-review-title">Title</Label>
         <div className="flex gap-2">
           <Input
-            id="cluster-title"
+            id="cluster-review-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             maxLength={100}
@@ -217,10 +217,10 @@ function QueueRow() {
         Queue <code className="font-mono font-normal">GreetingQueue</code>
       </h4>
       <form onSubmit={submit} className="space-y-2">
-        <Label htmlFor="cluster-name">Name to greet</Label>
+        <Label htmlFor="cluster-greet-name">Name to greet</Label>
         <div className="flex gap-2">
           <Input
-            id="cluster-name"
+            id="cluster-greet-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={100}
