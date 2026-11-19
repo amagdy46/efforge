@@ -192,7 +192,7 @@ it("asFailure: a rejected call keeps its tag, and only a bug is a Defect", () =>
 })
 
 const { region, regions } = await load<{
-  region: (source: string, name: string) => string | undefined
+  region: (source: string, name: string, file?: string) => string | undefined
   regions: () => {
     load: (this: unknown, id: string) => Promise<string | null>
   }

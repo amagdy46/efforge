@@ -82,7 +82,7 @@ npx -y create-efforge add email
 npx -y create-efforge add ai/effect-ai-byok extras/storage --dry-run
 ```
 
-Ids are `email`, `extras/email` or `ai/effect-ai-byok`, in any case. A slot name with one add-on (`ai`, `infra`) means that add-on; a typo or an ambiguous id (`auth`) gets a suggestion. Flags: `--overwrite`, `--dry-run`, `--json`, `--cwd <dir>`, `--no-install`.
+Ids are `email`, `extras/email` or `ai/effect-ai-byok`, in any case. A slot name with one add-on (`ai`, `infra`) means that add-on; a typo or an ambiguous id (`auth`) gets a suggestion. Flags: `--overwrite`, `--dry-run` (what would change, by add-on, as `create --dry-run` shows it; `--verbose` lists every file), `--json`, `--cwd <dir>`, `--no-install`.
 
 The single-choice slots depend on each other, so add them together: on a project without a database, `add database/d1 orm/effect-sql auth/better-auth` works where `add auth/better-auth` alone is refused (the error lists each combination that works, as a command to run; which database and ORM is your choice).
 

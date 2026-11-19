@@ -422,6 +422,22 @@ it("doctor's env check gives each variable the same secret and set as info", asy
   expect(vars.find((v) => v.name === "LLM_API_KEY")).toMatchObject({ secret: true, set: false })
 }, 60_000)
 
+it("add --dry-run groups the files by add-on, as create --dry-run does; --verbose lists each", async () => {
+  await create("app", "--database=d1", "--orm=effect-sql", "--auth=none")
+  const r = await cli(["add", "realtime", "email", "--dry-run", "--cwd", "app"])
+  expect(r.exitCode).toBe(0)
+  const box = stripVTControlCharacters([r.out, ...r.s.output].join("\n"))
+  expect(box).toMatch(/extras\/realtime +\+\d+ +apps\/web \d+, packages\/core \d+/)
+  expect(box).toMatch(/extras\/email +\+\d+ /)
+  expect(box).toMatch(/edited +~\d+ /)
+  expect(box).toContain("Every file: add --verbose, or --json for the list as data.")
+  expect(box).not.toContain("+ apps/web/src/lib/use-room.ts")
+  const verbose = await cli(["add", "realtime", "--dry-run", "--verbose", "--cwd", "app"])
+  expect(stripVTControlCharacters(verbose.s.output.join("\n"))).toContain(
+    "+ apps/web/src/lib/use-room.ts",
+  )
+})
+
 it("add auth says every server function now needs a session, names the owner's own, and how to open one", async () => {
   await create("app", "--database=d1", "--orm=effect-sql", "--auth=none")
   writeFileSync(

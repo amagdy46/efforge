@@ -6,7 +6,13 @@ import { type ParseError, parse } from "jsonc-parser"
 import { sameJsonc } from "../structure.ts"
 import pc from "picocolors"
 import { parseDocument } from "yaml"
-import { type AddonLoadError, type AddonManifest, addonIdsFor, loadAddons } from "../addon.ts"
+import {
+  type AddonLoadError,
+  type AddonManifest,
+  addonIdsFor,
+  type LoadedAddon,
+  loadAddons,
+} from "../addon.ts"
 import {
   CARDS_DIR,
   cardTransforms,
@@ -96,7 +102,7 @@ import {
   pnpmWildcardOverrides,
   versions,
 } from "../versions.ts"
-import { elapsed, type EnvVar, PnpmMissing, TemplatesDir } from "./create.ts"
+import { elapsed, type EnvVar, origins, PnpmMissing, TemplatesDir, whereIn } from "./create.ts"
 
 export class NotAnEfforgeProject extends Schema.TaggedError<NotAnEfforgeProject>()(
   "NotAnEfforgeProject",
@@ -1264,7 +1270,11 @@ export const addConfig = {
     Flag.withDefault(false),
   ),
   dryRun: Flag.Boolean("dry-run").pipe(
-    Flag.withDescription("Print what would change; write nothing"),
+    Flag.withDescription("Print what would change, by add-on; write nothing"),
+    Flag.withDefault(false),
+  ),
+  verbose: Flag.Boolean("verbose").pipe(
+    Flag.withDescription("With --dry-run, list every file"),
     Flag.withDefault(false),
   ),
   json: Flag.Boolean("json").pipe(
@@ -1311,6 +1321,49 @@ const wrap = (text: string, width: number): string[] => {
 
 const list = (files: ReadonlyArray<string>, mark: string) => files.map((f) => `${mark} ${f}`)
 
+/**
+ * What an `add --dry-run` would do, as `create --dry-run` shows it: the new files by the add-on
+ * they come from (a count and the top-level directories), then the files it edits and removes.
+ */
+export const changesByOrigin = (
+  stack: StackConfig,
+  addons: ReadonlyMap<string, LoadedAddon>,
+  created: ReadonlyArray<string>,
+  changed: ReadonlyArray<string>,
+  removed: ReadonlyArray<string>,
+): string => {
+  const from = origins(stack, addons, created)
+  const group = (label: string, mark: string, files: ReadonlyArray<string>) =>
+    ({ label, mark, files }) as const
+  const rows = [
+    // `base` here is what no add-on's files list: settings and package files written for them
+    ...addonIdsFor(stack).map((id) =>
+      group(
+        id === "base" ? "settings" : id,
+        "+",
+        created.filter((f) => from.get(f) === id),
+      ),
+    ),
+    group("edited", "~", changed),
+    group("removed", "-", removed),
+  ].filter((r) => r.files.length > 0)
+  // three directories at most, so a row fits the box
+  const where = (files: ReadonlyArray<string>) => {
+    const all = whereIn(files).split(", ")
+    return all.length <= 3 ? all.join(", ") : `${all.slice(0, 3).join(", ")}, +${all.length - 3}`
+  }
+  const width = Math.max(...rows.map((r) => r.label.length))
+  const count = Math.max(...rows.map((r) => String(r.files.length).length)) + 1
+  return [
+    ...rows.map(
+      (r) =>
+        `${r.label.padEnd(width)}  ${`${r.mark}${r.files.length}`.padStart(count)}  ${pc.dim(where(r.files))}`,
+    ),
+    "",
+    pc.dim("Every file: add --verbose, or --json for the list as data."),
+  ].join("\n")
+}
+
 /** An added add-on's title, then where its card and AGENTS.md sections are. */
 const addedLines = (a: AddedAddon): string[] => {
   const facts: Array<[string, string]> = []
@@ -1324,6 +1377,7 @@ export const addHandler = (input: {
   ids: ReadonlyArray<string>
   overwrite: boolean
   dryRun: boolean
+  verbose?: boolean
   json: boolean
   cwd: string
   install: boolean
@@ -1519,7 +1573,19 @@ export const addHandler = (input: {
     if (!changed) {
       yield* io.info(`Already there: ${result.skipped.join(", ")}`)
       if (!owed) return yield* io.outro("Nothing to do.")
-    } else
+    } else if (input.dryRun && input.verbose !== true)
+      // as create --dry-run: the new files by the add-on they come from, then what is edited
+      yield* io.note(
+        changesByOrigin(
+          result.stack,
+          yield* loadAddons(yield* TemplatesDir),
+          result.created,
+          changedFiles,
+          result.removed,
+        ),
+        `Would change: ${result.added.map((a) => a.title).join(", ") || "stack"}`,
+      )
+    else
       yield* io.note(
         [
           ...list(result.created, pc.green("+")),
@@ -1528,6 +1594,8 @@ export const addHandler = (input: {
         ].join("\n"),
         `${input.dryRun ? "Would change" : "Changed"}: ${result.added.map((a) => a.title).join(", ") || "stack"}`,
       )
+    if (input.verbose === true && !input.dryRun && !input.json)
+      yield* io.warn("--verbose only changes what --dry-run prints, so it does nothing here.")
     yield* replacementWarnings
     if (result.packageManager !== null)
       yield* io.info(

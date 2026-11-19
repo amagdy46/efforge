@@ -753,7 +753,12 @@ it("the generated invocations cover every command and every flag the CLI defines
   for (const d of defs.values())
     for (const f of d.flags)
       expect(
-        cases.some((x) => x.args.some((a) => a === `--${f.name}` || a.startsWith(`--${f.name}=`))),
+        // any of its forms: a boolean's --no-<name> follows the flag too
+        cases.some((x) =>
+          x.args.some(
+            (a) => a === `--${f.name}` || a === `--no-${f.name}` || a.startsWith(`--${f.name}=`),
+          ),
+        ),
         `--${f.name}`,
       ).toBe(true)
 })
