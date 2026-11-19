@@ -1,6 +1,6 @@
 import { createServer } from "node:http"
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Result, Schema } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { type Browser, chromium } from "playwright"
 import { checkUrl } from "./url-policy.ts"
@@ -69,7 +69,7 @@ const run = HttpRouter.add(
       try: () => inspect(url),
       catch: loadFailure,
     }).pipe(Effect.result)
-    if (result._tag === "Failure")
+    if (Result.isFailure(result))
       return yield* HttpServerResponse.json({ error: result.failure }, { status: 502 })
     return yield* HttpServerResponse.json(result.success)
   }).pipe(

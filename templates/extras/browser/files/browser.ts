@@ -1,5 +1,5 @@
 import { Browser, BrowserError, BrowserUnavailable, UrlRefused } from "@repo/core"
-import { Duration, Effect, Layer, Schema } from "effect"
+import { Duration, Effect, Layer, Option, Schema } from "effect"
 import { ContainerNamespace } from "effect-cf"
 import { WorkerEnvLive } from "./cloudflare"
 
@@ -45,17 +45,14 @@ const make = Effect.gen(function* () {
           try: () => response.json(),
           catch: fail("run"),
         })
-        const reason = decodeError(body)
+        // the container's reason, when it gave one
+        const reason = Option.getOrUndefined(decodeError(body))?.error
         if (response.status === 403)
           return yield* new UrlRefused({
-            message: `The browser refused ${url}: ${reason._tag === "Some" ? reason.value.error : "not allowed"}.`,
+            message: `The browser refused ${url}: ${reason ?? "not allowed"}.`,
           })
         if (!response.ok)
-          return yield* fail("run")(
-            new Error(
-              reason._tag === "Some" ? reason.value.error : `container answered ${response.status}`,
-            ),
-          )
+          return yield* fail("run")(new Error(reason ?? `container answered ${response.status}`))
         return yield* decode(body).pipe(Effect.mapError(fail("run")))
       }).pipe(
         Effect.timeoutOrElse({
