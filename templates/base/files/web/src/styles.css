@@ -40,12 +40,12 @@
   --code-punctuation: #5d6066;
 
   /* tempering colours, one per layer, always in this order */
-  --temper-1: #e2c275;
+  --temper-1: #9a8c33;
   --temper-2: #a8683a;
-  --temper-3: #6c4e96;
+  --temper-3: #774990;
   --temper-4: #2f5aa8;
-  --temper-5: #6f9fc8;
-  --temper-6: #b8902f;
+  --temper-5: #3496b4;
+  --temper-6: #b38323;
   --temper-7: #8a4f6e;
   --temper-8: #6b7078;
   --temper-9: #3d7f73;
@@ -82,10 +82,10 @@
 
   --temper-1: #e2c275;
   --temper-2: #c98a58;
-  --temper-3: #ad8fdb;
+  --temper-3: #bc8bd5;
   --temper-4: #7da2e3;
   --temper-5: #a9c9e6;
-  --temper-6: #d6b25a;
+  --temper-6: #bf8d2e;
   --temper-7: #c58aa8;
   --temper-8: #a3a7ae;
   --temper-9: #7fbfb2;

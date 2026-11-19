@@ -27,14 +27,14 @@ const NAME = /\b([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+|[A-Z]{2,}[A-Z0-9]*)\b/
 
 /**
  * `error` as `NotConfigured` when it is a setting a layer could not use: an Effect `ConfigError`
- * (missing, named as `at ["NAME"]`), or a layer's own `...ConfigError`. Such an error should name
+ * (missing, named as `at ["NAME"]`), or a layer's own `...ConfigError` or `...NotConfigured`. Such an error should name
  * the setting in a `setting` field (as `StorageConfigError` does); otherwise the first setting
  * name in its message is taken, and its message is kept as the problem.
  */
 export const asNotConfigured = (error: unknown): NotConfigured | undefined => {
   if (error instanceof NotConfigured) return error
   if (typeof error !== "object" || error === null || !("_tag" in error)) return undefined
-  if (!String(error._tag).endsWith("ConfigError")) return undefined
+  if (!/(?:ConfigError|NotConfigured)$/.test(String(error._tag))) return undefined
   const message = "message" in error ? String(error.message) : ""
   const own = error._tag !== "ConfigError" && message !== "" ? message : undefined
   if ("setting" in error && typeof error.setting === "string")

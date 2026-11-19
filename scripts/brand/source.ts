@@ -47,8 +47,34 @@ export const palette = {
   },
 } as const
 
-/** The tempering sequence for diagrams: one colour per layer, always in this order. */
+/** The tempering sequence: the four named colours steel passes through, in this order. */
 export const temper = ["straw", "bronze", "purple", "blued"] as const
+
+/** The surfaces the dashboard draws layer colours on, per theme (styles.css `--card`, `--background`). */
+export const surfaces = {
+  light: { card: "#FCFBF8", background: "#F6F5F1" },
+  dark: { card: "#222327", background: "#1C1D20" },
+} as const
+
+/**
+ * The layer colours, one per layer of `AppLayer`, always in this order: the tempering sequence,
+ * then five more, so a project with every add-on (nine layers) repeats none. The dashboard's layer
+ * graph and cards use `light` and `dark` (each at least 3:1 on both surfaces of its theme, and
+ * apart from its neighbours: checked in docs/brand.md and test/brand.test.ts); `efforge graph`
+ * draws its Mermaid nodes from `light`. A named colour keeps its brand value in `palette`; these
+ * are its dashboard variants. No orange.
+ */
+export const layerColors = [
+  { name: "Straw", light: "#9A8C33", dark: "#E2C275" },
+  { name: "Bronze", light: "#A8683A", dark: "#C98A58" },
+  { name: "Temper purple", light: "#774990", dark: "#BC8BD5" },
+  { name: "Blued steel", light: "#2F5AA8", dark: "#7DA2E3" },
+  { name: "Sky", light: "#3496B4", dark: "#A9C9E6" },
+  { name: "Gold", light: "#B38323", dark: "#BF8D2E" },
+  { name: "Plum", light: "#8A4F6E", dark: "#C58AA8" },
+  { name: "Slate", light: "#6B7078", dark: "#A3A7AE" },
+  { name: "Teal", light: "#3D7F73", dark: "#7FBFB2" },
+] as const
 
 /**
  * The wordmark `efforge`, outlined, in lockup coordinates: the mark sits at 0..64 and the

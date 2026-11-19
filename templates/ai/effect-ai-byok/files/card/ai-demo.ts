@@ -2,7 +2,7 @@ import { ask, type LlmError, type LlmNotConfigured } from "@repo/core/llm"
 import { createServerFn } from "@tanstack/react-start"
 import { Effect, Schema, Stream } from "effect"
 import { type Failure, runOutcome } from "./outcome"
-import { NotConfigured } from "./settings"
+import { asNotConfigured } from "./settings"
 
 /** A piece of the answer, or how the answer failed part way through. */
 export type AnswerPart = { readonly text: string } | { readonly failure: Failure }
@@ -11,9 +11,12 @@ const AskInput = Schema.Struct({
   prompt: Schema.String.check(Schema.isMaxLength(4000)),
 })
 
-/** A missing environment variable as `NotConfigured`, which names its file. */
+/**
+ * A setting the layer could not use as `NotConfigured`, which names its file and keeps the
+ * layer's reason ("is not set", "must be one of: ...").
+ */
 const named = (error: LlmNotConfigured) =>
-  Effect.fail(error.setting === undefined ? error : new NotConfigured(error.setting))
+  Effect.fail(error.setting === undefined ? error : (asNotConfigured(error) ?? error))
 
 /** The answer for the browser: text as it comes, then a failure if one ends it. */
 const parts = (answer: Stream.Stream<string, LlmError>) =>

@@ -1,7 +1,24 @@
 import type { Capability } from "@/capabilities/types"
 import { temperClasses } from "@/components/capability-card"
-import type { LayerEntry } from "@/lib/layer-graph"
+import { type LayerEntry, rowSizes } from "@/lib/layer-graph"
 import { cn } from "@/lib/utils"
+
+// a row of n layers on the 6-column (sm) and 12-column (xl) grids: each layer spans 6/n or 12/n
+const smSpan: Record<number, string> = {
+  1: "sm:col-span-6",
+  2: "sm:col-span-3",
+  3: "sm:col-span-2",
+}
+const xlSpan: Record<number, string> = {
+  1: "xl:col-span-12",
+  2: "xl:col-span-6",
+  3: "xl:col-span-4",
+  4: "xl:col-span-3",
+}
+
+/** For each layer, the size of the row it lands in when rows hold at most `columns`. */
+const rowOf = (count: number, columns: number): number[] =>
+  rowSizes(count, columns).flatMap((size) => Array.from({ length: size }, () => size))
 
 /**
  * `AppLayer` and the layers it merges, each in its tempering colour, with the services it provides
@@ -14,6 +31,9 @@ export function LayerGraph({
   layers: ReadonlyArray<LayerEntry>
   capabilities: ReadonlyArray<Capability>
 }) {
+  // rows of up to three layers from sm, four from xl, with no layer alone on a row
+  const sm = rowOf(layers.length, 3)
+  const xl = rowOf(layers.length, 4)
   return (
     <section
       aria-labelledby="layer-graph-title"
@@ -34,12 +54,19 @@ export function LayerGraph({
         <p className="mb-3 font-mono text-xs font-medium">
           AppLayer <span className="text-muted-foreground">= Layer.mergeAll(</span>
         </p>
-        <ol className="grid gap-3 sm:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]">
+        <ol className="grid gap-3 sm:grid-cols-6 xl:grid-cols-12">
           {layers.map((layer, i) => {
             const info = capabilities.find((c) => c.layer?.name === layer.name)?.layer
             const needs = [...layer.provided, ...(info?.needs ?? [])]
             return (
-              <li key={layer.name} className="overflow-hidden rounded-md border bg-background">
+              <li
+                key={layer.name}
+                className={cn(
+                  "overflow-hidden rounded-md border bg-background",
+                  smSpan[sm[i] ?? 1],
+                  xlSpan[xl[i] ?? 1],
+                )}
+              >
                 <div aria-hidden className={cn("h-1.5", temperClasses[i % temperClasses.length])} />
                 <div className="space-y-2 p-3">
                   <p className="font-mono text-sm font-semibold break-all">{layer.name}</p>

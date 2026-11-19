@@ -238,6 +238,8 @@ const waitForServer = async (url: string) => {
 const browserFlow = (config: StackConfig): Effect.Effect<void, unknown> =>
   Effect.gen(function* () {
     const dir = yield* generateStack(config)
+    // the session guard's bypasses go in before the app runs: they must be refused
+    yield* Effect.tryPromise(async () => (await import("./browser-flow.ts")).plantBypasses(dir))
     const databaseUrl =
       process.env.EFFORGE_E2E_DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/app"
     const port = process.env.EFFORGE_E2E_PORT ?? "5199"

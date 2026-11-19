@@ -90,6 +90,18 @@ it("asNotConfigured: every configuration error names its setting, and keeps a la
   expect(
     asNotConfigured({ _tag: "LlmConfigError", message: "LLM_ENCRYPTION_KEY is not a 32-byte key" }),
   ).toMatchObject({ setting: "LLM_ENCRYPTION_KEY" })
+  // the AI layer's LlmNotConfigured: an unusable value says so, not "is not set"
+  expect(
+    asNotConfigured({
+      _tag: "LlmNotConfigured",
+      setting: "LLM_PROVIDER",
+      message: "LLM_PROVIDER must be one of: anthropic, openai, openrouter, ollama.",
+    }),
+  ).toMatchObject({
+    setting: "LLM_PROVIDER",
+    message:
+      "LLM_PROVIDER must be one of: anthropic, openai, openrouter, ollama. Set LLM_PROVIDER in .dev.vars and restart pnpm dev.",
+  })
   expect(asNotConfigured({ _tag: "NotFound", message: "X_Y" })).toBeUndefined()
 })
 
@@ -289,3 +301,22 @@ it(`every region a registered card shows fits in ${REGION_WIDTH} characters, on 
   expect(regionsChecked).toBeGreaterThan(50)
   expect([...new Set(long)]).toEqual([])
 }, 60_000)
+
+const { rowSizes } = await load<{ rowSizes: (count: number, columns: number) => number[] }>(
+  "base/files/web/src/lib/layer-graph.ts",
+)
+
+it("the layer graph leaves no layer alone on a row, for one to twelve layers at three and four columns", () => {
+  for (const columns of [3, 4])
+    for (let count = 1; count <= 12; count++) {
+      const rows = rowSizes(count, columns)
+      expect(
+        rows.reduce((a, b) => a + b, 0),
+        `${count} in ${columns}`,
+      ).toBe(count)
+      expect(Math.max(...rows), `${count} in ${columns}`).toBeLessThanOrEqual(columns)
+      if (count > 1) expect(Math.min(...rows), `${count} in ${columns}: ${rows}`).toBeGreaterThan(1)
+    }
+  // nine layers, the stack with everything, at the README's width
+  expect(rowSizes(9, 4)).toEqual([3, 3, 3])
+})

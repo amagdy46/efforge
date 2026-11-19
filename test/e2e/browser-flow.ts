@@ -1,4 +1,6 @@
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { request as httpRequest } from "node:http"
+import { join } from "node:path"
 import { chromium, type Page, type Request } from "playwright"
 import { PUBLIC_SERVER_FNS } from "../../src/cards.ts"
 
@@ -66,6 +68,14 @@ const useServiceCards = async (page: Page) => {
     throw new Error(`the signed link answered ${download.status()}`)
   await storage.getByRole("button", { name: "Delete hello.txt" }).click()
   await storage.getByText("No files yet").waitFor()
+  // one file stays, for the second user to not see
+  await storage.getByLabel("File to upload").setInputFiles({
+    name: "ann-keeps.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Ann's\n"),
+  })
+  await upload.click()
+  await storage.getByRole("link", { name: "ann-keeps.txt" }).waitFor()
 
   const email = page.locator("#email")
   const send = email.getByRole("button", { name: "Send a test email" })
@@ -102,6 +112,177 @@ const useServiceCards = async (page: Page) => {
   await browser.getByText("Not configured yet").waitFor({ timeout: 100_000 })
 }
 
+/** The first user's calls the second one replays (set by cardsRequireSession). */
+let annWatch: string | undefined
+let annUpload: string | undefined
+
+/**
+ * The reviewer's bypasses of the session guard, planted in a generated auth project before it
+ * runs: a server function through an alias, through a re-export, behind a middleware merely named
+ * `requireSession` and behind another one imported as `requireSession`; a Worker route and a
+ * route file under `/api/`. Each answers "LEAK" if it runs. `bypassesRefused` calls them.
+ */
+export const plantBypasses = (dir: string) => {
+  const web = join(dir, "apps/web/src")
+  const write = (file: string, lines: string[]) => {
+    mkdirSync(join(web, file, ".."), { recursive: true })
+    writeFileSync(join(web, file), `${lines.join("\n")}\n`)
+  }
+  write("server/bypass-src.ts", [
+    'export { createServerFn as serverFn } from "@tanstack/react-start"',
+  ])
+  write("server/bypass-reexport.ts", [
+    'import { serverFn } from "./bypass-src"',
+    'export const leakReexport = serverFn({ method: "GET" }).handler(() => "LEAK")',
+  ])
+  write("server/bypass-alias.ts", [
+    'import { createServerFn } from "@tanstack/react-start"',
+    "const make = createServerFn",
+    'export const leakAlias = make({ method: "GET" }).handler(() => "LEAK")',
+  ])
+  write("server/bypass-named.ts", [
+    'import { createMiddleware, createServerFn } from "@tanstack/react-start"',
+    'const requireSession = createMiddleware({ type: "function" }).server(({ next }) => next())',
+    'export const leakNamed = createServerFn({ method: "GET" })',
+    "  .middleware([requireSession])",
+    '  .handler(() => "LEAK")',
+  ])
+  write("server/bypass-log.ts", [
+    'import { createMiddleware } from "@tanstack/react-start"',
+    'export const logCalls = createMiddleware({ type: "function" }).server(({ next }) => next())',
+  ])
+  write("server/bypass-renamed.ts", [
+    'import { createServerFn } from "@tanstack/react-start"',
+    'import { logCalls as requireSession } from "./bypass-log"',
+    'export const leakRenamed = createServerFn({ method: "GET" })',
+    "  .middleware([requireSession])",
+    '  .handler(() => "LEAK")',
+  ])
+  write("server/bypass-route.ts", [
+    'import type { WorkerRoute } from "./routes"',
+    "export const exportRoute: WorkerRoute = (request) =>",
+    '  Promise.resolve(new URL(request.url).pathname === "/api/export" ? new Response("LEAK") : undefined)',
+  ])
+  const routes = join(web, "server/routes.ts")
+  writeFileSync(
+    routes,
+    readFileSync(routes, "utf8")
+      .replace(/^/, 'import { exportRoute } from "./bypass-route"\n')
+      .replace(/\n\]\s*$/, "\n  exportRoute,\n]\n"),
+  )
+  write("routes/api/leak.ts", [
+    'import { createFileRoute } from "@tanstack/react-router"',
+    'export const Route = createFileRoute("/api/leak")({',
+    '  server: { handlers: { GET: () => new Response("LEAK") } },',
+    "})",
+  ])
+  write("routes/bypass.tsx", [
+    'import { createFileRoute } from "@tanstack/react-router"',
+    'import { leakAlias } from "@/server/bypass-alias"',
+    'import { leakNamed } from "@/server/bypass-named"',
+    'import { leakReexport } from "@/server/bypass-reexport"',
+    'import { leakRenamed } from "@/server/bypass-renamed"',
+    'export const Route = createFileRoute("/bypass")({',
+    "  component: () => (",
+    '    <button type="button" onClick={() => void Promise.allSettled([leakAlias(), leakNamed(), leakReexport(), leakRenamed()])}>',
+    "      go",
+    "    </button>",
+    "  ),",
+    "})",
+  ])
+}
+
+/** Signed out, every planted bypass is refused: the four server functions and both routes. */
+const bypassesRefused = async (page: Page, baseURL: string) => {
+  const answers: string[] = []
+  page.on("response", async (r) => {
+    if (r.url().includes("/_serverFn/")) answers.push(await r.text().catch(() => ""))
+  })
+  await page.goto("/bypass")
+  await hydrated(page)
+  await page.getByRole("button", { name: "go" }).click()
+  for (let i = 0; i < 60 && answers.length < 4; i++) await page.waitForTimeout(250)
+  if (answers.length !== 4) throw new Error(`the bypass page made ${answers.length} calls, not 4`)
+  for (const body of answers)
+    if (body.includes("LEAK") || !body.includes("Unauthorized"))
+      throw new Error(`a planted server function answered signed out: ${body.slice(0, 200)}`)
+  for (const path of [
+    "/api/export",
+    "/api/leak",
+    "/API/leak",
+    "/%61pi/leak",
+    "/api/auth/..%2Fleak",
+  ]) {
+    const r = await fetch(`${baseURL}${path}`)
+    const body = await r.text()
+    if (r.status !== 401 || body.includes("LEAK"))
+      throw new Error(`${path} answered signed out: ${r.status} ${body.slice(0, 200)}`)
+  }
+}
+
+/** The second user sees none of the first one's files and can't watch the first one's run. */
+const othersDataIsTheirs = async (page: Page) => {
+  await page.goto("/app")
+  await hydrated(page)
+  const storage = page.locator("#storage")
+  await storage.getByText("No files yet").waitFor()
+  if ((await storage.getByRole("link", { name: "ann-keeps.txt" }).count()) !== 0)
+    throw new Error("the second user sees the first user's upload")
+  if (annWatch === undefined || annUpload === undefined)
+    throw new Error("the first user's calls were not recorded")
+  const watched = await (await page.request.get(annWatch)).text()
+  if (!watched.includes("UnknownRun"))
+    throw new Error(`the second user watched the first user's run: ${watched.slice(0, 200)}`)
+  const listed = await (await page.request.get(annUpload)).text()
+  if (listed.includes("ann-keeps.txt"))
+    throw new Error("the second user's listFiles returned the first user's upload")
+}
+
+/** At 390 px, with long unbroken input in the cards, nothing is wider than its card or the page. */
+const cardsFitPhoneWidth = async (page: Page) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/app")
+  await hydrated(page)
+  const database = page.locator("#database")
+  const note = "n".repeat(180)
+  await database.getByLabel("New note").fill(note)
+  await database.getByRole("button", { name: "Add note" }).click()
+  await database.getByText(note).waitFor()
+  const storage = page.locator("#storage")
+  const name = "quarterly-report-2026-final-reviewed.pdf"
+  await storage.getByLabel("File to upload").setInputFiles({
+    name,
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4\n"),
+  })
+  await storage.getByRole("button", { name: "Upload", exact: true }).click()
+  await storage.getByRole("link", { name }).waitFor()
+  const workflows = page.locator("#workflows")
+  await workflows.getByLabel("Name").fill("W".repeat(100))
+  await workflows.getByRole("button", { name: "Start workflow" }).click()
+  await workflows.getByText(/The workflow finished/).waitFor({ timeout: 90_000 })
+  const email = page.locator("#email")
+  await email.getByLabel("To").fill(`${"a".repeat(60)}@example.com`)
+  await email.getByRole("button", { name: "Send a test email" }).click()
+  await email.getByText("Printed to the dev server log").waitFor()
+  // a string, since this file is type-checked without the DOM library
+  const wide = await page.evaluate<string[]>(`(() => {
+    const out = []
+    if (document.documentElement.scrollWidth > window.innerWidth)
+      out.push("page " + document.documentElement.scrollWidth)
+    for (const card of document.querySelectorAll("section[id]"))
+      for (const pane of card.querySelectorAll(":scope > div > div"))
+        if (pane.scrollWidth > pane.clientWidth + 1)
+          out.push(card.id + " " + pane.scrollWidth + " in " + pane.clientWidth)
+    return out
+  })()`)
+  if (wide.length > 0) throw new Error(`too wide at 390 px: ${wide.join(", ")}`)
+  // the uploaded file goes, so the second user's check starts from Ann's one file
+  await storage.getByRole("button", { name: `Delete ${name}` }).click()
+  await storage.getByRole("link", { name }).waitFor({ state: "detached" })
+  await page.setViewportSize({ width: 1280, height: 800 })
+}
+
 /**
  * Uses every card's demo as a signed-in user, then replays each server function call the dashboard
  * made without the session cookie: every one must be refused with `Unauthorized`, reads included.
@@ -136,6 +317,8 @@ const cardsRequireSession = async (page: Page) => {
   await realtime.getByText(/broadcast it to/).waitFor()
   await useServiceCards(page)
 
+  annWatch = calls.find((c) => c.url().includes("watchWorkflow"))?.url()
+  annUpload = calls.find((c) => c.url().includes("listFiles"))?.url()
   const seen = new Map(calls.map((c) => [`${c.method()} ${c.url()}`, c]))
   const names = new Set<string>()
   for (const call of seen.values()) {
@@ -210,6 +393,9 @@ export const orgsFlow = async (baseURL: string): Promise<void> => {
     const expectVisible = async (page: Page, text: string) =>
       page.getByText(text, { exact: false }).first().waitFor({ state: "visible", timeout: 30_000 })
 
+    // signed out: the reviewer's bypasses of the session guard are all refused
+    await bypassesRefused(await (await browser.newContext({ baseURL })).newPage(), baseURL)
+
     // user one: guard -> sign up -> first sign-in creates an organization
     const annPage = await (await browser.newContext({ baseURL })).newPage()
     await annPage.goto("/app")
@@ -227,6 +413,7 @@ export const orgsFlow = async (baseURL: string): Promise<void> => {
     // every card renders on the database + auth dashboard (the stack includes realtime)
     await expectVisible(annPage, "Realtime room")
     await cardsRequireSession(annPage)
+    await cardsFitPhoneWidth(annPage)
     // a host Better Auth does not allow under pnpm dev gets a clear 403, not a 500
     const lan = await postWithHost(
       `${baseURL}/api/auth/sign-in/email`,
@@ -264,6 +451,8 @@ export const orgsFlow = async (baseURL: string): Promise<void> => {
       .getByRole("button", { name: "Switch organization" })
       .getByText("Acme Inc")
       .waitFor()
+    // in the same organization, Ann's uploads and runs are still hers
+    await othersDataIsTheirs(bobPage)
 
     // both are members, seen from both sides
     for (const page of [bobPage, annPage]) {
