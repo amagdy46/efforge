@@ -156,11 +156,11 @@ const entry = {
 }
 
 // merge into the data file, releases in version order
-let existing: Record<string, unknown> = {}
-try {
-  const text = readFileSync(out, "utf8")
-  existing = JSON.parse(text.slice(text.indexOf("= {") + 2, text.lastIndexOf("}") + 1))
-} catch {}
+// the file is TypeScript (and formatted as such), so read it as a module, not as JSON; a parse
+// that failed silently here would drop every earlier release
+const existing: Record<string, unknown> = {
+  ...((await import(pathToFileURL(out).href)) as { releases: Record<string, unknown> }).releases,
+}
 existing[version] = entry
 const ordered = Object.fromEntries(
   Object.entries(existing).toSorted(([a], [b]) => {
