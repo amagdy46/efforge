@@ -94,6 +94,7 @@ export const announce = (roomId: string, text: string) =>
 
 - Only the region reaches the browser: `regions.ts` cuts it out at build time, so the rest of the file stays on the server. The region itself is public on every stack, auth or not, because static assets are not behind the session. Never mark a part that holds a secret, a key or anything private.
 - A file without the region fails the build with a message that names it. There is no "whole file" fallback.
+- In a `.ts` or `.tsx` file the markers are read as code: only a real `//` comment counts, so a `// #region card` line inside a template string or a string is part of that string.
 - Keep a region to 10-20 lines and every line to 80 characters, so the code panel does not scroll sideways at 1440 px. On auth stacks efforge inserts `.middleware([requireSession])` into a card's server functions, and a repo test checks the 80 characters on every stack. Shorten doc comments rather than wrapping code, and write an object or a type literal over several lines when it would be long: the formatter keeps it that way.
 - Show the part that teaches: the program with its tagged error, the server function, the layer. Two or three files per card, as tabs.
 
