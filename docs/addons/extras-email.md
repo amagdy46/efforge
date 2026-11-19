@@ -119,7 +119,7 @@ None.
 ### Email
 
 - Send mail through the `Mailer` service from `@repo/core` (`send({ to, subject, text, html? })`); do not use the `EMAIL` binding directly. Always send a `text` body.
-- `apps/web/src/server/mailer.ts` picks the transport from `MAIL_TRANSPORT`: `console` (set in `.dev.vars`) prints the message to the dev server log, anything else sends through Cloudflare Email Service with the `EMAIL` `send_email` binding. `MAIL_FROM` must be an address on a domain enabled for sending: `wrangler email sending enable <domain>`.
+- `apps/web/src/server/mailer.ts` picks the transport from `MAIL_TRANSPORT`: `console` (the local value in `.env.example`) prints the message to the dev server log, anything else sends through Cloudflare Email Service with the `EMAIL` `send_email` binding. `MAIL_FROM` must be an address on a domain enabled for sending: `wrangler email sending enable <domain>`.
 - Transactional mail only (invitations, receipts, password resets); use a dedicated platform for marketing or bulk sends.
 
 Only with `auth=better-auth-orgs`:

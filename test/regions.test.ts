@@ -267,7 +267,7 @@ describe(`marked regions (seed ${SEED}, ${CASES} cases per file)`, () => {
     const prefix = "efforge:section"
     const footer = "<!-- efforge:agents -->"
     const ids = ["database", "database-wrangler", "orm", "auth", "auth-secret", "email", "alchemy"]
-    const seen = { synced: 0, malformed: 0, legacy: 0 }
+    const seen = { synced: 0, malformed: 0, legacy: 0, removed: 0 }
     for (let n = 0; n < CASES; n++) {
       let footers = 0
       const c = makeCase(r, prefix, ids, (lines) => {
@@ -277,9 +277,10 @@ describe(`marked regions (seed ${SEED}, ${CASES} cases per file)`, () => {
         for (let i = 0; i < k; i++)
           lines.push({ text: footer, user: true }, { text: "", user: true })
       })
-      // wanted: every section the file has (so none is removed) and some new ones, in a random order
+      // wanted: most sections the file has (the rest no longer hold and are removed) and some new
+      // ones, in a random order
       const wanted = ids
-        .filter((id) => c.intact.includes(id) || r() < 0.4)
+        .filter((id) => (c.intact.includes(id) ? r() < 0.8 : r() < 0.4))
         .toSorted(() => r() - 0.5)
         .map((id) => ({ id, content: `## ${id}\n\nnew ${int(r, 99)}` }))
       const result = syncSections(c.text, prefix, wanted, { footer, owned: () => true })
@@ -308,13 +309,14 @@ describe(`marked regions (seed ${SEED}, ${CASES} cases per file)`, () => {
         continue
       }
       seen.synced++
-      expect(
-        blankLinesAdded(
-          c.lines.filter((l) => l.user).map((l) => l.text),
-          outside(result.text, prefix),
-        ),
-        why,
-      ).toBe(true)
+      const removed = c.intact.filter((id) => !wanted.some((w) => w.id === id))
+      if (removed.length > 0) seen.removed++
+      const user = c.lines.filter((l) => l.user).map((l) => l.text)
+      const kept = outside(result.text, prefix)
+      if (removed.length === 0) expect(blankLinesAdded(user, kept), why).toBe(true)
+      // a removed section takes at most the blank line that separated it: no other user line moves
+      const nonBlank = (xs: ReadonlyArray<string>) => xs.filter((l) => l.trim() !== "")
+      expect(nonBlank(kept), why).toEqual(nonBlank(user))
       // every wanted section is there, once, with its content, in wanted order when it was inserted
       const p = parseRegions(result.text, prefix)
       if (!p.ok) throw new Error(why)
@@ -325,6 +327,7 @@ describe(`marked regions (seed ${SEED}, ${CASES} cases per file)`, () => {
     expect(seen.synced).toBeGreaterThan(CASES / 10)
     expect(seen.malformed).toBeGreaterThan(CASES / 10)
     expect(seen.legacy).toBeGreaterThan(0)
+    expect(seen.removed).toBeGreaterThan(CASES / 20)
   })
 })
 

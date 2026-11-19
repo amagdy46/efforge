@@ -3,17 +3,11 @@
   "version": "9",
   "dialect": "postgres",
   "id": "667d2c3b-3819-4efd-98e5-4035d041970c",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "footprints": [
     {
       "statementType": "create_table",
-      "statementTarget": [
-        "table",
-        "public",
-        "note"
-      ],
+      "statementTarget": ["table", "public", "note"],
       "writes": [
         "s|tbl|public.note",
         "n|tbl|public.note",
@@ -22,9 +16,7 @@
         "n|type|public.note",
         "n|rel|public.note_pkey"
       ],
-      "reads": [
-        "n|sch|public"
-      ]
+      "reads": ["n|sch|public"]
     }
   ],
   "ddl": [
@@ -90,9 +82,7 @@
       "schema": "public",
       "table": "note",
       "name": "note_pkey",
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "entityType": "pks"
     }

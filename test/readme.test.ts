@@ -8,7 +8,14 @@ import { loadAddons } from "../src/addon.ts"
 import { addAddons } from "../src/commands/add.ts"
 import { defaultTemplatesDir } from "../src/commands/create.ts"
 import { generate } from "../src/generate.ts"
-import { capabilities, fillReadme, README_REGIONS, readmeRegions } from "../src/readme.ts"
+import {
+  capabilities,
+  fillReadme,
+  planSteps,
+  README_REGIONS,
+  readmeRegions,
+  renderSteps,
+} from "../src/readme.ts"
 import { slots } from "../src/slots.ts"
 import { type StackConfig, withDefaults } from "../src/stack.ts"
 import { writeTree } from "../src/write.ts"
@@ -108,6 +115,11 @@ it("the run steps are the ones each stack needs", async () => {
   expect(alchemy).toContain("http://localhost:1337")
   // alchemy dev migrates a local D1 itself; db:migrate needs a wrangler.jsonc
   expect(await steps({ ...d1, infra: "alchemy" })).not.toContain("db:migrate")
+  // one source: the README's commands are the ones create prints and --json gives as nextSteps
+  for (const c of [minimal, pg, d1, house, { ...d1, infra: "alchemy" as const }]) {
+    const block = /```sh\n([\s\S]*?)\n```/.exec(await steps(c))?.[1]
+    expect(block).toBe(renderSteps(planSteps(c, { installed: false })).join("\n"))
+  }
 })
 
 it("deploy follows the infra: wrangler resources and secrets, or Alchemy stages", async () => {
@@ -120,7 +132,9 @@ it("deploy follows the infra: wrangler resources and secrets, or Alchemy stages"
   expect(wrangler).toContain("pnpm exec wrangler secret bulk .env.production")
   expect(wrangler).toContain("pnpm run deploy")
   expect(wrangler).not.toContain("alchemy")
-  expect(await deploy(pg)).toMatch(/pnpm exec wrangler hyperdrive create app --connection-string="[^"]+" --binding HYPERDRIVE/)
+  expect(await deploy(pg)).toMatch(
+    /pnpm exec wrangler hyperdrive create app --connection-string="[^"]+" --binding HYPERDRIVE/,
+  )
   expect(await deploy(minimal)).not.toContain("secret bulk")
   const alchemy = await deploy(house)
   expect(alchemy).toContain("pnpm run deploy --stage prod --env-file .env.production")
@@ -253,6 +267,9 @@ it("the ORM, database and Alchemy add-ons each bring an AGENTS.md section", asyn
   expect(h).toContain("## Infrastructure (Alchemy)")
   expect(h).toContain("There is no `wrangler.jsonc`")
   expect(h).not.toContain("`HYPERDRIVE` is declared in `wrangler.jsonc`")
+  // Alchemy reads local settings from .env: no section may send anyone to .dev.vars
+  expect(h).not.toContain(".dev.vars")
+  expect(await agents({ ...d1, infra: "alchemy" })).not.toContain(".dev.vars")
   const s = await agents(d1)
   expect(s).toContain("## Database (Cloudflare D1)")
   expect(s).toContain("## Queries and migrations (Effect SQL)")

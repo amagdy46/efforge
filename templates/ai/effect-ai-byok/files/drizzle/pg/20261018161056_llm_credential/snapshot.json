@@ -3,17 +3,11 @@
   "version": "9",
   "dialect": "postgres",
   "id": "25a92137-a841-4fe1-a33d-bd9d274f8977",
-  "prevIds": [
-    "8e6f8310-20e4-4feb-bc5b-5274cdbd0dfd"
-  ],
+  "prevIds": ["8e6f8310-20e4-4feb-bc5b-5274cdbd0dfd"],
   "footprints": [
     {
       "statementType": "create_table",
-      "statementTarget": [
-        "table",
-        "public",
-        "llm_credential"
-      ],
+      "statementTarget": ["table", "public", "llm_credential"],
       "writes": [
         "s|tbl|public.llm_credential",
         "n|tbl|public.llm_credential",
@@ -22,17 +16,11 @@
         "n|type|public.llm_credential",
         "n|rel|public.llm_credential_pkey"
       ],
-      "reads": [
-        "n|sch|public"
-      ]
+      "reads": ["n|sch|public"]
     },
     {
       "statementType": "create_fk",
-      "statementTarget": [
-        "table",
-        "public",
-        "llm_credential"
-      ],
+      "statementTarget": ["table", "public", "llm_credential"],
       "writes": [
         "s|fk|public.llm_credential.llm_credential_org_id_organization_id_fkey",
         "n|fk|public.llm_credential.llm_credential_org_id_organization_id_fkey",
@@ -163,14 +151,10 @@
         "table": "llm_credential",
         "name": "llm_credential_org_id_organization_id_fkey",
         "nameExplicit": false,
-        "columns": [
-          "org_id"
-        ],
+        "columns": ["org_id"],
         "schemaTo": "public",
         "tableTo": "organization",
-        "columnsTo": [
-          "id"
-        ],
+        "columnsTo": ["id"],
         "onUpdate": "NO ACTION",
         "onDelete": "CASCADE",
         "entityType": "fks"
@@ -182,9 +166,7 @@
         "schema": "public",
         "table": "llm_credential",
         "name": "llm_credential_pkey",
-        "columns": [
-          "org_id"
-        ],
+        "columns": ["org_id"],
         "nameExplicit": false,
         "entityType": "pks"
       }

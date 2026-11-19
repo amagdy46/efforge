@@ -3,17 +3,11 @@
   "version": "9",
   "dialect": "postgres",
   "id": "4867975e-abf3-44ef-b06c-ede274eb2c70",
-  "prevIds": [
-    "667d2c3b-3819-4efd-98e5-4035d041970c"
-  ],
+  "prevIds": ["667d2c3b-3819-4efd-98e5-4035d041970c"],
   "footprints": [
     {
       "statementType": "create_table",
-      "statementTarget": [
-        "table",
-        "public",
-        "account"
-      ],
+      "statementTarget": ["table", "public", "account"],
       "writes": [
         "s|tbl|public.account",
         "n|tbl|public.account",
@@ -22,17 +16,11 @@
         "n|type|public.account",
         "n|rel|public.account_pkey"
       ],
-      "reads": [
-        "n|sch|public"
-      ]
+      "reads": ["n|sch|public"]
     },
     {
       "statementType": "create_table",
-      "statementTarget": [
-        "table",
-        "public",
-        "session"
-      ],
+      "statementTarget": ["table", "public", "session"],
       "writes": [
         "s|tbl|public.session",
         "n|tbl|public.session",
@@ -42,17 +30,11 @@
         "n|rel|public.session_pkey",
         "n|rel|public.session_token_key"
       ],
-      "reads": [
-        "n|sch|public"
-      ]
+      "reads": ["n|sch|public"]
     },
     {
       "statementType": "create_table",
-      "statementTarget": [
-        "table",
-        "public",
-        "user"
-      ],
+      "statementTarget": ["table", "public", "user"],
       "writes": [
         "s|tbl|public.user",
         "n|tbl|public.user",
@@ -62,17 +44,11 @@
         "n|rel|public.user_pkey",
         "n|rel|public.user_email_key"
       ],
-      "reads": [
-        "n|sch|public"
-      ]
+      "reads": ["n|sch|public"]
     },
     {
       "statementType": "create_table",
-      "statementTarget": [
-        "table",
-        "public",
-        "verification"
-      ],
+      "statementTarget": ["table", "public", "verification"],
       "writes": [
         "s|tbl|public.verification",
         "n|tbl|public.verification",
@@ -81,77 +57,44 @@
         "n|type|public.verification",
         "n|rel|public.verification_pkey"
       ],
-      "reads": [
-        "n|sch|public"
-      ]
+      "reads": ["n|sch|public"]
     },
     {
       "statementType": "create_index",
-      "statementTarget": [
-        "index",
-        "public",
-        "account",
-        "account_userId_idx"
-      ],
+      "statementTarget": ["index", "public", "account", "account_userId_idx"],
       "writes": [
         "s|idx|public.account_userId_idx",
         "n|idx|public.account_userId_idx",
         "e|idx|public.account_userId_idx",
         "n|rel|public.account_userId_idx"
       ],
-      "reads": [
-        "n|tbl|public.account",
-        "n|sch|public",
-        "n|col|public.account.user_id"
-      ]
+      "reads": ["n|tbl|public.account", "n|sch|public", "n|col|public.account.user_id"]
     },
     {
       "statementType": "create_index",
-      "statementTarget": [
-        "index",
-        "public",
-        "session",
-        "session_userId_idx"
-      ],
+      "statementTarget": ["index", "public", "session", "session_userId_idx"],
       "writes": [
         "s|idx|public.session_userId_idx",
         "n|idx|public.session_userId_idx",
         "e|idx|public.session_userId_idx",
         "n|rel|public.session_userId_idx"
       ],
-      "reads": [
-        "n|tbl|public.session",
-        "n|sch|public",
-        "n|col|public.session.user_id"
-      ]
+      "reads": ["n|tbl|public.session", "n|sch|public", "n|col|public.session.user_id"]
     },
     {
       "statementType": "create_index",
-      "statementTarget": [
-        "index",
-        "public",
-        "verification",
-        "verification_identifier_idx"
-      ],
+      "statementTarget": ["index", "public", "verification", "verification_identifier_idx"],
       "writes": [
         "s|idx|public.verification_identifier_idx",
         "n|idx|public.verification_identifier_idx",
         "e|idx|public.verification_identifier_idx",
         "n|rel|public.verification_identifier_idx"
       ],
-      "reads": [
-        "n|tbl|public.verification",
-        "n|sch|public",
-        "n|col|public.verification.identifier"
-      ]
+      "reads": ["n|tbl|public.verification", "n|sch|public", "n|col|public.verification.identifier"]
     },
     {
       "statementType": "create_fk",
-      "statementTarget": [
-        "table",
-        "public",
-        "account"
-      ],
+      "statementTarget": ["table", "public", "account"],
       "writes": [
         "s|fk|public.account.account_user_id_user_id_fkey",
         "n|fk|public.account.account_user_id_user_id_fkey",
@@ -170,11 +113,7 @@
     },
     {
       "statementType": "create_fk",
-      "statementTarget": [
-        "table",
-        "public",
-        "session"
-      ],
+      "statementTarget": ["table", "public", "session"],
       "writes": [
         "s|fk|public.session.session_user_id_user_id_fkey",
         "n|fk|public.session.session_user_id_user_id_fkey",
@@ -852,14 +791,10 @@
         "table": "account",
         "name": "account_user_id_user_id_fkey",
         "nameExplicit": false,
-        "columns": [
-          "user_id"
-        ],
+        "columns": ["user_id"],
         "schemaTo": "public",
         "tableTo": "user",
-        "columnsTo": [
-          "id"
-        ],
+        "columnsTo": ["id"],
         "onUpdate": "NO ACTION",
         "onDelete": "CASCADE",
         "entityType": "fks"
@@ -872,14 +807,10 @@
         "table": "session",
         "name": "session_user_id_user_id_fkey",
         "nameExplicit": false,
-        "columns": [
-          "user_id"
-        ],
+        "columns": ["user_id"],
         "schemaTo": "public",
         "tableTo": "user",
-        "columnsTo": [
-          "id"
-        ],
+        "columnsTo": ["id"],
         "onUpdate": "NO ACTION",
         "onDelete": "CASCADE",
         "entityType": "fks"
@@ -891,9 +822,7 @@
         "schema": "public",
         "table": "account",
         "name": "account_pkey",
-        "columns": [
-          "id"
-        ],
+        "columns": ["id"],
         "nameExplicit": false,
         "entityType": "pks"
       }
@@ -904,9 +833,7 @@
         "schema": "public",
         "table": "session",
         "name": "session_pkey",
-        "columns": [
-          "id"
-        ],
+        "columns": ["id"],
         "nameExplicit": false,
         "entityType": "pks"
       }
@@ -917,9 +844,7 @@
         "schema": "public",
         "table": "user",
         "name": "user_pkey",
-        "columns": [
-          "id"
-        ],
+        "columns": ["id"],
         "nameExplicit": false,
         "entityType": "pks"
       }
@@ -930,9 +855,7 @@
         "schema": "public",
         "table": "verification",
         "name": "verification_pkey",
-        "columns": [
-          "id"
-        ],
+        "columns": ["id"],
         "nameExplicit": false,
         "entityType": "pks"
       }
@@ -944,9 +867,7 @@
         "table": "session",
         "name": "session_token_key",
         "nameExplicit": false,
-        "columns": [
-          "token"
-        ],
+        "columns": ["token"],
         "nullsNotDistinct": false,
         "entityType": "uniques"
       }
@@ -958,9 +879,7 @@
         "table": "user",
         "name": "user_email_key",
         "nameExplicit": false,
-        "columns": [
-          "email"
-        ],
+        "columns": ["email"],
         "nullsNotDistinct": false,
         "entityType": "uniques"
       }

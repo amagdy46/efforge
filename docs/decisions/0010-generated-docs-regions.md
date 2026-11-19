@@ -1,4 +1,4 @@
-# 0009 — The generated README and AGENTS.md are the user's files with regions efforge owns
+# 0010 — The generated README and AGENTS.md are the user's files with regions efforge owns
 
 Date: 2026-11-18. Status: accepted.
 

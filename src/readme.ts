@@ -151,7 +151,7 @@ const run = (input: ReadmeInput): string => {
     `You need ${and(needs)}.`,
     "",
     "```sh",
-    ...renderSteps([{ command: "pnpm install" }, ...runSteps(stack)]),
+    ...renderSteps(planSteps(stack, { installed: false })),
     "```",
   ]
   const groups = envGroups(stack, input.addons)
