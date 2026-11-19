@@ -125,6 +125,7 @@ export const renderUpgrade = (
     r.scripts.some((s) => s.status === "behind")
       ? plural(r.scripts.filter((s) => s.status === "behind").length, "script")
       : undefined,
+    r.env.length > 0 ? plural(r.env.length, "env var") : undefined,
     r.removes.size > 0 ? `${r.removes.size} to remove` : undefined,
   ].filter((x) => x !== undefined)
   const head =
@@ -203,6 +204,8 @@ export const renderUpgrade = (
       out.push(
         `  ${pc.cyan("script")}   ${x.file} ${x.name}: ${x.yours} ${x.status === "behind" ? `→ ${x.efforge}` : "(yours)"}`,
       )
+    for (const v of r.env)
+      out.push(`  ${pc.cyan("env")}      ${v.name} (.env.example${v.set ? "" : ", fill it in"})`)
   } else if (
     r.files.some((f) => f.status !== "current") ||
     r.pins.some((p) => p.status !== "same" && p.status !== "unmanaged")
@@ -272,6 +275,7 @@ const checkDocument = (r: UpgradeReport, only: string | undefined) => ({
   files: only === undefined ? r.files : r.files.filter((f) => f.path === only),
   seams: r.seams,
   scripts: r.scripts,
+  env: r.env,
   kept: r.kept,
   steps: r.steps,
   warnings: r.warnings,
@@ -499,6 +503,7 @@ export const upgradeCommand = Command.make(
           changed,
           removed,
           installed: installs,
+          env: r.env,
           kept: after.kept,
           needsAction,
           nextSteps,
@@ -527,6 +532,17 @@ export const upgradeCommand = Command.make(
               `  ${pc.yellow("~")} ${f}${r.seams.find((s) => s.file === f) === undefined ? "" : pc.dim(` (${r.seams.find((s) => s.file === f)?.missing.join("; ")})`)}`,
             )
           for (const f of removed) lines.push(`  ${pc.red("-")} ${f}`)
+          if (r.env.length > 0) {
+            const width = Math.max(...r.env.map((v) => v.name.length))
+            lines.push(
+              "",
+              `${pc.bold("New env vars")} ${pc.dim(`(in .env.example; local values in ${r.env[0]?.file})`)}`,
+              ...r.env.map(
+                (v) =>
+                  `  ${v.name.padEnd(width)}  ${pc.dim(v.set ? "set" : "empty: fill it in before it is used")}`,
+              ),
+            )
+          }
         }
         if (after.kept.length > 0) {
           lines.push(

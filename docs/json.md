@@ -857,8 +857,9 @@ The rest:
 - `files`: each generated file by `status`. `current`: as efforge writes it today. `refresh`: efforge's own older output, and the template moved: `upgrade` replaces it. `review`: you changed it and so did the template. `yours`: you changed it; it has everything today's has. `deleted`: you removed it. `dropped`: efforge no longer generates it (`upgrade` removes it when it is efforge's, unedited). `new`: efforge generates it today. `inPlace: true` marks a file efforge edits in place (`layers.ts`, `AGENTS.md`), judged by the release record instead of a hash. `held` says why `upgrade` keeps one it would otherwise apply, `why` what efforge's change is for. With `--diff`, `diff` is a git diff from yours to efforge's.
 - `seams`: files `upgrade` edits in place, with `missing` (what it adds, one line each) and `diff`.
 - `scripts`: package.json scripts that differ from today's template: `behind` when a release wrote yours, `yours` otherwise.
+- `env`: env vars the stack reads today that `.env.example` lacks, each as `create` and `add` report one (`name`, `description`, `file`, `set`, `secret`). `upgrade` appends them to `.env.example`, and to the local settings file (`.dev.vars`, or `.env` with Alchemy) when there is one, as `add` does: no line already there changes. A script today's templates define that no release wrote for your stack is added the same way; one a release wrote that you removed stays removed.
 - `kept`: what `upgrade` won't change for you, each with `status` (`review`, `held`), `reason` and, where efforge can name them, the exact `lines` that would let it apply.
-- `steps`: what to do, in order, ending with the project's gate. The `upgrade` step's `covers` lists what it applies (`effect-overrides`, `package-manager`, `pins`, `scripts`, `seams`, `refresh`, `new`, `remove`, `manifest`, `install`), so an agent knows not to repeat any of it by hand.
+- `steps`: what to do, in order, ending with the project's gate. The `upgrade` step's `covers` lists what it applies (`effect-overrides`, `package-manager`, `pins`, `scripts`, `seams`, `env`, `refresh`, `new`, `remove`, `manifest`, `install`), so an agent knows not to repeat any of it by hand.
 
 `--file <path>` with `--diff` limits the diffs to one file.
 
@@ -948,6 +949,7 @@ npx -y create-efforge upgrade --check --json --cwd my-app
   ],
   "seams": [],
   "scripts": [],
+  "env": [],
   "kept": [],
   "steps": [],
   "warnings": []
@@ -1072,6 +1074,7 @@ npx -y create-efforge upgrade --check --json --cwd my-app
   ],
   "seams": [],
   "scripts": [],
+  "env": [],
   "kept": [],
   "steps": [
     {
@@ -1104,6 +1107,7 @@ npx -y create-efforge upgrade --check --json --cwd my-app
 - `efforgeVersion`: `from` what efforge.jsonc said, `to` what it says now.
 - `status`: `current`, or `needs-action` (exit code `2`) when something only you can fix still breaks the project; `needsAction` lists it.
 - `created`, `changed`, `removed`: the files, relative to the project. `installed`: whether `pnpm install` ran.
+- `env`: the env vars it added, as in `--check`.
 - `kept`: as above. `nextSteps`: the commands left to run, each with its `cwd`, ending with the project's gate.
 - With `--diff`, `diff` is what it changed, as one git diff.
 
@@ -1146,6 +1150,7 @@ npx -y create-efforge upgrade --json --cwd my-app
   ],
   "removed": [],
   "installed": true,
+  "env": [],
   "kept": [],
   "needsAction": [],
   "nextSteps": [
