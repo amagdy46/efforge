@@ -143,9 +143,23 @@ None.
 - `Browser` (`packages/core/src/browser.ts`) opens a page and reports its title, request count and a screenshot; `visit(url)` is the program the dashboard card runs. `BrowserLive` (`apps/web/src/server/browser.ts`) sends the URL to Playwright in the `apps/browser` container (a Node server, `apps/browser/src/server.ts`), bound as `BROWSER` through `BrowserContainer` (`apps/web/src/browser/BrowserContainer.ts`).
 - The container refuses private and local addresses (`apps/browser/src/url-policy.ts`, answered as `UrlRefused`). Keep that policy: the container fetches whatever it is sent, so without it it is a request-forgery proxy into your network.
 - Keep the Dockerfile's Playwright image tag and the `playwright` version in `apps/browser/package.json` in step, and update `apps/browser/package-lock.json` with `npm install --package-lock-only` after a dependency change.
-- Locally the container needs Docker. On a wrangler stack, `pnpm dev` runs no container until `dev.enable_containers` is true in `wrangler.jsonc`; calls then fail with `BrowserUnavailable`. A page that never loads in local dev usually means the container cannot reach the internet: a host firewall that drops traffic from Docker's bridge network to the host blocks it.
 - Test code that opens pages with `BrowserInMemory` from `packages/core/test/browser-in-memory.ts` (see `browser.test.ts`); it needs no container.
-- The dashboard card's server function (`apps/web/src/server/browser-demo.ts`) requires a session when the project has auth; without auth anyone who can reach the app can make the container load pages.
+- The dashboard card's server function is `visitPage` in `apps/web/src/server/browser-demo.ts`.
+- Locally the container needs Docker. A page that never loads in local dev usually means the container cannot reach the internet: a host firewall that drops traffic from Docker's bridge network to the host blocks it.
+
+Only with `infra=none`:
+
+- `pnpm dev` runs no container until `dev.enable_containers` is true in `wrangler.jsonc` (it is false, so `pnpm dev` starts without Docker); until then calls fail with `BrowserUnavailable`.
+
+Only with `infra=alchemy`:
+
+- `pnpm dev` (`alchemy dev`) runs the container with Docker; without Docker running, calls fail with `BrowserUnavailable`.
+
+Only with `auth=none`:
+
+#### Browser without auth
+
+- This project has no auth, so `visitPage` in `apps/web/src/server/browser-demo.ts` is open: anyone who can reach the app can make the container load public pages. Add auth (`efforge add auth/better-auth`, which guards it) or remove the demo before deploying.
 
 ## Limits
 
