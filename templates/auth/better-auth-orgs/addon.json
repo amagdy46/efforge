@@ -303,6 +303,19 @@
   ],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "Everything in Better Auth, plus organizations: each user belongs to one or more, with roles (`owner`, `admin`, `member`), an organization switcher, member management at `/app/settings/members` and invite links. The session carries the active organization, so scope your data by it. With the email add-on, invitations are also emailed.",
+    "service": {
+      "name": "Auth",
+      "file": "packages/core/src/Auth.ts",
+      "errors": [
+        "Unauthorized"
+      ]
+    },
+    "limits": [
+      "`.dev.vars` sets `BETTER_AUTH_URL=http://localhost:5173`. If Vite picks another port, sign-up fails with `INVALID_ORIGIN`; update the variable or free the port."
+    ]
+  },
   "transforms": [
     {
       "name": "addDevVar",

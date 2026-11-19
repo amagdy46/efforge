@@ -67,6 +67,19 @@
   "envVars": [],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "A headless browser you drive from the server. The `Browser` service sends a URL to a Cloudflare Container that runs Playwright (`apps/browser`) and returns the page title and how many requests it made. Use it as the starting point for screenshots, checks or scraping.",
+    "service": {
+      "name": "Browser",
+      "file": "packages/core/src/browser.ts",
+      "errors": [
+        "BrowserError"
+      ]
+    },
+    "limits": [
+      "With `wrangler.jsonc`, `pnpm dev` does not start containers (`dev.enable_containers` is false), so `Browser` calls fail locally. Set it to true to run the image locally; that needs Docker."
+    ]
+  },
   "transforms": [
     {
       "name": "addExport",

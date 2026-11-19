@@ -40,6 +40,12 @@
   "envVars": [],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "SQLite on Cloudflare D1, reached through the `DB` binding. `pnpm db:migrate` applies the migrations to the local D1 database that wrangler keeps for development. The ORM add-on fills the `@repo/db` package it creates.",
+    "limits": [
+      "With `infra=alchemy`, `pnpm db:migrate` still expects a `wrangler.jsonc`."
+    ]
+  },
   "transforms": [
     {
       "name": "addWranglerBinding",

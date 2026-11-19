@@ -67,6 +67,9 @@
   ],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "Postgres for the app's data. On Workers the app connects through a Hyperdrive binding (`HYPERDRIVE`), which pools the connections; in development `docker compose up -d` starts Postgres and wrangler points Hyperdrive at it. It also replaces `apps/web/src/server/runtime.ts` with one that builds the layers for each call, because a Worker must not reuse a Postgres socket across requests. The ORM add-on fills the `@repo/db` package it creates."
+  },
   "transforms": [
     {
       "name": "addWranglerBinding",

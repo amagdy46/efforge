@@ -54,6 +54,16 @@
   "envVars": [],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "WebSocket rooms. Each room is a Durable Object (`Room`) that hibernates while idle. On the server, the `Realtime` service connects clients, broadcasts to a room and counts its connections; in the UI, the `useRoom` hook joins a room.",
+    "service": {
+      "name": "Realtime",
+      "file": "packages/core/src/realtime.ts",
+      "errors": [
+        "RealtimeError"
+      ]
+    }
+  },
   "transforms": [
     {
       "name": "addExport",
