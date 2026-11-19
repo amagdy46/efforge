@@ -48,7 +48,7 @@ The summary before writing, and the `command` field of `efforge.jsonc`, give a n
 npm create efforge my-app -- --yes --database=d1 --orm=effect-sql --auth=better-auth --extras=storage,realtime
 ```
 
-When it finishes, `create` prints the next steps for the stack: `docker compose up -d --wait` for Postgres, `pnpm db:migrate` when there is a database, then `pnpm dev` (with Alchemy, no `db:migrate` on D1). The generated README's "Run it" has the same steps, from the same code, and its other sections (scripts, layout, capabilities, a first deploy for wrangler or Alchemy) are written for the stack too.
+When it finishes, `create` prints the next steps for the stack: `docker compose up -d --wait` for Postgres, `pnpm db:migrate` when there is a database, then `pnpm dev` (with Alchemy, no `db:migrate` on D1). Whether `pnpm db:migrate` is still owed is read from the project, as `doctor`'s `migrations` check reads it: on D1 it is there while the local database lacks a migration file, so `add` says it after an add-on that brings a migration (auth's tables) and after any earlier run that never migrated, and leaves it out when everything is applied. Postgres can't be read without connecting, so there it follows the migration files the run writes. The generated README's "Run it" has the same steps, from the same code, and its other sections (scripts, layout, capabilities, a first deploy for wrangler or Alchemy) are written for the stack too.
 
 Compatibility rules: `orm` is set exactly when `database` is; `auth` needs a database; `d1`, `workflows`, `realtime` and `browser` need the Cloudflare runtime. With `infra=none`, bindings live in `wrangler.jsonc`; with `infra=alchemy`, they live in `infra/alchemy.run.ts` and there is no `wrangler.jsonc`.
 

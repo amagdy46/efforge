@@ -112,18 +112,18 @@ for (const stack of stacks) {
 // it; for extras, the extras each of them had (a project with any of them counts). Wider than
 // exact, so a script a release may have written is never taken for a new one.
 const narrowing = (got: ReadonlyArray<Record<string, unknown>>) => {
-  const out: Record<string, string[]> = {}
+  const only: Record<string, string[]> = {}
   for (const slot of ["database", "orm", "auth", "infra", "ai"]) {
     const all = new Set(stacks.map((s) => String((s as Record<string, unknown>)[slot])))
     const seen = new Set(got.map((s) => String(s[slot])))
-    if (seen.size < all.size) out[slot] = [...seen].toSorted()
+    if (seen.size < all.size) only[slot] = [...seen].toSorted()
   }
   const each = got.map((s) => (s.extras as string[]) ?? [])
   if (each.every((x) => x.length > 0)) {
     const common = each.reduce((a, b) => a.filter((x) => b.includes(x)))
-    out.extras = common.toSorted()
+    only.extras = common.toSorted()
   }
-  return out
+  return only
 }
 
 const sorted = <V>(m: Map<string, V>) => [...m].toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))

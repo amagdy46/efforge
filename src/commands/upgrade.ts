@@ -4,6 +4,7 @@ import { Console, Effect, FileSystem, Path, Schema } from "effect"
 import { Command, Flag } from "effect/cli"
 import pc from "picocolors"
 import { loadAddons } from "../addon.ts"
+import { migrateOwed } from "../migrations.ts"
 import { BIN, type Failure, inDir, Invocation, printSuccess, quote, report } from "../contract.ts"
 import { exec, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
 import { alternative, finish, withFlag } from "../fix.ts"
@@ -480,7 +481,8 @@ export const upgradeCommand = Command.make(
         ...(anything || after.kept.length > 0
           ? [{ command: "pnpm typecheck && pnpm check && pnpm test && pnpm build", cwd: dir }]
           : []),
-        ...(r.files.some((f) => f.status === "new" && /migrations?\//.test(f.path))
+        // read from the local database, as doctor reads it; what this run writes where it can't
+        ...(migrateOwed(dir, r.stack, createdList)
           ? [{ command: "pnpm db:migrate", cwd: dir }]
           : []),
       ]

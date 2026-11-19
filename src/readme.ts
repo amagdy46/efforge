@@ -70,10 +70,16 @@ export const runSteps = (stack: StackConfig): Step[] => {
 export const setupSteps = (stack: StackConfig): Step[] =>
   runSteps(stack).filter((s) => s.longRunning !== true)
 
-/** What to run after `create`: the install when it was skipped, then {@link runSteps}. */
-export const planSteps = (stack: StackConfig, o: { readonly installed: boolean }): Step[] => [
+/**
+ * What to run after `create`: the install when it was skipped, then {@link runSteps}; without
+ * `pnpm db:migrate` when `migrate` is false (src/migrations.ts says whether it is owed).
+ */
+export const planSteps = (
+  stack: StackConfig,
+  o: { readonly installed: boolean; readonly migrate?: boolean },
+): Step[] => [
   ...(o.installed ? [] : [{ command: INSTALL }]),
-  ...runSteps(stack),
+  ...runSteps(stack).filter((s) => o.migrate !== false || s.command !== "pnpm db:migrate"),
 ]
 
 /** `command  # note` lines, the notes aligned. */

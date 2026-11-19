@@ -996,20 +996,24 @@ export const planUpgrade = (
     if (exampleText !== undefined) {
       const have = new Set(exampleText.split("\n").map((l) => l.split("=")[0]?.trim()))
       const missing = envGroups(stack, loaded)
-        .map((g) => ({ ...g, vars: g.vars.filter((v) => !have.has(v.name)) }))
+        .map((g) => ({ id: g.id, title: g.title, vars: g.vars.filter((v) => !have.has(v.name)) }))
         .filter((g) => g.vars.length > 0)
       if (missing.length > 0) {
         changes.set(ENV_EXAMPLE, appendBlock(exampleText, renderGroups(missing)))
         const envFile = localEnvFile(stack)
         const localText = at(envFile)
-        let local = localText
+        let localAfter = localText
         if (localText !== undefined) {
           const toWrite = missing
-            .map((g) => ({ ...g, vars: g.vars.filter((v) => !assigns(localText, v.name)) }))
+            .map((g) => ({
+              id: g.id,
+              title: g.title,
+              vars: g.vars.filter((v) => !assigns(localText, v.name)),
+            }))
             .filter((g) => g.vars.length > 0)
           if (toWrite.length > 0) {
-            local = appendBlock(localText, renderGroups(toWrite))
-            changes.set(envFile, local)
+            localAfter = appendBlock(localText, renderGroups(toWrite))
+            changes.set(envFile, localAfter)
           }
         }
         for (const g of missing)
@@ -1018,7 +1022,7 @@ export const planUpgrade = (
               name: v.name,
               description: v.description,
               file: envFile,
-              set: v.dev !== undefined || assignsValue(local, v.name),
+              set: v.dev !== undefined || assignsValue(localAfter, v.name),
               secret: v.secret === true,
             })
       }

@@ -17,6 +17,7 @@ import {
   typoOf,
 } from "../contract.ts"
 import { ignoredBy, ignoredMessage } from "../ignored.ts"
+import { migrateOwed, migrationFiles } from "../migrations.ts"
 import { COMMIT, exec, FORMAT, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
 import { alternative, finish, fix, intentOf, meantName, withFlag } from "../fix.ts"
 import { generate, matches } from "../generate.ts"
@@ -213,7 +214,10 @@ export const leftBehind = (o: {
   // the setup still owed, then what a finished create would have said
   nextSteps: [
     ...o.remaining.map((command) => ({ command })),
-    ...planSteps(o.stack, { installed: o.installRequested }),
+    ...planSteps(o.stack, {
+      installed: o.installRequested,
+      migrate: migrateOwed(o.dir, o.stack, o.files),
+    }),
   ].map((s) => Object.assign({}, s, { cwd: o.dir })),
   warnings: o.warnings,
 })
@@ -231,6 +235,8 @@ export const nextSteps = (
     readonly dirName: string
     readonly inPlace: boolean
     readonly installed: boolean
+    /** `pnpm db:migrate` is owed (src/migrations.ts); default true. */
+    readonly migrate?: boolean
   },
 ): string => {
   const steps: Step[] = [
@@ -546,12 +552,21 @@ export const create = (opts: CreateOptions) =>
         installed: opts.install,
         git: gitState,
         env,
-        nextSteps: planSteps(stack, { installed: opts.install }).map((s) =>
-          Object.assign({}, s, { cwd: dir }),
-        ),
+        nextSteps: planSteps(stack, {
+          installed: opts.install,
+          migrate: migrateOwed(dir, stack, files),
+        }).map((s) => Object.assign({}, s, { cwd: dir })),
         warnings,
       })
-    yield* io.note(nextSteps(stack, { dirName, inPlace, installed: opts.install }), "Next steps")
+    yield* io.note(
+      nextSteps(stack, {
+        dirName,
+        inPlace,
+        installed: opts.install,
+        migrate: migrateOwed(dir, stack, files),
+      }),
+      "Next steps",
+    )
     yield* io.outro(
       outroLines(`${pc.green("Done")} in ${elapsed(start)}.`, [
         ["Add more later:", `${BIN} list${inPlace ? "" : ` --cwd ${dirName}`}`],
@@ -904,7 +919,10 @@ export const createFailure = (
       const rest = project.remaining
       const steps = [
         ...rest.map((command) => ({ command })),
-        ...planSteps(project.stack, { installed: true }),
+        ...planSteps(project.stack, {
+          installed: true,
+          migrate: migrateOwed(dir, project.stack, migrationFiles(dir)),
+        }),
       ].map((x) => Object.assign({}, x, { cwd: dir }))
       // only the project this command would have made is finished; anything else is a choice
       const same = requested !== undefined && sameStack(project.stack, requested)

@@ -22,6 +22,7 @@ import { Node, SyntaxKind } from "ts-morph"
 import { parseTs } from "./transforms/util.ts"
 import { missingOverrides, pinnedPnpm, planUpgrade, readWorkspace } from "./upgrade.ts"
 import { ignoredBy, ignoredMessage } from "./ignored.ts"
+import { appliedD1, localMigrations } from "./migrations.ts"
 import {
   effectOverrides,
   efforgeVersion,
@@ -101,39 +102,7 @@ export const liveProbe: Probe = {
       socket.once("connect", () => done(true))
       socket.once("error", () => done(false))
     }),
-  appliedD1: (files) => {
-    // node:sqlite prints an ExperimentalWarning on some Node versions; --json allows no stderr
-    const original = Object.getOwnPropertyDescriptor(process, "emitWarning")
-    try {
-      Object.defineProperty(process, "emitWarning", {
-        value: () => {},
-        configurable: true,
-        writable: true,
-      })
-      const { DatabaseSync } = process.getBuiltinModule("node:sqlite")
-      const names: string[] = []
-      for (const file of files) {
-        const db = new DatabaseSync(file, { readOnly: true })
-        try {
-          const table = db
-            .prepare(
-              "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'd1_migrations'",
-            )
-            .get()
-          if (table !== undefined)
-            for (const row of db.prepare("SELECT name FROM d1_migrations").all())
-              names.push(String((row as { name: unknown }).name))
-        } finally {
-          db.close()
-        }
-      }
-      return names
-    } catch {
-      return undefined
-    } finally {
-      if (original !== undefined) Object.defineProperty(process, "emitWarning", original)
-    }
-  },
+  appliedD1,
   dirty: (dir) => {
     const r = spawnText("git", ["status", "--porcelain", "--", "."], dir, 30_000)
     if (r === undefined || r.status !== 0) return undefined
@@ -871,8 +840,6 @@ const bindingsCheck: Check = {
 
 // --- Database -----------------------------------------------------------------------------------
 
-const D1_STATE = ".wrangler/state/v3/d1/miniflare-D1DatabaseObject"
-
 const migrationsCheck: Check = {
   id: "migrations",
   title: "Local migrations",
@@ -880,45 +847,9 @@ const migrationsCheck: Check = {
     Effect.sync(() => {
       const stack = ctx.manifest?.stack
       if (stack === undefined) return skipped("efforge.jsonc isn't valid, so the stack is unknown.")
-      if (stack.database === "none") return skipped("This stack has no database.")
-      if (stack.database === "postgres")
-        return skipped(
-          "Which Postgres migrations are applied can't be read without connecting to the database.",
-        )
-      if (stack.infra === "alchemy")
-        return skipped("Alchemy applies D1 migrations when it runs (pnpm dev).")
-      // drizzle-kit writes one folder per migration; `pnpm db:migrate` numbers them like this
-      const dirOf = (rel: string) => {
-        try {
-          return readdirSync(join(ctx.dir, rel), { withFileTypes: true })
-        } catch {
-          return undefined
-        }
-      }
-      const drizzle = dirOf("packages/db/drizzle")
-      const expected =
-        stack.orm === "drizzle" && drizzle !== undefined
-          ? drizzle
-              .filter(
-                (e) =>
-                  e.isDirectory() &&
-                  existsSync(join(ctx.dir, "packages/db/drizzle", e.name, "migration.sql")),
-              )
-              .map((e) => e.name)
-              .toSorted()
-              .map((d, i) => `${String(i + 1).padStart(4, "0")}_${d.replace(/^\d+_/, "")}.sql`)
-          : (dirOf("packages/db/migrations") ?? [])
-              .filter((e) => e.isFile() && e.name.endsWith(".sql"))
-              .map((e) => e.name)
-              .toSorted()
-      if (expected.length === 0) return skipped("There are no migration files.")
-      const state = dirOf(D1_STATE)
-      const files = (state ?? [])
-        .filter((e) => e.isFile() && e.name.endsWith(".sqlite") && e.name !== "metadata.sqlite")
-        .map((e) => join(ctx.dir, D1_STATE, e.name))
-      const applied = files.length === 0 ? [] : ctx.probe.appliedD1(files)
-      if (applied === undefined) return skipped("The local D1 database couldn't be read.")
-      const pending = expected.filter((m) => !applied.includes(m))
+      const local = localMigrations(ctx.dir, stack, ctx.probe.appliedD1)
+      if (!local.known) return skipped(local.why)
+      const { expected, applied, pending } = local
       if (pending.length === 0)
         return ok(`All ${expected.length} migrations are applied to the local D1 database.`)
       return {

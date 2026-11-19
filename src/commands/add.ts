@@ -62,6 +62,7 @@ import {
   nameOf,
   renderGroups,
 } from "../env.ts"
+import { migrateOwed } from "../migrations.ts"
 import { WRANGLER_FILE } from "../transforms/addWranglerBinding.ts"
 import {
   runTransform,
@@ -1348,10 +1349,14 @@ export const addHandler = (input: {
     // a new database needs its tables before the app (or sign-up) can use it; when the last
     // install never finished, neither did the steps after it, so count the ids already there too
     const touched = [...result.added.map((a) => a.id), ...(owed ? result.skipped : [])]
-    // the same setup steps `create` and the README's "Run it" give for this stack
-    const afterInstall: Step[] = touched.some((id) => id.startsWith("database/"))
-      ? setupSteps(result.stack)
-      : []
+    // the same setup steps `create` and the README's "Run it" give for this stack: the database
+    // when one was added, and `pnpm db:migrate` whenever the local database lacks a migration (an
+    // earlier run that never migrated, or one this add brings), read as doctor reads it
+    const migrate = migrateOwed(dir, result.stack, [...result.created, ...result.written])
+    const newDatabase = touched.some((id) => id.startsWith("database/"))
+    const afterInstall: Step[] = setupSteps(result.stack).filter((s) =>
+      s.command === "pnpm db:migrate" ? migrate : newDatabase,
+    )
     const steps: Step[] = [
       ...(!installs && (owed || !installed || (changes && depsChanged))
         ? [{ command: INSTALL }]

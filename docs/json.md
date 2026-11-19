@@ -69,7 +69,7 @@ The library's `--wizard` is not one of efforge's flags (efforge's own prompts do
 
 `env` lists every env var the project reads: `file` is where the local value lives (`.dev.vars`, or `.env` with Alchemy) and `set` says whether efforge wrote a value there that works locally. When `set` is false (an API key only you have), efforge wrote it empty, in `file` and in `.env.example`, and the feature that reads it fails until it is filled in. `secret` says the value is a secret (a key, a password, a signing secret): the deployed value is set with `wrangler secret put` or the deploy env, and is never printed or committed. A secret can still have a local value (`BETTER_AUTH_SECRET` does: `secret: true`, `set: true`). These two fields mean the same in `create`, `add` and `info`.
 
-`nextSteps` are the commands still to run, in order, each with the directory to run it in (`cwd`). A step with `longRunning: true` (the dev server) doesn't exit on its own: start it in the background or leave it to the user.
+`nextSteps` are the commands still to run, in order, each with the directory to run it in (`cwd`). `pnpm db:migrate` is in them while it is owed: on D1, while the local database lacks a migration (what `doctor`'s `migrations` check reads), in `add`, `upgrade` and an `Interrupted` document too; on Postgres, which can't be read without connecting, when the run writes a migration. A step with `longRunning: true` (the dev server) doesn't exit on its own: start it in the background or leave it to the user.
 
 <!-- example: create -->
 
@@ -283,6 +283,11 @@ npx -y create-efforge add email --json --cwd my-app
     {
       "command": "pnpm install --no-frozen-lockfile",
       "cwd": "/home/me/projects/my-app"
+    },
+    {
+      "command": "pnpm db:migrate",
+      "note": "create the tables in the local D1",
+      "cwd": "/home/me/projects/my-app"
     }
   ],
   "warnings": []
@@ -404,6 +409,11 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
   "nextSteps": [
     {
       "command": "pnpm install --no-frozen-lockfile",
+      "cwd": "/home/me/projects/my-app"
+    },
+    {
+      "command": "pnpm db:migrate",
+      "note": "create the tables in the local D1",
       "cwd": "/home/me/projects/my-app"
     }
   ],
@@ -1158,6 +1168,10 @@ npx -y create-efforge upgrade --json --cwd my-app
   "nextSteps": [
     {
       "command": "pnpm typecheck && pnpm check && pnpm test && pnpm build",
+      "cwd": "/home/me/projects/my-app"
+    },
+    {
+      "command": "pnpm db:migrate",
       "cwd": "/home/me/projects/my-app"
     }
   ],
@@ -2349,6 +2363,11 @@ npx -y create-efforge add ai --json --cwd my-app
     "nextSteps": [
       {
         "command": "pnpm install --no-frozen-lockfile",
+        "cwd": "/home/me/projects/my-app"
+      },
+      {
+        "command": "pnpm db:migrate",
+        "note": "create the tables in the local D1",
         "cwd": "/home/me/projects/my-app"
       }
     ],
