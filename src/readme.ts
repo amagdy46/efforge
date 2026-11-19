@@ -437,8 +437,8 @@ const more = (input: ReadmeInput): string => {
     SUGGESTED.find((e) => !stack.extras.includes(e)) ??
     (stack.infra === "none" ? "infra/alchemy" : undefined)
   return next === undefined
-    ? "Every capability is an add-on, and this project has the ones that add alone. List them all:\n\n```sh\nnpx create-efforge list\n```"
-    : `Every capability is an add-on. List them, then add one:\n\n\`\`\`sh\nnpx create-efforge list\nnpx create-efforge add ${next}\n\`\`\``
+    ? "Every capability is an add-on, and this project has the ones that add alone. List them all:\n\n```sh\nnpx -y create-efforge list\n```"
+    : `Every capability is an add-on. List them, then add one:\n\n\`\`\`sh\nnpx -y create-efforge list\nnpx -y create-efforge add ${next}\n\`\`\``
 }
 
 /** The content of every region for this project. */

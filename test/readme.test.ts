@@ -378,13 +378,13 @@ for (const [name, config, add] of b3)
 it("Add more suggests an add-on the project lacks, and none when it has them all", async () => {
   const more = async (c: StackConfig) =>
     region((await generated(c)).get("README.md") as string, "more")
-  expect(await more(minimal)).toContain("npx create-efforge add email")
+  expect(await more(minimal)).toContain("npx -y create-efforge add email")
   const withEmail = await more({ ...pg, extras: ["email"] })
   expect(withEmail).not.toContain("add email")
-  expect(withEmail).toContain("npx create-efforge add storage")
+  expect(withEmail).toContain("npx -y create-efforge add storage")
   const all = await more(house)
-  expect(all).toContain("npx create-efforge list")
-  expect(all).not.toContain("npx create-efforge add")
+  expect(all).toContain("npx -y create-efforge list")
+  expect(all).not.toContain("npx -y create-efforge add")
 })
 
 // W2-D review S3, S4: AGENTS.md sections follow the stack in a fixed order, stale ones go

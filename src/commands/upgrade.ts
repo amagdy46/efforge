@@ -594,19 +594,19 @@ export const upgradeCommand = Command.make(
   ),
   Command.withExamples([
     {
-      command: "npx create-efforge upgrade --check",
+      command: "npx -y create-efforge upgrade --check",
       description: "What differs, what breaks, and what to do",
     },
     {
-      command: "npx create-efforge upgrade --dry-run",
+      command: "npx -y create-efforge upgrade --dry-run",
       description: "What upgrade would change; write nothing",
     },
     {
-      command: "npx create-efforge upgrade",
+      command: "npx -y create-efforge upgrade",
       description: "Apply it: pins, guards and the files that are still efforge's",
     },
     {
-      command: "npx create-efforge upgrade --check --json",
+      command: "npx -y create-efforge upgrade --check --json",
       description: "The report as data; exit code 2 when something breaks the project",
     },
   ]),

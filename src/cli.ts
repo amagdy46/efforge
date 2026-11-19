@@ -28,29 +28,32 @@ export const root = Command.make("create-efforge", createConfig, createHandler).
   ]),
   Command.withExamples([
     {
-      command: "npm create efforge my-app",
-      description: "Answer a few questions, then create ./my-app",
+      command: "npx -y create-efforge my-app",
+      description: "Answer a few questions at a terminal, then create ./my-app",
     },
     {
-      command: "npm create efforge my-app -- --yes --database=d1 --orm=effect-sql",
+      command: "npx -y create-efforge my-app --yes --database=d1 --orm=effect-sql",
       description: "No questions: flags, defaults for the rest",
     },
     {
-      command: "npm create efforge . -- --yes",
+      command: "npx -y create-efforge . --yes",
       description: "Create in the current (empty) directory",
     },
-    { command: "npx create-efforge list", description: "See every add-on" },
+    { command: "npx -y create-efforge list", description: "See every add-on" },
     {
-      command: "npx create-efforge add email storage",
+      command: "npx -y create-efforge add email storage",
       description: "Add add-ons to an existing project",
     },
-    { command: "npx create-efforge info email", description: "What one add-on adds and needs" },
-    { command: "npx create-efforge graph", description: "The project's layer graph, as Mermaid" },
+    { command: "npx -y create-efforge info email", description: "What one add-on adds and needs" },
     {
-      command: "npx create-efforge upgrade --check",
+      command: "npx -y create-efforge graph",
+      description: "The project's layer graph, as Mermaid",
+    },
+    {
+      command: "npx -y create-efforge upgrade --check",
       description: "See how a project differs from this efforge, and what to do",
     },
-    { command: "npx create-efforge doctor", description: "See what is wrong with a checkout" },
+    { command: "npx -y create-efforge doctor", description: "See what is wrong with a checkout" },
   ]),
 )
 

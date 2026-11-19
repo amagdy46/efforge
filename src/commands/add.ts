@@ -1554,13 +1554,13 @@ const addInterrupted = (
 export const addCommand = Command.make("add", addConfig, addHandler).pipe(
   Command.withDescription("Add an add-on to an existing efforge project"),
   Command.withExamples([
-    { command: "npx create-efforge add email", description: "Add the email add-on" },
+    { command: "npx -y create-efforge add email", description: "Add the email add-on" },
     {
-      command: "npx create-efforge add ai/effect-ai-byok extras/storage --dry-run",
+      command: "npx -y create-efforge add ai/effect-ai-byok extras/storage --dry-run",
       description: "Show what would change; write nothing",
     },
     {
-      command: "npx create-efforge add database/d1 orm/effect-sql auth/better-auth",
+      command: "npx -y create-efforge add database/d1 orm/effect-sql auth/better-auth",
       description: "Add a database, an ORM and auth together",
     },
   ]),

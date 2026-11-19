@@ -82,7 +82,7 @@ export const nextAdd = (stack: Stack): string => {
   const missing = suggestions.find((id) =>
     id.startsWith("ai/") ? stack.ai === "none" : !stack.extras.includes(id),
   )
-  return missing === undefined ? "npx create-efforge list" : `npx create-efforge add ${missing}`
+  return missing === undefined ? "npx -y create-efforge list" : `npx -y create-efforge add ${missing}`
 }
 
 /** One plain sentence on what the project is made of. */
