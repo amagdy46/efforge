@@ -12,8 +12,9 @@
 
 Use `pnpm run deploy`: plain `pnpm deploy` is pnpm's own workspace command.
 
-Copy `.env.example` to `.env` for local values. Deploying needs `CLOUDFLARE_API_TOKEN` and
-`CLOUDFLARE_ACCOUNT_ID` (and `DATABASE_URL` for Postgres) in the environment.
+`pnpm dev` reads local values from `.env` (gitignored), which efforge writes; in a fresh clone,
+`cp .env.example .env` and fill in any value marked "Fill in". Deploying needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (and `DATABASE_URL` for
+Postgres) in the environment, or in a file passed with `--env-file .env.production`.
 
 ## CI
 

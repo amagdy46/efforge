@@ -5,6 +5,10 @@ import { addonIdsFor } from "./addon.ts"
 import { presentCardTransforms } from "./cards.ts"
 import { hash, manifestSchemaUrl, renderManifest } from "./manifest.ts"
 import { applyProjectName } from "./projectName.ts"
+import { syncAgents } from "./agents.ts"
+import { ENV_EXAMPLE, envExample, envGroups, localEnv, localEnvFile } from "./env.ts"
+import { AGENTS_FILE } from "./transforms/appendAgentsSection.ts"
+import { fillReadme, README_FILE, readmeRegions } from "./readme.ts"
 import { SlotId, type StackConfig, toCommand } from "./stack.ts"
 import {
   runTransform,
@@ -53,12 +57,29 @@ const json = (value: unknown): string => {
 const sortKeys = (o: Record<string, string>): Record<string, string> =>
   Object.fromEntries(Object.entries(o).toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
 
-const computedNames = new Set(["pnpm-workspace.yaml", ".env.example", "efforge.jsonc"])
+// .dev.vars and .env are gitignored local settings, never hashed
+const computedNames = new Set([
+  "pnpm-workspace.yaml",
+  ".env.example",
+  "efforge.jsonc",
+  ".dev.vars",
+  ".env",
+])
 export const isComputed = (target: string) =>
   computedNames.has(target) || target === "package.json" || target.endsWith("/package.json")
 
 /** Packages of the generated monorepo (`@repo/*`) link via `workspace:*`; they have no pinned version. */
 const isWorkspace = (name: string) => name.startsWith("@repo/")
+
+/** The `scripts` of a package.json, or none when it is missing or not JSON. */
+export const rootScripts = (text: string | undefined): Record<string, string> => {
+  try {
+    const pkg = JSON.parse(text ?? "{}") as { scripts?: Record<string, string> }
+    return pkg.scripts ?? {}
+  } catch {
+    return {}
+  }
+}
 
 const DEFAULT_PACKAGES = ["apps/*", "packages/*"]
 
@@ -78,8 +99,6 @@ export const generate = (
     const overlay = new Set<string>()
     const seams = new Set<string>()
     const used = new Set<string>()
-    const env = new Map<string, { title: string; vars: string[] }>()
-    const seenEnv = new Set<string>()
 
     const loaded: LoadedAddon[] = []
     for (const id of addonIdsFor(config)) {
@@ -172,15 +191,6 @@ export const generate = (
             ...scripts,
           }
         })
-
-      for (const v of manifest.envVars) {
-        if (!matches(v.when, config)) continue
-        if (seenEnv.has(v.name)) continue
-        seenEnv.add(v.name)
-        const group = env.get(manifest.id) ?? { title: manifest.title, vars: [] }
-        group.vars.push(`${v.name}=${v.example}`)
-        env.set(manifest.id, group)
-      }
     }
 
     // 3. every transform, in add-on order; an add-on's card transforms (its own, the session guard,
@@ -200,6 +210,31 @@ export const generate = (
     // final (named) content and `add` sees an unedited README/wrangler.jsonc as unchanged.
     const out = new Map(applyProjectName(tree, config.name))
 
+    // AGENTS.md's sections, in the add-ons' order, as `add` keeps them
+    const agents = out.get(AGENTS_FILE)
+    if (agents !== undefined) {
+      const synced = syncAgents(agents, config, addons)
+      if (synced.kind === "synced") out.set(AGENTS_FILE, synced.text)
+    }
+
+    // the README's marked regions describe the final stack; `add` rewrites them, so the README is a
+    // seam, never hash-checked
+    const readme = out.get(README_FILE)
+    if (readme !== undefined) {
+      const filled = fillReadme(
+        readme,
+        readmeRegions({
+          stack: config,
+          addons,
+          scripts: rootScripts(out.get("package.json")),
+        }),
+      )
+      if (filled.kind === "filled") {
+        out.set(README_FILE, filled.text)
+        seams.add(README_FILE)
+      }
+    }
+
     // keep the template's other keys and comments (e.g. `allowBuilds`); `catalog` is always
     // computed, and `overrides` always holds every Effect package at the `effect` pin
     const workspace = parseDocument(out.get("pnpm-workspace.yaml") ?? "")
@@ -210,11 +245,12 @@ export const generate = (
     workspace.set("catalog", catalog)
     out.set("pnpm-workspace.yaml", workspace.toString())
 
-    if (env.size > 0)
-      out.set(
-        ".env.example",
-        `${[...env.values()].map((g) => `# ${g.title}\n${g.vars.join("\n")}`).join("\n\n")}\n`,
-      )
+    // local settings: .env.example (committed) and the file `pnpm dev` reads, with the same values
+    const groups = envGroups(config, addons)
+    if (groups.length > 0) {
+      out.set(ENV_EXAMPLE, envExample(config, groups))
+      out.set(localEnvFile(config), localEnv(groups))
+    }
 
     const files = Object.fromEntries(
       [...overlay]

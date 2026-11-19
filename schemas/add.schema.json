@@ -119,7 +119,19 @@
             "type": "string"
           },
           "docs": {
-            "type": "string"
+            "type": "string",
+            "description": "Its page in efforge's docs."
+          },
+          "card": {
+            "type": "string",
+            "description": "Its dashboard card module, when the project has one."
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Headings of the AGENTS.md sections this run added for it."
           }
         },
         "required": [

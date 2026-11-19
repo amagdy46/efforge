@@ -33,6 +33,9 @@ import { recordingSpawner } from "./recordingSpawner.ts"
 // second run has nothing to apply), and it never undoes the owner's work.
 
 const fixture = new URL("fixtures/v0.2.0/d1-effect-sql-auth", import.meta.url).pathname
+// each test renders a project and plans an upgrade; under a full parallel run that takes a while
+vi.setConfig({ testTimeout: 60_000 })
+
 const roots: string[] = []
 afterEach(() => {
   for (const r of roots.splice(0)) rmSync(r, { recursive: true, force: true })

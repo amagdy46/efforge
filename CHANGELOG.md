@@ -30,6 +30,10 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - An add-on file can be `ifAbsent`: written only where the project has no such file. Auth uses it for the app shell and the project name, so adding auth to a renamed app keeps the name.
 - Each capability with a card ships a test that swaps in a test layer and checks a tagged error, replacing the placeholder test. The generated `AGENTS.md` shows the pattern.
 - Generated projects have `engines` in their root `package.json` and an `.nvmrc`.
+- The generated `README.md` is written for the stack: what the project has, how to run it, a scripts table that matches `package.json`, the layout, each capability's service, layer, env vars and card, a first deploy with wrangler or Alchemy, and an add-on the project doesn't have yet. `efforge add` rewrites the text between its `efforge:readme` markers and leaves everything else alone; a README without markers is not touched, and `add` says so in one line.
+- The generated `AGENTS.md` has sections for Alchemy, both ORMs, Postgres and D1. Every section is written from the stack: `add` keeps them in the add-ons' order and removes one that no longer holds, such as the `wrangler.jsonc` line once Alchemy declares the Worker.
+- `add` says, for each new add-on, where its card is, which `AGENTS.md` sections it added and where its docs page is; under `--json` these are `card`, `agents` and `docs` in each `added` entry.
+- A marker counts only on a line of its own, and each region needs one opening and one closing marker, in order, not nested. When a README or `AGENTS.md` breaks that, `add` leaves the whole file as it is and names the marker, in text and in `notes`. A seeded property test with random user text and random marker damage holds this ([ADR 0010](docs/decisions/0010-generated-docs-regions.md)).
 - `efforge upgrade --check` says how a project differs from what this efforge generates for its stack, and changes nothing: every pin against efforge's (behind, ahead, same, or not efforge's), grouped into the sets that move together so nobody bumps half of one; the Effect version guard and the `packageManager` that honours it; each generated file as current, safe to refresh, needing review (you and the template both changed it), yours, new, or differing where efforge edits it in place; missing seams and scripts. Then the steps, in order, each a command or the exact lines, ending with the project's gate. `--diff` shows each file against today's template, and `--patch` prints the changes that keep your edits as one patch for `git apply`. Exit code 2 when it finds something to do, so CI can gate on it.
 - `efforge doctor` checks a checkout and says what is wrong, each finding with the reason and the command that fixes it: Node and pnpm, whether `node_modules` matches, exactly one Effect version installed (the 0.2.0 build failure in one line), peers, env vars (never their values), bindings, local D1 migrations, the local Postgres, `efforge.jsonc` and the layers. It changes nothing and uses the network only with `--online`. Exit code 2 when a check fails.
 - `--json` covers both: `upgrade` and `doctor` documents with schemas in `schemas/`, the `UpgradeNeedsCheck` error, and exit code 2 for a check that found something (the document has `ok: true`). The skill and `llms.txt` tell agents to check their own work with `doctor --json`.
@@ -69,6 +73,10 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - `RealtimeError` has a message.
 - `add --json` reports a skipped card in `notes`.
 - `efforge add realtime` no longer rewrites a 0.2.x project's dashboard to show the widgets: the widgets are gone, and such a project has no card registry, so an add-on comes without its card and a note says so.
+- With Alchemy, local settings are written to `.env`, the file `alchemy dev` reads, at `create` and at every `add`; `add infra/alchemy` moves what `.dev.vars` held there. No step copies one settings file to another.
+- `.env.example` has a value that works locally for every variable, and an empty one marked "Fill in" for a real secret, so a fresh clone runs after `cp .env.example .dev.vars` (`.env` with Alchemy) and filling in the named secrets.
+- The README's "Run it", `create`'s next steps and `nextSteps` under `--json` come from one function, and depend only on the stack in `efforge.jsonc`, never on which untracked files exist.
+- Alchemy with Postgres: `DATABASE_URL` has no default keyed on the stage name, and `pnpm dev` turns TLS off only for a database on this machine (`localhost`, `127.0.0.1`, `::1`).
 
 ### Fixed
 
@@ -87,6 +95,9 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - Sign-up no longer fails with `INVALID_ORIGIN` when Vite picks a port other than 5173: under `pnpm dev`, Better Auth takes the origin from each request on a local host while `BETTER_AUTH_URL` is unset. A set `BETTER_AUTH_URL` always wins, and sign-in from a host that is not allowed gets a 403 that says what to set, not a 500.
 - `efforge.jsonc` with a comment no longer breaks the landing page.
 - On Alchemy stacks the landing page no longer says the app is configured in `wrangler.jsonc`.
+- `pnpm db:generate` no longer fails on a new Postgres + Drizzle project ("snapshot.json is not of the latest version"): the committed snapshots are the version the pinned drizzle-kit reads, and CI runs `pnpm db:generate` on every Drizzle stack.
+- `pnpm run deploy` deploys the built Worker config; wrangler refused the config in `apps/web`.
+- `pnpm db:migrate --remote` on D1 no longer passes `--local` too, which wrangler refuses. On Alchemy, D1 + Drizzle's `pnpm db:migrate` says why it doesn't apply and leaves no `packages/db/migrations/` behind.
 
 ## 0.2.1 (2026-11-18)
 

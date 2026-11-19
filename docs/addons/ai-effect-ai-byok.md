@@ -88,12 +88,6 @@ Your code asks for `Llm`, declared in `packages/core/src/llm.ts`. It has one mem
 
 - Adds `{ to: "/app/settings/ai", label: "AI" }` to `tabs`. Only with `auth=better-auth-orgs`.
 
-### `.dev.vars`
-
-- Sets `LLM_ENCRYPTION_KEY=ZGV2LW9ubHktbGxtLWtleS1yZXBsYWNlLW1lLTMyISE=` for local development. Only with `auth=better-auth-orgs`.
-- Sets `LLM_PROVIDER=anthropic` for local development. Only with `auth=none` or `auth=better-auth`.
-- Sets `LLM_MODEL=claude-sonnet-5-5` for local development. Only with `auth=none` or `auth=better-auth`.
-
 ### `infra/alchemy.run.ts`
 
 - Imports `* as Config` from `effect/Config`. Only with `infra=alchemy`.
@@ -125,7 +119,11 @@ Your code asks for `Llm`, declared in `packages/core/src/llm.ts`. It has one mem
 
 ### `.env.example`
 
-- Adds the environment variables listed below.
+- Adds the environment variables listed below, each with its local value, or empty where it needs a real secret.
+
+### `.dev.vars`
+
+- Adds the same lines: `pnpm dev` reads them from here (gitignored). With Alchemy the file is `.env`.
 
 ### `efforge.jsonc`
 
@@ -141,11 +139,11 @@ Your code asks for `Llm`, declared in `packages/core/src/llm.ts`. It has one mem
 
 ## Environment variables
 
-- `LLM_ENCRYPTION_KEY`, for example `openssl rand -base64 32`: AES-GCM key (32 random bytes, base64) that encrypts each organization's saved API key; the app refuses to start without a valid one. Only with `auth=better-auth-orgs`.
-- `LLM_PROVIDER`, for example `anthropic`: anthropic | openai | openrouter | ollama. Only with `auth=none` or `auth=better-auth`.
-- `LLM_MODEL`, for example `claude-sonnet-5-5`: Model id for the provider. Only with `auth=none` or `auth=better-auth`.
-- `LLM_API_KEY`, for example `sk-...`: Provider API key (not needed for a local Ollama); a Worker secret in production. Only with `auth=none` or `auth=better-auth`.
-- `LLM_BASE_URL`: Optional OpenAI-compatible endpoint (openai, ollama). Only with `auth=none` or `auth=better-auth`.
+- `LLM_ENCRYPTION_KEY`, for example `openssl rand -base64 32`: AES-GCM key (32 random bytes, base64) that encrypts each organization's saved API key; the app refuses to start without a valid one. Locally `ZGV2LW9ubHktbGxtLWtleS1yZXBsYWNlLW1lLTMyISE=`. Only with `auth=better-auth-orgs`.
+- `LLM_PROVIDER`, for example `anthropic`: anthropic | openai | openrouter | ollama. Locally `anthropic`. Only with `auth=none` or `auth=better-auth`.
+- `LLM_MODEL`, for example `claude-sonnet-5-5`: Model id for the provider. Locally `claude-sonnet-5-5`. Only with `auth=none` or `auth=better-auth`.
+- `LLM_API_KEY`, for example `sk-...`: Provider API key (not needed for a local Ollama); a Worker secret in production. No local value: fill it in. Only with `auth=none` or `auth=better-auth`.
+- `LLM_BASE_URL`: Optional OpenAI-compatible endpoint (openai, ollama). Empty locally. Only with `auth=none` or `auth=better-auth`.
 
 ## Package scripts
 

@@ -1,14 +1,16 @@
 import { Effect } from "effect"
+import { syncSections } from "../regions.ts"
 import { missing, req, type Transform, withFile } from "./util.ts"
 
 export const AGENTS_FILE = "AGENTS.md"
 const FILE = AGENTS_FILE
-const END = "<!-- efforge:agents -->"
 
 /**
- * args: `{ id, content }` — inserts `content` (markdown, usually a `##` section) before the
- * `<!-- efforge:agents -->` footer of the root AGENTS.md, behind an `<!-- efforge:section:id -->`
- * marker. A section whose marker is already present is left alone, so repeated runs are identical.
+ * args: `{ id, content }` — writes `content` (markdown, usually a `##` section) between
+ * `<!-- efforge:section:id -->` and `<!-- /efforge:section:id -->` in the root AGENTS.md: a new
+ * section goes before the `<!-- efforge:agents -->` footer, an existing one gets this content. An
+ * AGENTS.md whose markers are broken is left alone (`add` says so). `syncAgents` then puts every
+ * section of the stack in order.
  */
 export const appendAgentsSection: Transform = (tree, args) =>
   Effect.gen(function* () {
@@ -17,17 +19,10 @@ export const appendAgentsSection: Transform = (tree, args) =>
     const text = tree.get(FILE)
     if (text === undefined)
       return yield* missing(FILE, "file", `Create ${FILE} and add the section:\n${content}`)
-
-    const marker = `<!-- efforge:section:${id} -->`
-    if (text.includes(marker)) return tree
-    // the formatter wants a blank line after an HTML comment block
-    const section = `${marker}\n\n${content}\n\n`
-    const at = text.lastIndexOf(END)
-    return withFile(
-      tree,
-      FILE,
-      at === -1
-        ? `${text}${text.endsWith("\n") ? "" : "\n"}\n${section.trimEnd()}\n`
-        : `${text.slice(0, at)}${section}${text.slice(at)}`,
-    )
+    const synced = syncSections(text, "efforge:section", [{ id, content }], {
+      footer: "<!-- efforge:agents -->",
+      owned: () => false,
+    })
+    if (synced.kind !== "synced" || synced.text === text) return tree
+    return withFile(tree, FILE, synced.text)
   })

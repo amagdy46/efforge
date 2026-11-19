@@ -51,6 +51,11 @@ None: this add-on adds no service of its own.
 
 - Adds the dependencies listed below.
 
+### `package.json`
+
+- Adds the dependencies listed below.
+- Sets the script `deploy`; a script of the same name is replaced.
+
 ### `pnpm-workspace.yaml`
 
 - Pins the new dependencies in the `catalog`.
@@ -64,6 +69,7 @@ None: this add-on adds no service of its own.
 | Package | Version | Workspace |
 | --- | --- | --- |
 | `effect-cf` | `0.59.0` | `apps/web` |
+| `wrangler` | `4.164.0` | `.` (dev) |
 | `@cloudflare/vite-plugin` | `1.70.0` | `apps/web` (dev) |
 | `@cloudflare/workers-types` | `5.20261118.1` | `apps/web` (dev) |
 | `wrangler` | `4.164.0` | `apps/web` (dev) |
@@ -74,7 +80,7 @@ None.
 
 ## Package scripts
 
-None.
+- `deploy` in `package.json`: `pnpm --filter web run deploy`
 
 ## Rules it adds to AGENTS.md
 

@@ -356,8 +356,6 @@ const activeTransforms = (
 ): TransformCall[] =>
   [...manifest.transforms, ...presentCardTransforms(manifest, has)]
     .filter((t) => matches((t as { when?: never }).when, stack))
-    // .dev.vars is local and gitignored: whether it has a value is `doctor`'s question
-    .filter((t) => t.name !== "addDevVar")
 
 /** What a transform adds, for people: `section auth-secret`. */
 const describe = (t: TransformCall): string => {

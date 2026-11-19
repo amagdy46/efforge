@@ -2,6 +2,7 @@
   "id": "extras/browser",
   "title": "Browser",
   "description": "A headless browser: a Browser service on a Cloudflare Container that runs Playwright (apps/browser).",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-browser.md",
   "files": [
     {
       "path": "files/core-browser.ts",

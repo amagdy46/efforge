@@ -88,10 +88,6 @@ Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`. It has one m
 
 `efforge add` makes these edits with AST transforms (changes to the parsed code, not to its text), so it changes only what is listed and leaves the rest of each file alone.
 
-### `.dev.vars`
-
-- Sets `BETTER_AUTH_SECRET=dev-only-secret-replace-me-with-openssl-rand-base64-32` for local development.
-
 ### `packages/core/src/index.ts`
 
 - Re-exports everything from `./Auth`.
@@ -141,7 +137,11 @@ Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`. It has one m
 
 ### `.env.example`
 
-- Adds the environment variables listed below.
+- Adds the environment variables listed below, each with its local value, or empty where it needs a real secret.
+
+### `.dev.vars`
+
+- Adds the same lines: `pnpm dev` reads them from here (gitignored). With Alchemy the file is `.env`.
 
 ### `efforge.jsonc`
 
@@ -155,8 +155,8 @@ Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`. It has one m
 
 ## Environment variables
 
-- `BETTER_AUTH_SECRET`, for example `change-me-to-a-long-random-string`: Signs sessions and cookies (local: .dev.vars; production: wrangler secret put BETTER_AUTH_SECRET).
-- `BETTER_AUTH_URL`, for example `https://app.example.com`: Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port).
+- `BETTER_AUTH_SECRET`, for example `change-me-to-a-long-random-string`: Signs sessions and cookies (production: a Worker secret, `wrangler secret put BETTER_AUTH_SECRET` or the deploy env with Alchemy). Locally `dev-only-secret-replace-me-with-openssl-rand-base64-32`.
+- `BETTER_AUTH_URL`, for example `https://app.example.com`: Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port). Empty locally.
 
 ## Package scripts
 
@@ -188,4 +188,4 @@ Only with `infra=alchemy`:
 
 ## Limits
 
-- `.dev.vars` sets `BETTER_AUTH_URL=http://localhost:5173`. If Vite picks another port, sign-up fails with `INVALID_ORIGIN`; update the variable or free the port.
+- Under `pnpm dev`, sign-in works from `localhost` and `127.0.0.1` on any port. From another host (a LAN address, a tunnel), set `BETTER_AUTH_URL` to that origin.

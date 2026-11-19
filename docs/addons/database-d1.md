@@ -110,25 +110,17 @@ None.
 
 ## Rules it adds to AGENTS.md
 
-Only with `orm=drizzle`:
+### Database (Cloudflare D1)
 
-### Database
+- The Worker reaches D1 only through the `DB` binding (`packages/db/src/layer.ts`, through effect-cf). D1 is SQLite: write SQLite SQL, and keep each query small (a Worker request has a time limit).
 
-Cloudflare D1, queried through Drizzle.
+Only with `infra=none`:
 
-- Tables live in `packages/db/src/schema.ts`; queries go through the `Database` service from `@repo/core`.
-- Change the schema, then run `pnpm --filter @repo/db db:generate` to write a migration to `packages/db/drizzle/`, then `pnpm db:migrate` (flattens them into `packages/db/migrations/` and applies them locally).
-- Never edit files under `packages/db/drizzle/` or `packages/db/migrations/` by hand; they are generated.
+- `DB` is declared under `d1_databases` in `wrangler.jsonc`. `pnpm db:migrate` applies `packages/db/migrations/` to the local D1 in `.wrangler/state` (shared with `pnpm dev`; delete it to start empty), and `pnpm db:migrate --remote` to the deployed one.
 
-Only with `orm=effect-sql`:
+Only with `infra=alchemy`:
 
-### Database
-
-Cloudflare D1, queried through effect-sql.
-
-- Migrations are plain SQL files in `packages/db/migrations/`, named `NNNN_name.sql` and applied in order by `pnpm db:migrate` (wrangler, local D1).
-- Add a new file for every schema change; never edit one that has already been applied.
-- Queries go through the `Database` service from `@repo/core`.
+- `infra/alchemy.run.ts` declares the D1 database. `pnpm dev` applies the migrations to a local D1 under `.alchemy/`, and `pnpm run deploy` to the stage's database; `pnpm db:migrate` is not used with Alchemy.
 
 ## Limits
 

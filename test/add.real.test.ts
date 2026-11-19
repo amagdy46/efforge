@@ -83,9 +83,6 @@ for (const [id, change] of cases) {
     expect([...actual.keys()].toSorted()).toEqual([...expected.keys()].toSorted())
     for (const [file, content] of expected) {
       if (file === "efforge.jsonc") continue
-      // AGENTS.md sections are written once (marker per id), so wording that depends on infra
-      // keeps the text of the stack it was first generated for.
-      if (file === "AGENTS.md" && id === "infra/alchemy") continue
       expect(actual.get(file), file).toBe(content)
     }
 

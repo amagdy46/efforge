@@ -68,6 +68,10 @@ Your code asks for `Database`, declared in `packages/core/src/Database.ts`. It h
 - Imports `WorkerEnvLive` from `./cloudflare`.
 - Adds `DatabaseLayer.pipe(Layer.provide(WorkerEnvLive))` to `AppLayer`, imported from `@repo/db`.
 
+### `AGENTS.md`
+
+- Adds the rules under [Rules it adds to AGENTS.md](#rules-it-adds-to-agentsmd).
+
 ### `apps/web/src/server/notes.ts`
 
 - Runs `requireSession` before every server function in the file. Only with `auth=better-auth-orgs` or `auth=better-auth`.
@@ -104,7 +108,28 @@ None.
 
 ## Rules it adds to AGENTS.md
 
-None.
+### Queries and migrations (Effect SQL)
+
+- `Database` (`packages/core/src/Database.ts`) holds an Effect SQL client: queries are tagged templates (`` sql`SELECT ...` ``) whose values are always parameters. `DatabaseLayer` (`packages/db/src/layer.ts`) provides it and the repositories built on it, such as `NotesLive` (`packages/db/src/notes.ts`, for the `Notes` service in `packages/core`). Add a repository the same way and merge it into `DatabaseLayer`.
+- Map a query's failure to the service's tagged error (`Effect.mapError(notesUnavailable)`), so callers get a typed error rather than a `SqlError`.
+- Migrations are plain SQL files in `packages/db/migrations/`, named `NNNN_name.sql` and applied in order. Add a new file for every schema change; never edit, rename or delete one that has been applied anywhere.
+- Test logic against a test layer, not a database: a program that needs `Notes` gets an in-memory `Notes` layer in `packages/core/test/notes.test.ts`; do the same for a repository you add. Check the queries themselves under `pnpm dev`.
+
+Only with `database=postgres`:
+
+- `pnpm db:migrate` applies the new files.
+
+Only with `database=d1` and `infra=none`:
+
+- `pnpm db:migrate` applies the new files.
+
+Only with `database=d1` and `infra=alchemy`:
+
+- The next `pnpm dev` applies the new files to the local D1 and `pnpm run deploy` to the stage's; `pnpm db:migrate` is not used with Alchemy.
+
+Only with `database=postgres`:
+
+- The Postgres runner sends one statement per `;` (outside `$$` bodies): keep string literals in migrations free of `;`.
 
 ## Limits
 

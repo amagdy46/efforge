@@ -87,7 +87,11 @@ None: this add-on adds no service of its own.
 
 ### `.env.example`
 
-- Adds the environment variables listed below.
+- Adds the environment variables listed below, each with its local value, or empty where it needs a real secret.
+
+### `.dev.vars`
+
+- Adds the same lines: `pnpm dev` reads them from here (gitignored). With Alchemy the file is `.env`.
 
 ### `efforge.jsonc`
 
@@ -112,7 +116,7 @@ None: this add-on adds no service of its own.
 
 ## Environment variables
 
-- `DATABASE_URL`, for example `postgres://postgres:postgres@localhost:5432/app`: Used by `pnpm db:migrate` and drizzle-kit, read from the shell; unset, they use the docker-compose database. The running app connects through the HYPERDRIVE binding.
+- `DATABASE_URL`, for example `postgres://postgres:postgres@localhost:5432/app`: Used by `pnpm db:migrate` and drizzle-kit, read from the shell; unset, they use the docker-compose database. The running app connects through the HYPERDRIVE binding. Locally `postgres://postgres:postgres@localhost:5432/app`.
 
 ## Package scripts
 
@@ -120,27 +124,19 @@ None: this add-on adds no service of its own.
 
 ## Rules it adds to AGENTS.md
 
-Only with `orm=drizzle`:
+### Database (Postgres)
 
-### Database
+- Locally, `docker compose up -d --wait` starts Postgres on port 5432 (`docker-compose.yml`), and `pnpm db:migrate` applies the migrations to `DATABASE_URL`, which defaults to that database.
+- The Worker reaches Postgres only through the `HYPERDRIVE` binding (`packages/db/src/layer.ts`, through effect-cf). `DATABASE_URL` is for migrations and drizzle-kit; app code never reads it.
+- Migrate production before you deploy code that needs the change: `DATABASE_URL=<production url> pnpm db:migrate`. The README's Deploy section has the first deploy.
 
-Postgres (through Hyperdrive in production), queried through Drizzle.
+Only with `infra=none`:
 
-- Tables live in `packages/db/src/schema.ts`; queries go through the `Database` service from `@repo/core`.
-- Change the schema, then run `pnpm --filter @repo/db db:generate` to write a migration to `packages/db/drizzle/`, then `pnpm db:migrate`.
-- Never edit files under `packages/db/drizzle/` by hand; they are generated.
-- Start the local database with `docker compose up -d`.
+- `HYPERDRIVE` is declared in `wrangler.jsonc`: `pnpm dev` connects to its `localConnectionString`, production to the Hyperdrive config named by its `id`.
 
-Only with `orm=effect-sql`:
+Only with `infra=alchemy`:
 
-### Database
-
-Postgres (through Hyperdrive in production), queried through effect-sql.
-
-- Migrations are plain SQL files in `packages/db/migrations/`, named `NNNN_name.sql` and applied in order by `pnpm db:migrate`.
-- Add a new file for every schema change; never edit one that has already been applied.
-- Put one statement per `;` and keep string literals free of `;` (the runner splits on it).
-- Queries go through the `Database` service from `@repo/core`. Start the local database with `docker compose up -d`.
+- `infra/alchemy.run.ts` creates the Hyperdrive config from `DATABASE_URL`: under `pnpm dev` the one in `.env` (the docker-compose database), and every deployed stage must set it. `pnpm dev` connects without TLS only to a database on this machine (`localhost`, `127.0.0.1`, `::1`).
 
 ## Limits
 

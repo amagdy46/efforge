@@ -30,6 +30,9 @@ import { recordingSpawner } from "./recordingSpawner.ts"
 // Each doctor check, proven with a project broken in exactly that way. The outside world (Node,
 // pnpm, peers, the database port) is a stub; the files are real, as `create --no-install` writes them.
 
+// each test renders a project and plans an upgrade; under a full parallel run that takes a while
+vi.setConfig({ testTimeout: 60_000 })
+
 const roots: string[] = []
 afterEach(() => {
   for (const r of roots.splice(0)) rmSync(r, { recursive: true, force: true })
@@ -291,8 +294,9 @@ it("env: no .dev.vars at all fails, and the fix writes efforge's local values", 
   expect(r.fix).toMatch(/^printf '%s\\n' '?BETTER_AUTH_SECRET=dev-only-[^' ]*'? >> \.dev\.vars$/)
 })
 
-it("env: with Alchemy and no .env, the fix is create's next step", async () => {
+it("env: with Alchemy and no .env, the fix copies .env.example, which has the same lines", async () => {
   const dir = await project({ infra: "alchemy" })
+  rmSync(join(dir, ".env"))
   const r = get(await doctor(dir), "env")
   expect(r).toMatchObject({ status: "fail", fix: "cp .env.example .env" })
 })

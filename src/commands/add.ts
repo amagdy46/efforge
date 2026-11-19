@@ -20,15 +20,39 @@ import {
   nearbyProject,
   withFlag,
 } from "../fix.ts"
-import { GenerateError, generate, isComputed, matches } from "../generate.ts"
+import { GenerateError, generate, isComputed, matches, rootScripts } from "../generate.ts"
 import { installOwed } from "../installed.ts"
 import { introLine } from "../intro.ts"
 import { EfforgeManifest, hash, renderManifest } from "../manifest.ts"
 import { applyProjectName } from "../projectName.ts"
+import {
+  fillReadme,
+  README_FILE,
+  readmeNote,
+  readmeRegions,
+  setupSteps,
+  type Step,
+} from "../readme.ts"
 import { generateRouteTree } from "../routeTree.ts"
 import { IncompatibleStack, validate } from "../rules.ts"
 import { type SlotDef, slots } from "../slots.ts"
 import { type StackConfig, toCommand } from "../stack.ts"
+import { AGENTS_FILE } from "../transforms/appendAgentsSection.ts"
+import { agentsNote, syncAgents } from "../agents.ts"
+import {
+  appendBlock,
+  assignments,
+  assigns,
+  assignsValue,
+  DEV_VARS,
+  ENV_EXAMPLE,
+  envGroups,
+  exampleHeader,
+  LOCAL_HEADER,
+  localEnvFile,
+  nameOf,
+  renderGroups,
+} from "../env.ts"
 import { WRANGLER_FILE } from "../transforms/addWranglerBinding.ts"
 import {
   runTransform,
@@ -46,14 +70,7 @@ import {
   pnpmWildcardOverrides,
   versions,
 } from "../versions.ts"
-import {
-  assigns,
-  type EnvVar,
-  localEnvFile,
-  PnpmMissing,
-  type Step,
-  TemplatesDir,
-} from "./create.ts"
+import { type EnvVar, PnpmMissing, TemplatesDir } from "./create.ts"
 
 export class NotAnEfforgeProject extends Schema.TaggedError<NotAnEfforgeProject>()(
   "NotAnEfforgeProject",
@@ -106,11 +123,7 @@ export interface AddResult {
   /** Generated files the add-on replaces (e.g. wrangler.jsonc for infra/alchemy). */
   readonly removed: string[]
   /** Add-ons this run added, for the summary and next steps. */
-  readonly added: ReadonlyArray<{
-    readonly id: string
-    readonly title: string
-    readonly docs?: string
-  }>
+  readonly added: ReadonlyArray<AddedAddon>
   /** Env vars this run added to `.env.example`, and where their local values live. */
   readonly envVars: ReadonlyArray<EnvVar>
   /** `<package.json>: <script>` entries whose existing command an add-on replaced. */
@@ -121,6 +134,18 @@ export interface AddResult {
   readonly packageManager: { readonly from: string; readonly to: string } | null
   /** Things left for you to do by hand, one line each. */
   readonly notes: string[]
+}
+
+/** An add-on this run added, and where to read about it. */
+export interface AddedAddon {
+  readonly id: string
+  readonly title: string
+  /** Its page in efforge's docs. */
+  readonly docs?: string
+  /** Its dashboard card module, when the project has it. */
+  readonly card?: string
+  /** Headings of the AGENTS.md sections this run added for it. */
+  readonly agents?: ReadonlyArray<string>
 }
 
 export type AddError =
@@ -469,9 +494,12 @@ export const addAddons = (
         ...cardTransforms(m).flatMap(transformTargets),
       ])
         if (!present.has(file) && safe(file) && (yield* read(file)) !== undefined) present.add(file)
+    // AGENTS.md's sections are placed by syncAgents below, in the add-ons' order; the section
+    // transforms only run on a project without AGENTS.md, where they say what to add by hand
+    const hasAgents = (yield* read(AGENTS_FILE)) !== undefined
     const active = scope.flatMap(({ manifest: m }) =>
-      [...m.transforms, ...presentCardTransforms(m, (file) => present.has(file))].filter((t) =>
-        switchedOn(m.id, t.when),
+      [...m.transforms, ...presentCardTransforms(m, (file) => present.has(file))].filter(
+        (t) => switchedOn(m.id, t.when) && !(hasAgents && t.name === "appendAgentsSection"),
       ),
     )
     const wanted = new Set<string>()
@@ -500,6 +528,19 @@ export const addAddons = (
           if (content !== disk.get(file)) out.set(file, content)
           else out.delete(file)
         }
+    }
+    // AGENTS.md's sections follow the new stack: rewritten in order, stale ones dropped
+    if (newIds.length > 0) {
+      const agents = current.get(AGENTS_FILE) ?? (yield* read(AGENTS_FILE))
+      if (agents !== undefined) {
+        const synced = syncAgents(agents, stack, addons)
+        if (synced.kind === "malformed") notes.push(agentsNote(synced.problems))
+        else if (synced.text !== agents) {
+          seams.add(AGENTS_FILE)
+          if (synced.text !== disk.get(AGENTS_FILE)) out.set(AGENTS_FILE, synced.text)
+          else out.delete(AGENTS_FILE)
+        }
+      }
     }
     const transformed = new Set<string>()
     for (const file of seams) {
@@ -645,31 +686,92 @@ export const addAddons = (
       }
     }
 
-    // 6. env vars
-    const envText = (yield* read(".env.example")) ?? ""
+    // 6. env vars: new ones go to .env.example and to the file `pnpm dev` reads (.dev.vars, or
+    // .env with Alchemy), with the values that work locally
+    const envText = (yield* read(ENV_EXAMPLE)) ?? ""
     const have = new Set(envText.split("\n").map((l) => l.split("=")[0]?.trim()))
-    const groups: string[] = []
-    const envVars: EnvVar[] = []
     const envFile = localEnvFile(stack)
-    const local = out.get(envFile) ?? (yield* read(envFile))
-    for (const { manifest: m } of scope) {
-      const vars = m.envVars.filter((v) => switchedOn(m.id, v.when) && !have.has(v.name))
-      for (const v of vars) {
-        have.add(v.name)
-        envVars.push({
-          name: v.name,
-          description: v.description,
-          file: envFile,
-          set: assigns(local, v.name),
-        })
-      }
-      if (vars.length > 0)
-        groups.push(`# ${m.title}\n${vars.map((v) => `${v.name}=${v.example}`).join("\n")}`)
+    const newEnv = envGroups(stack, addons)
+      .map((g) => ({
+        id: g.id,
+        title: g.title,
+        vars: g.vars.filter((v) => switchedOn(g.id, v.when) && !have.has(v.name)),
+      }))
+      .filter((g) => g.vars.length > 0)
+    if (newEnv.length > 0) {
+      const base = envText.replace(exampleHeader(manifest.stack), exampleHeader(stack))
+      out.set(
+        ENV_EXAMPLE,
+        appendBlock(base === "" ? exampleHeader(stack) : base, renderGroups(newEnv)),
+      )
+      written.add(ENV_EXAMPLE)
+    } else if (
+      stack.infra !== manifest.stack.infra &&
+      envText.includes(exampleHeader(manifest.stack))
+    ) {
+      out.set(ENV_EXAMPLE, envText.replace(exampleHeader(manifest.stack), exampleHeader(stack)))
+      written.add(ENV_EXAMPLE)
     }
-    if (groups.length > 0) {
-      const base = envText === "" || envText.endsWith("\n") ? envText : `${envText}\n`
-      out.set(".env.example", `${base}${base === "" ? "" : "\n"}${groups.join("\n\n")}\n`)
-      written.add(".env.example")
+    const localBefore = yield* read(envFile)
+    let local = localBefore ?? LOCAL_HEADER
+    // Alchemy reads .env: what .dev.vars held moves there, and .dev.vars goes
+    if (envFile !== DEV_VARS) {
+      const devVars = yield* read(DEV_VARS)
+      if (devVars !== undefined && localBefore === undefined) {
+        // .env doesn't exist yet: .dev.vars becomes it, as it is
+        local = devVars
+        removed.add(DEV_VARS)
+      } else if (devVars !== undefined) {
+        const moved = assignments(devVars).filter((l) => !assigns(local, nameOf(l)))
+        if (moved.length > 0)
+          local = appendBlock(
+            local,
+            `# From .dev.vars (efforge add ${newIds.join(" ")})\n${moved.join("\n")}`,
+          )
+        removed.add(DEV_VARS)
+      }
+    }
+    // a project without any local settings (a fresh clone) gets every setting, else the new ones
+    const toWrite = (local === LOCAL_HEADER ? envGroups(stack, addons) : newEnv)
+      .map((g) => ({
+        id: g.id,
+        title: g.title,
+        vars: g.vars.filter((v) => !assigns(local, v.name)),
+      }))
+      .filter((g) => g.vars.length > 0)
+    if (toWrite.length > 0) local = appendBlock(local, renderGroups(toWrite))
+    if (local !== (localBefore ?? LOCAL_HEADER)) {
+      out.set(envFile, local)
+      written.add(envFile)
+    }
+    const envVars: EnvVar[] = newEnv.flatMap((g) =>
+      g.vars.map((v) => ({
+        name: v.name,
+        description: v.description,
+        file: envFile,
+        set: v.dev !== undefined || assignsValue(local, v.name),
+      })),
+    )
+
+    // 6b. the README's marked regions describe the new stack; a README without them is the user's
+    if (newIds.length > 0) {
+      const readme = out.get(README_FILE) ?? (yield* read(README_FILE))
+      if (readme !== undefined) {
+        const filled = fillReadme(
+          readme,
+          readmeRegions({
+            stack,
+            addons,
+            scripts: rootScripts(out.get("package.json") ?? (yield* read("package.json"))),
+          }),
+        )
+        if (filled.kind !== "filled") notes.push(readmeNote(filled))
+        else if (filled.text !== readme) {
+          out.set(README_FILE, filled.text)
+          if (!written.has(README_FILE)) transformed.add(README_FILE)
+        }
+        if (filled.kind !== "no-markers") seams.add(README_FILE)
+      }
     }
 
     // 7. efforge.jsonc
@@ -691,6 +793,33 @@ export const addAddons = (
       written.add("efforge.jsonc")
     }
 
+    // where to read about each new add-on: its card, the AGENTS.md sections this run added, its docs
+    const addedAddon = (m: AddonManifest): AddedAddon => {
+      const entry: { -readonly [K in keyof AddedAddon]: AddedAddon[K] } = {
+        id: m.id,
+        title: m.title,
+      }
+      if (m.docs !== undefined) entry.docs = m.docs
+      const card = m.card?.files[0]
+      if (
+        card !== undefined &&
+        switchedOn(m.id, card.when) &&
+        (out.has(card.target) || disk.get(card.target) !== undefined)
+      )
+        entry.card = card.target
+      const agentsBefore = disk.get(AGENTS_FILE) ?? ""
+      const agentsAfter = out.get(AGENTS_FILE) ?? agentsBefore
+      const agents = m.transforms
+        .filter((t) => t.name === "appendAgentsSection" && switchedOn(m.id, t.when))
+        .filter((t) => {
+          const marker = `<!-- efforge:section:${t.args.id ?? ""} -->`
+          return !agentsBefore.includes(marker) && agentsAfter.includes(marker)
+        })
+        .flatMap((t) => /^#{2,3} (.+)$/m.exec(t.args.content ?? "")?.[1] ?? [])
+      if (agents.length > 0) entry.agents = agents
+      return entry
+    }
+
     const result: AddResult = {
       stack,
       written: [...written].toSorted(),
@@ -698,11 +827,7 @@ export const addAddons = (
       transformed: [...transformed].toSorted(),
       skipped: skipped.toSorted(),
       removed: [...removed].toSorted(),
-      added: fresh.map(({ manifest: m }) =>
-        m.docs === undefined
-          ? { id: m.id, title: m.title }
-          : { id: m.id, title: m.title, docs: m.docs },
-      ),
+      added: fresh.map(({ manifest: m }) => addedAddon(m)),
       envVars,
       replacedScripts,
       packageManager,
@@ -982,6 +1107,15 @@ const wrap = (text: string, width: number): string[] => {
 
 const list = (files: ReadonlyArray<string>, mark: string) => files.map((f) => `${mark} ${f}`)
 
+/** An added add-on's title, then where its card and AGENTS.md sections are. */
+const addedLines = (a: AddedAddon): string[] => {
+  const facts: Array<[string, string]> = []
+  if (a.card !== undefined) facts.push(["card", `${a.card} ${pc.dim("(on /app)")}`])
+  if (a.agents !== undefined) facts.push(["AGENTS.md", a.agents.map((h) => `"${h}"`).join(", ")])
+  if (facts.length === 0) return []
+  return [`\n${pc.bold(a.title)}`, ...facts.map(([k, v]) => `  ${pc.dim(k.padEnd(9))} ${v}`)]
+}
+
 export const addHandler = (input: {
   ids: ReadonlyArray<string>
   overwrite: boolean
@@ -1062,17 +1196,10 @@ export const addHandler = (input: {
     // a new database needs its tables before the app (or sign-up) can use it; when the last
     // install never finished, neither did the steps after it, so count the ids already there too
     const touched = [...result.added.map((a) => a.id), ...(owed ? result.skipped : [])]
-    const database = touched.find((id) => id.startsWith("database/"))?.split("/")[1]
-    const alchemy = manifest.stack.infra === "alchemy" || touched.includes("infra/alchemy")
-    const afterInstall: Step[] = [
-      ...(database === "postgres"
-        ? [
-            { command: "docker compose up -d --wait", note: "local Postgres" },
-            { command: "pnpm db:migrate" },
-          ]
-        : []),
-      ...(database === "d1" && !alchemy ? [{ command: "pnpm db:migrate", note: "local D1" }] : []),
-    ]
+    // the same setup steps `create` and the README's "Run it" give for this stack
+    const afterInstall: Step[] = touched.some((id) => id.startsWith("database/"))
+      ? setupSteps(result.stack)
+      : []
     const steps: Step[] = [
       ...(!installs && (owed || !installed || (changes && depsChanged))
         ? [{ command: INSTALL }]
@@ -1125,9 +1252,15 @@ export const addHandler = (input: {
       ),
     )
     const replacementWarnings = Effect.gen(function* () {
-      if (result.removed.length > 0)
+      // .dev.vars is moved, not replaced: its settings are in .env, which alchemy dev reads
+      const replaced = result.removed.filter((f) => f !== DEV_VARS)
+      if (replaced.length > 0)
         yield* io.warn(
-          `${input.dryRun ? "Would remove" : "Removed"} ${result.removed.join(", ")}: the new add-ons replace it.`,
+          `${input.dryRun ? "Would remove" : "Removed"} ${replaced.join(", ")}: the new add-ons replace ${replaced.length === 1 ? "it" : "them"}.`,
+        )
+      if (result.removed.includes(DEV_VARS))
+        yield* io.warn(
+          `${input.dryRun ? "Would move" : "Moved"} the settings in ${DEV_VARS} to ${localEnvFile(result.stack)}, which \`pnpm dev\` now reads.`,
         )
       if (result.replacedScripts.length > 0)
         yield* io.warn(
@@ -1184,7 +1317,7 @@ export const addHandler = (input: {
       ...steps.map((s) => `  ${pc.cyan(s.command)}`),
       ...(result.envVars.length > 0
         ? [
-            `${steps.length > 0 ? "\n" : ""}${pc.bold("New env vars")} ${pc.dim("(in .env.example; local values in .dev.vars)")}`,
+            `${steps.length > 0 ? "\n" : ""}${pc.bold("New env vars")} ${pc.dim(`(in .env.example; local values in ${localEnvFile(result.stack)})`)}`,
             // full descriptions, wrapped under the name: the hint at the end is often the useful part
             ...result.envVars.map(
               (v) =>
@@ -1194,11 +1327,12 @@ export const addHandler = (input: {
             ),
           ]
         : []),
-      ...result.added
-        .filter((a) => a.docs !== undefined)
-        .map((a) => `${a.title}: ${pc.dim(a.docs as string)}`),
+      ...result.added.flatMap(addedLines),
     ]
-    if (lines.length > 0) yield* io.note(lines.join("\n"), "Next steps")
+    if (lines.length > 0) yield* io.note(lines.join("\n").replace(/^\n/, ""), "Next steps")
+    // outside the box, so a narrow terminal does not break the links
+    const docs = result.added.flatMap((a) => (a.docs === undefined ? [] : [a.docs]))
+    if (docs.length > 0) yield* io.info(`Docs:\n${docs.join("\n")}`)
     yield* io.outro(`${pc.green("Done.")} ${pc.dim("Review the changes with")} git diff`)
   }).pipe(
     // under --json a stopped add still prints its one document (Ctrl-C, SIGTERM, a timeout)

@@ -2,6 +2,7 @@
   "id": "extras/email",
   "title": "Email",
   "description": "Transactional email: a Mailer service on Cloudflare Email Service, printed to the console in development, plus invitation emails with organizations.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-email.md",
   "files": [
     {
       "path": "files/core-mailer.ts",
@@ -27,12 +28,16 @@
     {
       "name": "MAIL_FROM",
       "example": "noreply@example.com",
+
+      "dev": "noreply@localhost",
       "description": "Sender address; its domain must be enabled for Cloudflare Email Sending (wrangler email sending enable <domain>)"
     },
     {
       "name": "MAIL_TRANSPORT",
       "example": "cloudflare",
-      "description": "cloudflare (default) sends through the EMAIL binding; console prints emails instead (used by .dev.vars)"
+
+      "dev": "console",
+      "description": "cloudflare (default) sends through the EMAIL binding; console prints emails instead (the local value)"
     }
   ],
   "requires": [],
@@ -65,20 +70,6 @@
         "import": "MailerLive",
         "from": "./mailer",
         "layer": "MailerLive"
-      }
-    },
-    {
-      "name": "addDevVar",
-      "args": {
-        "name": "MAIL_TRANSPORT",
-        "value": "console"
-      }
-    },
-    {
-      "name": "addDevVar",
-      "args": {
-        "name": "MAIL_FROM",
-        "value": "noreply@localhost"
       }
     },
     {
@@ -175,7 +166,7 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "email",
-        "content": "## Email\n\n- Send mail through the `Mailer` service from `@repo/core` (`send({ to, subject, text, html? })`); do not use the `EMAIL` binding directly. Always send a `text` body.\n- `apps/web/src/server/mailer.ts` picks the transport from `MAIL_TRANSPORT`: `console` (set in `.dev.vars`) prints the message to the dev server log, anything else sends through Cloudflare Email Service with the `EMAIL` `send_email` binding. `MAIL_FROM` must be an address on a domain enabled for sending: `wrangler email sending enable <domain>`.\n- Transactional mail only (invitations, receipts, password resets); use a dedicated platform for marketing or bulk sends."
+        "content": "## Email\n\n- Send mail through the `Mailer` service from `@repo/core` (`send({ to, subject, text, html? })`); do not use the `EMAIL` binding directly. Always send a `text` body.\n- `apps/web/src/server/mailer.ts` picks the transport from `MAIL_TRANSPORT`: `console` (the local value in `.env.example`) prints the message to the dev server log, anything else sends through Cloudflare Email Service with the `EMAIL` `send_email` binding. `MAIL_FROM` must be an address on a domain enabled for sending: `wrangler email sending enable <domain>`.\n- Transactional mail only (invitations, receipts, password resets); use a dedicated platform for marketing or bulk sends."
       }
     },
     {

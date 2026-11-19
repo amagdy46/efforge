@@ -5,7 +5,7 @@ import { Context, Effect, Exit, Option, Path, Schema } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { parse as parseJsonc } from "jsonc-parser"
 import pc from "picocolors"
-import { addonIdsFor, type LoadedAddon, loadAddons } from "../addon.ts"
+import { type LoadedAddon, loadAddons } from "../addon.ts"
 import {
   BIN,
   type Failure,
@@ -17,10 +17,15 @@ import {
 } from "../contract.ts"
 import { COMMIT, exec, FORMAT, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
 import { alternative, finish, fix, meantName, withFlag } from "../fix.ts"
-import { generate, matches } from "../generate.ts"
+import { generate } from "../generate.ts"
 import { askStack, DEFAULT_NAME, type StackFlags } from "../prompts/flow.ts"
 import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
 import { projectDirName } from "../projectName.ts"
+import { envGroups, localEnvFile } from "../env.ts"
+import { planSteps, renderSteps, type Step } from "../readme.ts"
+
+export type { Step } from "../readme.ts"
+export { planSteps } from "../readme.ts"
 import { introLine } from "../intro.ts"
 import { generateRouteTree } from "../routeTree.ts"
 import { slots } from "../slots.ts"
@@ -113,59 +118,26 @@ const nodeSupported = (version: string): boolean => {
   return (major === 24 && minor >= 11) || major >= 26
 }
 
-/** One command to run after `create` or `add`, inside the project directory. */
-export interface Step {
-  readonly command: string
-  readonly note?: string
-  /** Runs until stopped (a dev server): start it in the background, don't wait for it. */
-  readonly longRunning?: boolean
-}
-
-/** What to run after `create`, for this stack, inside the project directory. */
-export const planSteps = (stack: StackConfig, o: { readonly installed: boolean }): Step[] => {
-  const steps: Step[] = []
-  if (!o.installed) steps.push({ command: INSTALL })
-  if (stack.infra === "alchemy") {
-    steps.push({ command: "cp .env.example .env", note: "local values for Alchemy" })
-    // D1 migrations still need wrangler.jsonc under Alchemy (a known gap, docs/limits.md)
-    if (stack.database === "postgres") {
-      steps.push({ command: "docker compose up -d --wait", note: "local Postgres" })
-      steps.push({ command: "pnpm db:migrate" })
-    }
-    steps.push({
-      command: "pnpm dev",
-      note: "alchemy dev; deploying: see infra/README.md",
-      longRunning: true,
-    })
-  } else {
-    if (stack.database === "postgres")
-      steps.push({ command: "docker compose up -d --wait", note: "local Postgres" })
-    if (stack.database !== "none")
-      steps.push(
-        stack.database === "d1"
-          ? { command: "pnpm db:migrate", note: "local D1" }
-          : { command: "pnpm db:migrate" },
-      )
-    steps.push({ command: "pnpm dev", note: "http://localhost:5173", longRunning: true })
-  }
-  return steps
-}
-
-/** What to run after `create`, for this stack, as people read it. */
+/** What to run after `create`, for this stack, as people read it: the README's "Run it", from the same source. */
 export const nextSteps = (
   stack: StackConfig,
-  o: { readonly dirName: string; readonly inPlace: boolean; readonly installed: boolean },
+  o: {
+    readonly dirName: string
+    readonly inPlace: boolean
+    readonly installed: boolean
+  },
 ): string => {
   const steps: Step[] = [
     ...(o.inPlace ? [] : [{ command: `cd ${o.dirName}` }]),
     ...planSteps(stack, o),
   ]
-  const width = Math.max(...steps.map((s) => s.command.length))
-  return steps
-    .map(
-      ({ command: c, note }) =>
-        `  ${pc.cyan(c)}${note === undefined ? "" : `  ${" ".repeat(width - c.length)}${pc.dim(`# ${note}`)}`}`,
-    )
+  return renderSteps(steps)
+    .map((line) => {
+      const at = line.indexOf("  # ")
+      return at === -1
+        ? `  ${pc.cyan(line)}`
+        : `  ${pc.cyan(line.slice(0, at))}${pc.dim(line.slice(at))}`
+    })
     .join("\n")
 }
 
@@ -179,35 +151,17 @@ export interface EnvVar {
   readonly set: boolean
 }
 
-export const localEnvFile = (stack: StackConfig): string =>
-  stack.infra === "alchemy" ? ".env" : ".dev.vars"
-
-/** True when `text` (a .dev.vars or .env file) assigns `name`. */
-export const assigns = (text: string | undefined, name: string): boolean =>
-  text !== undefined && text.split("\n").some((l) => l.trimStart().startsWith(`${name}=`))
-
 /** Every env var of `stack`, in add-on order, as `create` leaves them. */
-export const envFor = (
-  stack: StackConfig,
-  addons: ReadonlyMap<string, LoadedAddon>,
-  tree: ReadonlyMap<string, string>,
-): EnvVar[] => {
-  const file = localEnvFile(stack)
-  const seen = new Set<string>()
-  const out: EnvVar[] = []
-  for (const id of addonIdsFor(stack))
-    for (const v of addons.get(id)?.manifest.envVars ?? []) {
-      if (!matches(v.when, stack) || seen.has(v.name)) continue
-      seen.add(v.name)
-      out.push({
-        name: v.name,
-        description: v.description,
-        file,
-        set: assigns(tree.get(file), v.name),
-      })
-    }
-  return out
-}
+export const envFor = (stack: StackConfig, addons: ReadonlyMap<string, LoadedAddon>): EnvVar[] =>
+  envGroups(stack, addons).flatMap((g) =>
+    g.vars.map((v) => ({
+      name: v.name,
+      description: v.description,
+      file: localEnvFile(stack),
+      // efforge wrote a value that works locally; a real secret is written empty
+      set: v.dev !== undefined,
+    })),
+  )
 
 /** validate -> generate -> (dry-run | write -> git init -> pnpm install -> route tree -> format -> commit). */
 export const create = (opts: CreateOptions) =>
@@ -268,7 +222,7 @@ export const create = (opts: CreateOptions) =>
     const addons = yield* loadAddons(templatesDir)
     const tree = yield* generate(stack, addons)
     const files = [...tree.keys()].toSorted()
-    const env = envFor(stack, addons, tree)
+    const env = envFor(stack, addons)
 
     const shownCommand = inPlace
       ? command.replace(` create ${stack.name} --yes`, " create . --yes")

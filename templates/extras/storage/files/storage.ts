@@ -14,7 +14,7 @@ const loadSecret = (provider: ConfigProvider.ConfigProvider) =>
       () =>
         new StorageConfigError({
           message:
-            "STORAGE_SIGNING_SECRET is not set. Set it to a random string of at least 32 characters (wrangler secret put STORAGE_SIGNING_SECRET, or .dev.vars locally).",
+            "STORAGE_SIGNING_SECRET is not set. Set it to a random string of at least 32 characters (a Worker secret in production; .dev.vars locally, .env with Alchemy).",
         }),
     ),
     Effect.map(Redacted.value),

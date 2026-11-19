@@ -53,6 +53,10 @@ It removes `wrangler.jsonc`, because `infra/alchemy.run.ts` declares the Worker 
 
 `efforge add` makes these edits with AST transforms (changes to the parsed code, not to its text), so it changes only what is listed and leaves the rest of each file alone.
 
+### `AGENTS.md`
+
+- Adds the rules under [Rules it adds to AGENTS.md](#rules-it-adds-to-agentsmd).
+
 ### `package.json`
 
 - Adds the dependencies listed below.
@@ -68,7 +72,11 @@ It removes `wrangler.jsonc`, because `infra/alchemy.run.ts` declares the Worker 
 
 ### `.env.example`
 
-- Adds the environment variables listed below.
+- Adds the environment variables listed below, each with its local value, or empty where it needs a real secret.
+
+### `.dev.vars`
+
+- Adds the same lines: `pnpm dev` reads them from here (gitignored). With Alchemy the file is `.env`.
 
 ### `efforge.jsonc`
 
@@ -87,7 +95,7 @@ It removes `wrangler.jsonc`, because `infra/alchemy.run.ts` declares the Worker 
 
 ## Environment variables
 
-- `CLOUDFLARE_ACCOUNT_ID`, for example `your-account-id`: Needed by `pnpm run deploy` (with CLOUDFLARE_API_TOKEN, or a login from `pnpm exec alchemy login`).
+- `CLOUDFLARE_ACCOUNT_ID`, for example `your-account-id`: Needed by `pnpm run deploy`, with CLOUDFLARE_API_TOKEN; `pnpm exec alchemy provider check-env -c infra/alchemy.run.ts` checks both. Empty locally.
 
 ## Package scripts
 
@@ -99,10 +107,16 @@ It removes `wrangler.jsonc`, because `infra/alchemy.run.ts` declares the Worker 
 
 ## Rules it adds to AGENTS.md
 
-None.
+### Infrastructure (Alchemy)
+
+- `infra/alchemy.run.ts` declares the Worker and every resource it binds. There is no `wrangler.jsonc`: add a binding as a resource there and pass it in the `env` of `Cloudflare.Website.Vite`, under the name effect-cf reads. `efforge add` inserts resources above `// efforge:resources`; keep that line.
+- Settings come from `Config` calls in `alchemy.run.ts`: from `.env` under `pnpm dev`, and from `--env-file` or the environment when deploying. Never write a secret's value into `alchemy.run.ts`, and never commit `.env` or `.env.production`.
+- `pnpm dev` runs stage `dev_$USER`; `pnpm run deploy --stage <name>` creates or updates a stage and `pnpm run destroy --stage <name>` removes one. Write `pnpm run deploy`: `pnpm deploy` is pnpm's own command.
+- Local state lives in `.alchemy/` (gitignored); CI keeps it in a Cloudflare-hosted store. `.github/workflows/deploy.yml` deploys `main` to `prod` and each pull request to `pr-<number>`: a new setting the Worker reads goes in its `env` and in the repository secrets.
+- `pnpm typecheck` checks `infra/` too (`tsc -p infra`).
 
 ## Limits
 
 - It uses an Alchemy 2.0 beta; the exact version is under Dependencies.
-- Local secrets are read from `.env`, not `.dev.vars`.
-- On D1, `pnpm db:migrate` still expects a `wrangler.jsonc`.
+- Local settings are in `.env`, not `.dev.vars`: `efforge add infra/alchemy` moves them there.
+- On D1, `pnpm db:migrate` is not used: `pnpm dev` and `pnpm run deploy` apply the migrations.

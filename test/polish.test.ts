@@ -151,7 +151,10 @@ it("next steps follow the stack", () => {
   expect(d1).not.toContain("docker")
   const none = steps({ database: "none", orm: "none", auth: "none" })
   expect(none).not.toContain("db:migrate")
-  expect(steps({ infra: "alchemy" })).toContain("cp .env.example .env")
+  // efforge writes .env itself on Alchemy: nothing to copy
+  expect(steps({ infra: "alchemy" })).not.toContain("cp ")
+  expect(steps({ infra: "alchemy" })).toContain("http://localhost:1337")
+  expect(steps({ infra: "alchemy", database: "d1", orm: "effect-sql" })).not.toContain("db:migrate")
 })
 
 const noDbProject = () =>

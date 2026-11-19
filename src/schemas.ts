@@ -65,7 +65,19 @@ export const AddOutput = Schema.Struct({
     Schema.Struct({
       id: Schema.String,
       title: Schema.String,
-      docs: Schema.optionalKey(Schema.String),
+      docs: Schema.optionalKey(
+        Schema.String.annotate({ description: "Its page in efforge's docs." }),
+      ),
+      card: Schema.optionalKey(
+        Schema.String.annotate({
+          description: "Its dashboard card module, when the project has one.",
+        }),
+      ),
+      agents: Schema.optionalKey(
+        Strings.annotate({
+          description: "Headings of the AGENTS.md sections this run added for it.",
+        }),
+      ),
     }),
   ),
   skipped: Strings.annotate({

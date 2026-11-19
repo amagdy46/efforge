@@ -58,7 +58,7 @@ A signal in the first fraction of a second, before efforge has started, can end 
 
 `directory` is absolute. `files` lists everything written, sorted. `installed` says whether `pnpm install` ran; `git` is `committed`, `initialized` (git init worked, the commit didn't) or `skipped`. `command` recreates the same stack without prompts.
 
-`env` lists every env var the project reads: `file` is where the local value lives (`.dev.vars`, or `.env` with Alchemy) and `set` says whether efforge wrote a local value there. When `set` is false, read `description`: some variables have a default (`DATABASE_URL` falls back to the docker-compose database), others must be filled in before the feature works. Production values are set as the description says, usually with `wrangler secret put`.
+`env` lists every env var the project reads: `file` is where the local value lives (`.dev.vars`, or `.env` with Alchemy) and `set` says whether efforge wrote a value there that works locally. When `set` is false the variable is a real secret (an API key): efforge wrote it empty, in `file` and in `.env.example`, and the feature that reads it fails until it is filled in. Production values are set as the description says, usually with `wrangler secret put`.
 
 `nextSteps` are the commands still to run, in order, each with the directory to run it in (`cwd`). A step with `longRunning: true` (the dev server) doesn't exit on its own: start it in the background or leave it to the user.
 
@@ -96,7 +96,7 @@ npx -y create-efforge create my-app --json --database=d1 --auth=better-auth
   "env": [
     {
       "name": "BETTER_AUTH_SECRET",
-      "description": "Signs sessions and cookies (local: .dev.vars; production: wrangler secret put BETTER_AUTH_SECRET)",
+      "description": "Signs sessions and cookies (production: a Worker secret, `wrangler secret put BETTER_AUTH_SECRET` or the deploy env with Alchemy)",
       "file": ".dev.vars",
       "set": true
     },
@@ -104,13 +104,13 @@ npx -y create-efforge create my-app --json --database=d1 --auth=better-auth
       "name": "BETTER_AUTH_URL",
       "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port).",
       "file": ".dev.vars",
-      "set": false
+      "set": true
     }
   ],
   "nextSteps": [
     {
       "command": "pnpm db:migrate",
-      "note": "local D1",
+      "note": "create the tables in the local D1",
       "cwd": "/home/me/projects/my-app"
     },
     {
@@ -162,11 +162,11 @@ npx -y create-efforge create my-app --json --dry-run
       "name": "DATABASE_URL",
       "description": "Used by `pnpm db:migrate` and drizzle-kit, read from the shell; unset, they use the docker-compose database. The running app connects through the HYPERDRIVE binding.",
       "file": ".dev.vars",
-      "set": false
+      "set": true
     },
     {
       "name": "BETTER_AUTH_SECRET",
-      "description": "Signs sessions and cookies (local: .dev.vars; production: wrangler secret put BETTER_AUTH_SECRET)",
+      "description": "Signs sessions and cookies (production: a Worker secret, `wrangler secret put BETTER_AUTH_SECRET` or the deploy env with Alchemy)",
       "file": ".dev.vars",
       "set": true
     },
@@ -174,7 +174,7 @@ npx -y create-efforge create my-app --json --dry-run
       "name": "BETTER_AUTH_URL",
       "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port).",
       "file": ".dev.vars",
-      "set": false
+      "set": true
     }
   ],
   "nextSteps": [
@@ -190,7 +190,7 @@ npx -y create-efforge create my-app --json --dry-run
 
 ## `add`
 
-`stack` is the project's stack afterwards. `created` and `changed` are the files this run created and changed, `removed` the generated files it deleted (`wrangler.jsonc` when you add Alchemy), `skipped` the ids the project already had and files already as efforge would write them. `replacedScripts` names package scripts an add-on replaced. `packageManager` is `{from, to}` when `add` raised the root `packageManager` (projects made by efforge 0.2.0, whose pnpm ignored the Effect overrides), else `null`. `notes` are things left to do by hand, one line each (for example, the widgets line to add to a dashboard you edited). `installed` says whether `pnpm install` ran in this run; when it didn't and should, `nextSteps` starts with it. `env` lists only the env vars this run added.
+`stack` is the project's stack afterwards. `added` has one entry per add-on this run added: its `id`, `title`, `docs` (its page in efforge's docs), `card` (its dashboard card module, when the project has one) and `agents` (the headings of the `AGENTS.md` sections this run added for it). `created` and `changed` are the files this run created and changed, `removed` the generated files it deleted (`wrangler.jsonc` when you add Alchemy), `skipped` the ids the project already had and files already as efforge would write them. `replacedScripts` names package scripts an add-on replaced. `packageManager` is `{from, to}` when `add` raised the root `packageManager` (projects made by efforge 0.2.0, whose pnpm ignored the Effect overrides), else `null`. `notes` are things left to do by hand, one line each (for example, the widgets line to add to a dashboard you edited). `installed` says whether `pnpm install` ran in this run; when it didn't and should, `nextSteps` starts with it. `env` lists only the env vars this run added.
 
 <!-- example: add -->
 
@@ -220,7 +220,11 @@ npx -y create-efforge add email --json --cwd my-app
   "added": [
     {
       "id": "extras/email",
-      "title": "Email"
+      "title": "Email",
+      "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-email.md",
+      "agents": [
+        "Email"
+      ]
     }
   ],
   "skipped": [],
@@ -232,6 +236,7 @@ npx -y create-efforge add email --json --cwd my-app
     ".dev.vars",
     ".env.example",
     "AGENTS.md",
+    "README.md",
     "apps/web/src/server/layers.ts",
     "efforge.jsonc",
     "packages/core/src/index.ts",
@@ -251,7 +256,7 @@ npx -y create-efforge add email --json --cwd my-app
     },
     {
       "name": "MAIL_TRANSPORT",
-      "description": "cloudflare (default) sends through the EMAIL binding; console prints emails instead (used by .dev.vars)",
+      "description": "cloudflare (default) sends through the EMAIL binding; console prints emails instead (the local value)",
       "file": ".dev.vars",
       "set": true
     }
@@ -296,11 +301,19 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
   "added": [
     {
       "id": "ai/effect-ai-byok",
-      "title": "Effect AI (bring your own key)"
+      "title": "Effect AI (bring your own key)",
+      "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/ai-effect-ai-byok.md",
+      "agents": [
+        "AI (Effect AI, bring your own key)"
+      ]
     },
     {
       "id": "extras/storage",
-      "title": "Storage"
+      "title": "Storage",
+      "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-storage.md",
+      "agents": [
+        "Storage"
+      ]
     }
   ],
   "skipped": [],
@@ -319,6 +332,7 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
     ".dev.vars",
     ".env.example",
     "AGENTS.md",
+    "README.md",
     "apps/web/package.json",
     "apps/web/src/server/layers.ts",
     "apps/web/src/server/routes.ts",
@@ -349,13 +363,13 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
       "name": "LLM_API_KEY",
       "description": "Provider API key (not needed for a local Ollama); a Worker secret in production",
       "file": ".dev.vars",
-      "set": false
+      "set": true
     },
     {
       "name": "LLM_BASE_URL",
       "description": "Optional OpenAI-compatible endpoint (openai, ollama)",
       "file": ".dev.vars",
-      "set": false
+      "set": true
     },
     {
       "name": "STORAGE_SIGNING_SECRET",
@@ -902,7 +916,7 @@ npx -y create-efforge doctor --json --cwd my-app
           {
             "name": "BETTER_AUTH_URL",
             "required": false,
-            "status": "missing"
+            "status": "empty"
           }
         ]
       }
@@ -1357,7 +1371,7 @@ npx -y create-efforge create my-app --json --database=d1 --auth=better-auth
       },
       {
         "command": "pnpm db:migrate",
-        "note": "local D1",
+        "note": "create the tables in the local D1",
         "cwd": "/home/me/projects/my-app"
       },
       {
@@ -1450,11 +1464,11 @@ npx -y create-efforge create my-app --json
         "name": "DATABASE_URL",
         "description": "Used by `pnpm db:migrate` and drizzle-kit, read from the shell; unset, they use the docker-compose database. The running app connects through the HYPERDRIVE binding.",
         "file": ".dev.vars",
-        "set": false
+        "set": true
       },
       {
         "name": "BETTER_AUTH_SECRET",
-        "description": "Signs sessions and cookies (local: .dev.vars; production: wrangler secret put BETTER_AUTH_SECRET)",
+        "description": "Signs sessions and cookies (production: a Worker secret, `wrangler secret put BETTER_AUTH_SECRET` or the deploy env with Alchemy)",
         "file": ".dev.vars",
         "set": true
       },
@@ -1462,7 +1476,7 @@ npx -y create-efforge create my-app --json
         "name": "BETTER_AUTH_URL",
         "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port).",
         "file": ".dev.vars",
-        "set": false
+        "set": true
       }
     ],
     "nextSteps": [
@@ -1485,6 +1499,7 @@ npx -y create-efforge create my-app --json
       },
       {
         "command": "pnpm db:migrate",
+        "note": "create the tables",
         "cwd": "/home/me/projects/my-app"
       },
       {
@@ -1552,11 +1567,11 @@ npx -y create-efforge create my-app --json
         "name": "DATABASE_URL",
         "description": "Used by `pnpm db:migrate` and drizzle-kit, read from the shell; unset, they use the docker-compose database. The running app connects through the HYPERDRIVE binding.",
         "file": ".dev.vars",
-        "set": false
+        "set": true
       },
       {
         "name": "BETTER_AUTH_SECRET",
-        "description": "Signs sessions and cookies (local: .dev.vars; production: wrangler secret put BETTER_AUTH_SECRET)",
+        "description": "Signs sessions and cookies (production: a Worker secret, `wrangler secret put BETTER_AUTH_SECRET` or the deploy env with Alchemy)",
         "file": ".dev.vars",
         "set": true
       },
@@ -1564,7 +1579,7 @@ npx -y create-efforge create my-app --json
         "name": "BETTER_AUTH_URL",
         "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port).",
         "file": ".dev.vars",
-        "set": false
+        "set": true
       }
     ],
     "nextSteps": [
@@ -1587,6 +1602,7 @@ npx -y create-efforge create my-app --json
       },
       {
         "command": "pnpm db:migrate",
+        "note": "create the tables",
         "cwd": "/home/me/projects/my-app"
       },
       {
@@ -1889,7 +1905,11 @@ npx -y create-efforge add ai --json --cwd my-app
     "added": [
       {
         "id": "ai/effect-ai-byok",
-        "title": "Effect AI (bring your own key)"
+        "title": "Effect AI (bring your own key)",
+        "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/ai-effect-ai-byok.md",
+        "agents": [
+          "AI (Effect AI, bring your own key)"
+        ]
       }
     ],
     "skipped": [],
@@ -1903,6 +1923,7 @@ npx -y create-efforge add ai --json --cwd my-app
       ".dev.vars",
       ".env.example",
       "AGENTS.md",
+      "README.md",
       "apps/web/package.json",
       "apps/web/src/server/layers.ts",
       "efforge.jsonc",
@@ -1930,13 +1951,13 @@ npx -y create-efforge add ai --json --cwd my-app
         "name": "LLM_API_KEY",
         "description": "Provider API key (not needed for a local Ollama); a Worker secret in production",
         "file": ".dev.vars",
-        "set": false
+        "set": true
       },
       {
         "name": "LLM_BASE_URL",
         "description": "Optional OpenAI-compatible endpoint (openai, ollama)",
         "file": ".dev.vars",
-        "set": false
+        "set": true
       }
     ],
     "nextSteps": [

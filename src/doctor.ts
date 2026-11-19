@@ -9,7 +9,7 @@ import { parseAllDocuments } from "yaml"
 import { addonIdsFor, type AddonManifest, type LoadedAddon } from "./addon.ts"
 import { presentCardTransforms } from "./cards.ts"
 import { BIN, inDir, quote } from "./contract.ts"
-import { localEnvFile } from "./commands/create.ts"
+import { localEnvFile } from "./env.ts"
 import { INSTALL } from "./exec.ts"
 import { matches } from "./generate.ts"
 import { installOwed } from "./installed.ts"
@@ -616,12 +616,12 @@ const envCheck: Check = {
         for (const v of manifest.envVars)
           if (matches(v.when, stack) && !declared.has(v.name))
             declared.set(v.name, { example: v.example })
-      const devValues = new Map(
-        transformsOf(ctx, stack, "addDevVar").map(({ t }) => [
-          t.args.name as string,
-          t.args.value as string,
-        ]),
-      )
+      // the value each add-on gives for local development (`dev` in addon.json)
+      const devValues = new Map<string, string>()
+      for (const { manifest } of ctx.addons)
+        for (const v of manifest.envVars)
+          if (v.dev !== undefined && matches(v.when, stack) && !devValues.has(v.name))
+            devValues.set(v.name, v.dev)
       const required = new Map<string, boolean>()
       const roots = ["apps", "packages", ...(stack.infra === "alchemy" ? ["infra"] : [])]
       for (const f of sourceFiles(ctx.dir, roots)) {

@@ -2,6 +2,7 @@
   "id": "extras/storage",
   "title": "Storage",
   "description": "Object storage: a Storage service on R2 with Worker-served signed download URLs.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-storage.md",
   "files": [
     {
       "path": "files/storage-security.ts",
@@ -30,6 +31,8 @@
     {
       "name": "STORAGE_SIGNING_SECRET",
       "example": "change-me-to-a-long-random-string",
+
+      "dev": "dev-only-storage-signing-secret-replace-me",
       "description": "HMAC secret for signed download URLs (wrangler secret put STORAGE_SIGNING_SECRET)"
     }
   ],
@@ -123,13 +126,6 @@
         "infra": [
           "alchemy"
         ]
-      }
-    },
-    {
-      "name": "addDevVar",
-      "args": {
-        "name": "STORAGE_SIGNING_SECRET",
-        "value": "dev-only-storage-signing-secret-replace-me"
       }
     },
     {
