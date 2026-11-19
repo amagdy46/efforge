@@ -384,6 +384,20 @@ export const deployResources = (stack: StackConfig): Record<string, DeployResour
   },
 })
 
+/**
+ * "Before you deploy": who can use the dashboard's demos once the app is public. With auth, any
+ * account, and sign-up is open; without auth, anyone. Empty for a stack with nothing to say.
+ */
+const beforeDeploy = (input: ReadmeInput): string => {
+  const { stack } = input
+  if (stack.auth !== "none")
+    return "Before you deploy: sign-up is open, so anyone can register and then use every card, the ones that spend included (an AI key, the test email, the browser container). Close sign-up with `disableSignUp: true` in `apps/web/src/server/auth.ts` (`AGENTS.md`, Auth), or remove the demos you don't want, before you deploy with real keys."
+  const ids = addonIdsFor(stack)
+  if (stack.orm === "none" && !ids.some((id) => id.startsWith("extras/") || id.startsWith("ai/")))
+    return ""
+  return "Before you deploy: this project has no auth, so the dashboard's demos answer anyone who can reach the app, and the ones that write or spend say so on their card. Add auth (`npx create-efforge add auth/better-auth`) or remove those demos first."
+}
+
 const deployWrangler = (input: ReadmeInput): string => {
   const { stack } = input
   const ids = addonIdsFor(stack)
@@ -476,7 +490,12 @@ export const readmeRegions = (input: ReadmeInput): Record<ReadmeRegion, string> 
   scripts: scripts(input),
   layout: layout(input),
   capabilities: capabilityList(input),
-  deploy: input.stack.infra === "alchemy" ? deployAlchemy(input) : deployWrangler(input),
+  deploy: [
+    beforeDeploy(input),
+    input.stack.infra === "alchemy" ? deployAlchemy(input) : deployWrangler(input),
+  ]
+    .filter((part) => part !== "")
+    .join("\n\n"),
   more: more(input),
 })
 

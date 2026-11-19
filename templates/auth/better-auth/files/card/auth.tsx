@@ -81,5 +81,6 @@ export const auth: Capability = {
   ],
   test: { path: "packages/core/test/auth.test.ts", name: "sessionOrNull is null" },
   agents: "Auth (Better Auth)",
+  access: { effect: "reads" },
   Demo: AuthDemo,
 }

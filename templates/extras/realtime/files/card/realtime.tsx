@@ -1,7 +1,7 @@
 import { ExternalLink } from "lucide-react"
 import { type SubmitEvent, useState } from "react"
 import { isMessageTooLarge, MAX_MESSAGE_BYTES } from "@repo/core/realtime-limits"
-import { FailureNote, OpenEndpoint } from "@/components/demo"
+import { FailureNote } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -60,10 +60,6 @@ function RealtimeDemo() {
           }}
         />
       ) : null}
-      <OpenEndpoint>
-        This project has no auth, so the room has no access check: anyone who can reach the app can
-        join it and read what is sent. Add auth and it refuses a socket without a session.
-      </OpenEndpoint>
       <ul
         aria-label="Room messages"
         aria-live="polite"
@@ -162,5 +158,11 @@ export const realtime: Capability = {
     name: "refuses a message over the size limit with MessageTooLarge",
   },
   agents: "Realtime",
+  access: {
+    effect: "writes",
+    open: "This project has no auth, so the room has no access check: anyone who can reach the app can join it and read what is sent. Add auth and it refuses a socket without a session.",
+    signedIn:
+      "There is one room: every signed-in user on the dashboard reads what is sent to it. Sign-up is open to anyone until you close it (AGENTS.md, Auth).",
+  },
   Demo: RealtimeDemo,
 }

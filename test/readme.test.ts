@@ -265,7 +265,10 @@ it("add tells where each new add-on's card, AGENTS.md sections and docs are", as
   const result = await run(addAddons(dir, ["database/d1", "orm/drizzle", "realtime"], opts))
   const byId = new Map(result.added.map((a) => [a.id, a]))
   expect(byId.get("orm/drizzle")?.card).toBe("apps/web/src/capabilities/database.tsx")
-  expect(byId.get("orm/drizzle")?.agents).toEqual(["Queries and migrations (Drizzle)"])
+  expect(byId.get("orm/drizzle")?.agents).toEqual([
+    "Queries and migrations (Drizzle)",
+    "Notes without auth",
+  ])
   expect(byId.get("database/d1")?.agents).toEqual(["Database (Cloudflare D1)"])
   expect(byId.get("extras/realtime")?.card).toBe("apps/web/src/capabilities/realtime.tsx")
   expect(byId.get("extras/realtime")?.docs).toBe(

@@ -46,11 +46,13 @@ const make = Effect.gen(function* () {
   // one entry per workflow; keys match `JobPayloads` in @repo/core
   const workflows = { example: yield* ExampleWorkflow }
   return Jobs.of({
-    start: (job, payload) =>
-      workflows[job].create(payload).pipe(
-        Effect.map((instance) => ({ id: instance.id })),
-        Effect.mapError(fail("start")),
-      ),
+    start: (job, payload, options) =>
+      workflows[job]
+        .create(payload, options?.id === undefined ? undefined : { id: options.id })
+        .pipe(
+          Effect.map((instance) => ({ id: instance.id })),
+          Effect.mapError(fail("start")),
+        ),
     status: (job, id) =>
       workflows[job].get(id).pipe(
         Effect.flatMap((instance) => instance.status),

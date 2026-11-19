@@ -1,5 +1,5 @@
 import { type SubmitEvent, useState } from "react"
-import { FailureNote, OpenEndpoint, Pending } from "@/components/demo"
+import { FailureNote, Pending } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -46,10 +46,6 @@ function BrowserDemo() {
           <code className="font-mono">InvalidUrl</code>.
         </p>
       </form>
-      <OpenEndpoint>
-        This project has no auth, so anyone who can reach the app can have the browser container
-        open a public page. Add auth or remove the demo before you deploy it.
-      </OpenEndpoint>
       <div aria-live="polite" className="space-y-3">
         {state.status === "idle" ? (
           <p className="text-sm text-muted-foreground">
@@ -106,5 +102,11 @@ export const browser: Capability = {
     name: "refuses an address that is not http(s) with InvalidUrl and never opens it",
   },
   agents: "Browser",
+  access: {
+    effect: "spends",
+    open: "This project has no auth, so anyone who can reach the app can have the browser container open a public page. Add auth or remove the demo before you deploy it.",
+    signedIn:
+      "Any account can have the container open a page, which costs container time. Sign-up is open to anyone until you close it (AGENTS.md, Auth). Close it, or remove this demo, before you deploy it.",
+  },
   Demo: BrowserDemo,
 }

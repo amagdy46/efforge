@@ -1,5 +1,5 @@
 import { type SubmitEvent, useCallback, useEffect, useRef, useState } from "react"
-import { FailureNote, OpenEndpoint, Pending } from "@/components/demo"
+import { FailureNote, Pending } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -96,11 +96,6 @@ function AiDemo() {
           answer is a paid call to your provider, with your key.
         </p>
       </form>
-      <OpenEndpoint>
-        This project has no auth, so anyone who can reach it can call{" "}
-        <code className="font-mono">askModel</code> and spend your key. Add auth before you deploy
-        it.
-      </OpenEndpoint>
       <div aria-live="polite" className="space-y-3">
         {answer.status === "idle" ? (
           <p className="text-sm text-muted-foreground">
@@ -152,5 +147,11 @@ export const ai: Capability = {
     name: "refuses a blank prompt with EmptyPrompt and never calls the model",
   },
   agents: "AI (Effect AI, bring your own key)",
+  access: {
+    effect: "spends",
+    open: "This project has no auth, so anyone who can reach it can call askModel and spend your key. Add auth before you deploy it.",
+    signedIn:
+      "askModel spends your key for whoever calls it. Sign-up is open to anyone until you close it (AGENTS.md, Auth). Close it, or remove this demo, before you deploy with a real key.",
+  },
   Demo: AiDemo,
 }

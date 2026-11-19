@@ -37,8 +37,11 @@ export const JobsInMemory = Layer.effect(
   Effect.gen(function* () {
     const started = yield* Started
     return Jobs.of({
-      start: (_job, payload) =>
-        Ref.modify(started, (all) => [{ id: `run-${all.length + 1}` }, [...all, payload]]),
+      start: (_job, payload, options) =>
+        Ref.modify(started, (all) => [
+          { id: options?.id ?? `run-${all.length + 1}` },
+          [...all, payload],
+        ]),
       status: () =>
         Effect.succeed({
           status: "complete",

@@ -220,6 +220,10 @@
       "target": "apps/web/src/server/outcome.ts"
     },
     {
+      "path": "files/web/src/server/owner.ts",
+      "target": "apps/web/src/server/owner.ts"
+    },
+    {
       "path": "files/web/src/server/stack.ts",
       "target": "apps/web/src/server/stack.ts"
     },

@@ -1,7 +1,7 @@
 import type { JobEvent } from "@repo/core/jobs"
 import { CircleCheck, CircleDashed, CircleX, LoaderCircle, RotateCw } from "lucide-react"
 import { type SubmitEvent, useCallback, useEffect, useRef, useState } from "react"
-import { FailureNote, OpenEndpoint, Pending } from "@/components/demo"
+import { FailureNote, Pending } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -166,10 +166,6 @@ function WorkflowsDemo() {
           anything starts.
         </p>
       </form>
-      <OpenEndpoint>
-        This project has no auth, so anyone who can reach the app can start runs of the example
-        workflow.
-      </OpenEndpoint>
       <div aria-live="polite" className="space-y-3">
         {start.state.status === "running" ? <Pending>Starting the workflow…</Pending> : null}
         {start.state.status === "failed" ? <FailureNote error={start.state.error} /> : null}
@@ -259,5 +255,11 @@ export const workflows: Capability = {
     name: "refuses a blank name with MissingName and starts nothing",
   },
   agents: "Workflows",
+  access: {
+    effect: "writes",
+    open: "This project has no auth, so anyone who can reach the app can start runs of the example workflow and watch any run. Add auth before you deploy it.",
+    signedIn:
+      "A run belongs to the user who started it: no one else can watch it. Sign-up is open to anyone until you close it (AGENTS.md, Auth).",
+  },
   Demo: WorkflowsDemo,
 }

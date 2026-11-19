@@ -1,6 +1,9 @@
+import { Users } from "lucide-react"
 import { Fragment } from "react"
 import type { Capability } from "@/capabilities/types"
 import { CodeBlock } from "@/components/code-block"
+import { OpenEndpoint } from "@/components/demo"
+import { useStack } from "@/lib/use-stack"
 import { cn } from "@/lib/utils"
 
 /**
@@ -38,6 +41,24 @@ function Path({ children }: { children: string }) {
   )
 }
 
+/**
+ * Who may use a demo that writes or spends: without auth, anyone who can reach the app
+ * ("Open endpoint."); with auth, any signed-in user, and anyone can sign up.
+ */
+function Access({ access }: { access: Capability["access"] }) {
+  const stack = useStack()
+  if (access === undefined || access.effect === "reads" || stack === undefined) return null
+  if (stack.auth === "none") return <OpenEndpoint>{access.open}</OpenEndpoint>
+  return (
+    <div role="note" className="flex gap-2 rounded-md border border-dashed p-3 text-sm">
+      <Users aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <p>
+        <span className="font-medium">Any signed-in user.</span> {access.signedIn}
+      </p>
+    </div>
+  )
+}
+
 /** One capability: its demo next to its code, then the files, test and docs to read next. */
 export function CapabilityCard({
   capability,
@@ -47,7 +68,7 @@ export function CapabilityCard({
   /** index into the tempering colours, or undefined for a capability without a layer */
   tone: number | undefined
 }) {
-  const { id, title, summary, layer, code, files, test, agents, Demo } = capability
+  const { id, title, summary, layer, code, files, test, agents, access, Demo } = capability
   return (
     <section
       id={id}
@@ -81,11 +102,12 @@ export function CapabilityCard({
         <p className="basis-full text-sm text-muted-foreground">{summary}</p>
       </header>
       <div className="grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <div className="flex flex-col gap-4 p-5">
+        <div className="flex min-w-0 flex-col gap-4 p-5">
           <h3 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
             Try it
           </h3>
           <Demo />
+          <Access access={access} />
         </div>
         <div className="max-h-[26rem] min-w-0 border-t bg-code lg:max-h-none lg:border-t-0 lg:border-l">
           <CodeBlock files={code} />

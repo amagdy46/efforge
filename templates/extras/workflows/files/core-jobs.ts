@@ -11,6 +11,11 @@ export class JobError extends Data.TaggedError("JobError")<{
   }
 }
 
+/** A run id that does not belong to the caller: someone else's run and a made-up id alike. */
+export class UnknownRun extends Data.TaggedError("UnknownRun")<{
+  readonly message: string
+}> {}
+
 /** The example job needs a name to greet. */
 export class MissingName extends Data.TaggedError("MissingName")<{
   readonly message: string
@@ -29,6 +34,11 @@ export type JobName = keyof JobPayloads
 
 export interface JobRun {
   readonly id: string
+}
+
+export interface StartOptions {
+  /** The run's id; one is made when it is left out. Letters, digits, `-` and `_`, up to 100 */
+  readonly id?: string
 }
 
 export interface JobStatus {
@@ -73,6 +83,7 @@ export class Jobs extends Context.Service<
     readonly start: <N extends JobName>(
       job: N,
       payload: JobPayloads[N],
+      options?: StartOptions,
     ) => Effect.Effect<JobRun, JobError>
     readonly status: (job: JobName, id: string) => Effect.Effect<JobStatus, JobError>
     /** Events after event `after` (-1 for all), waiting a few seconds for the next one when none is new */
@@ -80,21 +91,36 @@ export class Jobs extends Context.Service<
   }
 >()("@repo/core/Jobs") {}
 
+/**
+ * The start of every run id `owner` starts: a hash of the owner (run ids are visible and short),
+ * then `_`. `watchExample` reads only the runs whose id starts with it.
+ */
+export const runPrefix = (owner: string): Effect.Effect<string> =>
+  Effect.promise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(owner))).pipe(
+    Effect.map((digest) => {
+      const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0"))
+      return `${hex.join("").slice(0, 32)}_`
+    }),
+  )
+
 // #region card
-/** Starts the example workflow; it returns at once with the run's id. */
-export const startExample = (payload: JobPayloads["example"]) =>
+/** Starts the example workflow for `owner`; returns at once with the run id. */
+export const startExample = (owner: string, input: JobPayloads["example"]) =>
   Effect.gen(function* () {
-    const name = payload.name.trim()
+    const name = input.name.trim()
     if (name === "") {
       return yield* new MissingName({ message: "Give the workflow a name." })
     }
     const jobs = yield* Jobs
-    return yield* jobs.start("example", { ...payload, name })
+    const id = `${yield* runPrefix(owner)}${crypto.randomUUID()}`
+    return yield* jobs.start("example", { ...input, name }, { id })
   })
 
-/** What happened in run `id` since event `after`, and where it is now. */
-export const watchExample = (id: string, after: number) =>
+/** What happened in `owner`'s run `id` since event `after`, and its status. */
+export const watchExample = (owner: string, id: string, after: number) =>
   Effect.gen(function* () {
+    if (!id.startsWith(yield* runPrefix(owner)))
+      return yield* new UnknownRun({ message: "No run of yours has this id." })
     const jobs = yield* Jobs
     const { events, done } = yield* jobs.events("example", id, after)
     const { status, output, error } = yield* jobs.status("example", id)

@@ -265,3 +265,55 @@ it("adding storage and email later adds their cards to the dashboard", async () 
     rmSync(tmp, { recursive: true, force: true })
   }
 })
+
+/** The card module a registry entry imports: `import { ai } from "./ai"` -> capabilities/ai.tsx. */
+const cardModule = (tree: ReadonlyMap<string, string>, name: string): string | undefined => {
+  const from = new RegExp(`import \\{ ${name} \\} from "\\./([\\w-]+)"`).exec(
+    tree.get(REGISTRY_FILE) ?? "",
+  )?.[1]
+  return from === undefined ? undefined : `${CARDS_DIR}${from}.tsx`
+}
+
+/** The `@/server/*` files a card module imports its server functions from. */
+const serverFiles = (source: string): string[] =>
+  [...source.matchAll(/from "@\/server\/([\w-]+)"/g)].map((m) => `apps/web/src/server/${m[1]}.ts`)
+
+it("every registered card that writes or spends says who may use it, on stacks with and without auth", async () => {
+  const addons = await run(loadAddons(templates))
+  let cards = 0
+  for (const auth of ["none", "better-auth", "better-auth-orgs"] as const) {
+    const config = withDefaults({
+      name: "app",
+      database: "d1",
+      orm: "effect-sql",
+      auth,
+      ai: "effect-ai-byok",
+      extras: ["workflows", "realtime", "browser", "storage", "email"],
+    })
+    const tree = await run(generate(config, addons))
+    for (const name of registered(tree)) {
+      const where = `${auth} ${name}`
+      const module = cardModule(tree, name)
+      const source = tree.get(module ?? "") ?? ""
+      const effect = /access: \{\s*effect: "(\w+)"/.exec(source)?.[1]
+      expect(effect, `${where}: access.effect`).toBeDefined()
+      // a POST server function changes something: the card may not say it only reads
+      const posts = serverFiles(source).some((f) =>
+        /createServerFn\(\{ method: "POST" \}\)/.test(tree.get(f) ?? ""),
+      )
+      if (posts) expect(effect, `${where}: has a POST server function`).not.toBe("reads")
+      if (effect !== "reads") {
+        expect(source, where).toMatch(/\bopen: "This project has no auth, so /)
+        expect(source, where).toMatch(/\bsignedIn:\s*"/)
+      }
+      cards++
+    }
+  }
+  // the frame shows the notice for every such card: no card has to remember it
+  const frame = readFileSync(
+    join(templates, "base/files/web/src/components/capability-card.tsx"),
+    "utf8",
+  )
+  expect(frame).toContain("<Access access={access} />")
+  expect(cards).toBeGreaterThanOrEqual(25)
+})

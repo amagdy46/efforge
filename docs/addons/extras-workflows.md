@@ -36,7 +36,7 @@ Nothing.
 
 Your code asks for `Jobs`, declared in `packages/core/src/jobs.ts`. Its members:
 
-- `start(job, payload)`. Fails with `JobError`.
+- `start(job, payload, options?)`. Fails with `JobError`.
 - `status(job, id)`. Fails with `JobError`.
 - `events(job, id, after)`. Events after event `after` (-1 for all), waiting a few seconds for the next one when none is new Fails with `JobError`.
 
@@ -116,6 +116,7 @@ None.
 - `Jobs` (`packages/core/src/jobs.ts`) starts durable jobs and reads their status and events; `JobsLive` (`apps/web/src/server/jobs.ts`) runs them on Cloudflare Workflows. Each workflow is a class in `apps/web/src/workflows/` (the example is `Example.ts`, bound as `EXAMPLE_WORKFLOW` and exported from `apps/web/src/server.ts`).
 - To add a workflow: a class beside `Example.ts`, its payload in `JobPayloads`, its client in `make` in `server/jobs.ts`, a binding for it, and its export from `src/server.ts`.
 - Put side effects inside `Workflow.step(...)`: a step that succeeded is not run again, but code outside a step runs again each time the run resumes. Wait with `Workflow.sleep`, not `Effect.sleep` or `setTimeout`. Fail with `WorkflowStepNonRetryableError` when a retry cannot help.
+- A run belongs to whoever started it: `startExample` puts a hash of the owner (`currentOwner` from `apps/web/src/server/owner.ts`) at the start of the run id, and `watchExample` answers `UnknownRun` for an id that doesn't start with the caller's. Do the same for a workflow of your own whose runs are per user.
 - Test code that starts jobs with `JobsInMemory` from `packages/core/test/jobs-in-memory.ts` (see `jobs.test.ts`); it needs no Cloudflare.
 - `pnpm dev` runs workflows locally, with no Cloudflare account. The dashboard card's server functions are in `apps/web/src/server/workflows-demo.ts` (on a project with the dashboard).
 
@@ -123,7 +124,7 @@ Only with `auth=none`:
 
 #### Workflows without auth
 
-- This project has no auth, so the card's server functions in `apps/web/src/server/workflows-demo.ts` (on a project with the dashboard) are open: anyone who can reach the app can start runs of the example workflow. Add auth (`efforge add auth/better-auth`, which guards them) or remove the demo before deploying.
+- This project has no auth, so the card's server functions in `apps/web/src/server/workflows-demo.ts` (on a project with the dashboard) are open: anyone who can reach the app can start runs of the example workflow and watch any run. Add auth (`efforge add auth/better-auth`, which guards them) or remove the demo before deploying.
 
 ## Limits
 

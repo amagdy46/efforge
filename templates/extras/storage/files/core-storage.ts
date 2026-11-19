@@ -72,6 +72,12 @@ export class Storage extends Context.Service<
 /** Where `upload` puts files; `deleteUpload` deletes nothing outside it. */
 export const UPLOADS = "uploads/"
 
+/**
+ * Where `upload` puts the files of `owner` (a user id, or one name everyone shares): no owner can
+ * list, open or delete another's, since every helper below works under this prefix only.
+ */
+export const uploadsOf = (owner: string): string => `${UPLOADS}${encodeURIComponent(owner)}/`
+
 /** The largest file `upload` stores, in bytes. */
 export const MAX_UPLOAD_BYTES = 1_000_000
 
@@ -90,8 +96,9 @@ export const fileName = (key: string): string =>
   (key.split("/").at(-1) ?? "").replaceAll(/[^\w.-]/g, "_").slice(0, 100) || "file"
 
 // #region card
-/** Stores a file under a key made here: never one the client picks. */
+/** Stores `owner`'s file under a key made here: never one the client picks. */
 export const upload = (
+  owner: string,
   name: string,
   contentType: string,
   bytes: Uint8Array,
@@ -102,7 +109,7 @@ export const upload = (
         message: `Files are at most ${MAX_UPLOAD_BYTES / 1_000_000} MB here.`,
       })
     const storage = yield* Storage
-    const key = `${UPLOADS}${crypto.randomUUID()}/${fileName(name)}`
+    const key = `${uploadsOf(owner)}${crypto.randomUUID()}/${fileName(name)}`
     return yield* storage.put(key, bytes, { contentType })
   })
 // #endregion
@@ -113,25 +120,29 @@ export interface Upload extends StoredObject {
   readonly url: string
 }
 
-/** The uploaded files, newest first, each with a link that opens it through this Worker. */
-export const listUploads = Effect.gen(function* () {
-  const storage = yield* Storage
-  const objects = yield* storage.list(UPLOADS)
-  const newest = objects.toSorted((a, b) => b.uploaded.getTime() - a.uploaded.getTime())
-  return yield* Effect.forEach(newest, (object): Effect.Effect<Upload, StorageError> =>
-    storage
-      .signedUrl(object.key, { expiresInSeconds: 600 })
-      .pipe(Effect.map((url) => ({ ...object, name: fileName(object.key), url }))),
-  )
-})
+/** `owner`'s uploaded files, newest first, each with a link that opens it through this Worker. */
+export const listUploads = (
+  owner: string,
+): Effect.Effect<ReadonlyArray<Upload>, StorageError, Storage> =>
+  Effect.gen(function* () {
+    const storage = yield* Storage
+    const objects = yield* storage.list(uploadsOf(owner))
+    const newest = objects.toSorted((a, b) => b.uploaded.getTime() - a.uploaded.getTime())
+    return yield* Effect.forEach(newest, (object): Effect.Effect<Upload, StorageError> =>
+      storage
+        .signedUrl(object.key, { expiresInSeconds: 600 })
+        .pipe(Effect.map((url) => ({ ...object, name: fileName(object.key), url }))),
+    )
+  })
 
-/** Deletes a file `upload` stored; any other key fails with `NotAnUpload`. */
+/** Deletes a file `upload` stored for `owner`; any other key fails with `NotAnUpload`. */
 export const deleteUpload = (
+  owner: string,
   key: string,
 ): Effect.Effect<void, NotAnUpload | StorageError, Storage> =>
   Effect.gen(function* () {
-    if (!key.startsWith(UPLOADS))
-      return yield* new NotAnUpload({ message: "Only uploaded files can be deleted here." })
+    if (!key.startsWith(uploadsOf(owner)))
+      return yield* new NotAnUpload({ message: "Only your own uploads can be deleted here." })
     const storage = yield* Storage
     return yield* storage.delete(key)
   })

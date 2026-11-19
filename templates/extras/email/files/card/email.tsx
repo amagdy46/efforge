@@ -1,5 +1,5 @@
 import { type SubmitEvent, useEffect, useState } from "react"
-import { FailureNote, OpenEndpoint, Pending } from "@/components/demo"
+import { FailureNote, Pending } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -85,9 +85,6 @@ function EmailDemo() {
           <code className="font-mono">InvalidAddress</code> come back.
         </p>
       </form>
-      <OpenEndpoint>
-        This project has no auth, so anyone who can reach the app can send a test email from it.
-      </OpenEndpoint>
       <div aria-live="polite">
         {sending.state.status === "running" ? <Pending>Sending…</Pending> : null}
         {sending.state.status === "failed" ? <FailureNote error={sending.state.error} /> : null}
@@ -140,5 +137,11 @@ export const email: Capability = {
     name: "refuses something that is not an address with InvalidAddress and sends nothing",
   },
   agents: "Email",
+  access: {
+    effect: "spends",
+    open: "This project has no auth, so anyone who can reach the app can send a test email from it. Add auth or remove the demo before you deploy it.",
+    signedIn:
+      "Any account can send the test email from your sender address. Sign-up is open to anyone until you close it (AGENTS.md, Auth). Close it, or remove this demo, before you deploy with MAIL_TRANSPORT=cloudflare.",
+  },
   Demo: EmailDemo,
 }

@@ -1,6 +1,6 @@
 import { ExternalLink } from "lucide-react"
 import { type SubmitEvent, useCallback, useEffect, useRef, useState } from "react"
-import { FailureNote, OpenEndpoint, Pending } from "@/components/demo"
+import { FailureNote, Pending } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -76,10 +76,6 @@ function StorageDemo() {
           back.
         </p>
       </form>
-      <OpenEndpoint>
-        This project has no auth, so anyone who can reach the app can upload files to the bucket and
-        delete them.
-      </OpenEndpoint>
       <div aria-live="polite" className="space-y-2">
         {adding.state.status === "running" ? <Pending>Uploading to R2…</Pending> : null}
         {adding.state.status === "failed" ? <FailureNote error={adding.state.error} /> : null}
@@ -166,5 +162,11 @@ export const storage: Capability = {
     name: "refuses a file over 1 MB with FileTooLarge and stores nothing",
   },
   agents: "Storage",
+  access: {
+    effect: "writes",
+    open: "This project has no auth, so anyone who can reach the app can upload files, open them and delete them, and every visitor shares one list. Add auth before you deploy it.",
+    signedIn:
+      "Each user lists, opens and deletes only their own uploads (under uploads/<user id>/), and each may store files up to 1 MB. Sign-up is open to anyone until you close it (AGENTS.md, Auth).",
+  },
   Demo: StorageDemo,
 }
