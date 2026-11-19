@@ -114,13 +114,13 @@ it("deploy follows the infra: wrangler resources and secrets, or Alchemy stages"
   const deploy = async (c: StackConfig) =>
     region((await generated(c)).get("README.md") as string, "deploy")
   const wrangler = await deploy(d1)
-  expect(wrangler).toContain("pnpm exec wrangler d1 create app")
+  expect(wrangler).toContain("pnpm exec wrangler d1 create app --binding DB")
   expect(wrangler).toContain("pnpm db:migrate --remote")
   expect(wrangler).toContain("pnpm exec wrangler email sending enable")
   expect(wrangler).toContain("pnpm exec wrangler secret bulk .env.production")
   expect(wrangler).toContain("pnpm run deploy")
   expect(wrangler).not.toContain("alchemy")
-  expect(await deploy(pg)).toContain("pnpm exec wrangler hyperdrive create app")
+  expect(await deploy(pg)).toMatch(/pnpm exec wrangler hyperdrive create app --connection-string="[^"]+" --binding HYPERDRIVE/)
   expect(await deploy(minimal)).not.toContain("secret bulk")
   const alchemy = await deploy(house)
   expect(alchemy).toContain("pnpm run deploy --stage prod --env-file .env.production")
@@ -233,7 +233,16 @@ it("every add-on links its page in efforge's docs", async () => {
     for (const option of slot.options.filter((o) => o.id !== "none")) {
       const m = loaded.get(`${slot.id}/${option.id}`)?.manifest
       expect(m?.docs, m?.id).toBe(`${repo.url}/blob/main/docs/addons/${slot.id}-${option.id}.md`)
+      // and the page is there, in this repo, so the link resolves once it is on main
+      const page = new URL(`../docs/addons/${slot.id}-${option.id}.md`, import.meta.url)
+      expect(readFileSync(page, "utf8"), m?.id).toContain(`# ${m?.title}`)
     }
+  // every add-on, the base and runtime included, has a link that resolves
+  for (const [id, a] of loaded) {
+    if (a.manifest.docs === undefined) continue
+    const rel = a.manifest.docs.replace(`${repo.url}/blob/main/`, "../")
+    expect(() => readFileSync(new URL(rel, import.meta.url)), id).not.toThrow()
+  }
 })
 
 it("the ORM, database and Alchemy add-ons each bring an AGENTS.md section", async () => {

@@ -365,11 +365,11 @@ const deployWrangler = (input: ReadmeInput): string => {
   const steps = ["Sign in: `pnpm exec wrangler login` (or set `CLOUDFLARE_API_TOKEN`)."]
   if (stack.database === "postgres")
     steps.push(
-      `Create a Hyperdrive config for your production Postgres (reachable from the internet): \`pnpm exec wrangler hyperdrive create ${dir} --connection-string="${pg}"\`. When wrangler offers to add it to \`wrangler.jsonc\`, answer no: it would add a second entry and leave \`HYPERDRIVE\` on the zeros. Put the id it prints in place of the zeros under \`hyperdrive\` yourself. Then create the tables: \`DATABASE_URL="${pg}" pnpm db:migrate\`.`,
+      `Create a Hyperdrive config for your production Postgres (reachable from the internet): \`pnpm exec wrangler hyperdrive create ${dir} --connection-string="${pg}" --binding HYPERDRIVE\`. With \`--binding\`, wrangler writes the new id into the \`HYPERDRIVE\` entry of \`wrangler.jsonc\` without asking (without it, the default answers add a second entry and leave \`HYPERDRIVE\` on the zeros): check that its \`id\` is no longer zeros. Then create the tables: \`DATABASE_URL="${pg}" pnpm db:migrate\`.`,
     )
   if (stack.database === "d1")
     steps.push(
-      `Create the database: \`pnpm exec wrangler d1 create ${dir}\`. When wrangler offers to add it to \`wrangler.jsonc\`, answer no: it would add a second entry and leave \`DB\` on the zeros. Put the \`database_name\` and \`database_id\` it prints in the \`DB\` entry under \`d1_databases\` yourself. Then create the tables: \`pnpm db:migrate --remote\`.`,
+      `Create the database: \`pnpm exec wrangler d1 create ${dir} --binding DB\`. With \`--binding\`, wrangler writes the new \`database_name\` and \`database_id\` into the \`DB\` entry of \`wrangler.jsonc\` without asking (without it, the default answers add a second entry and leave \`DB\` on the zeros): check that its \`database_id\` is no longer zeros. Then create the tables: \`pnpm db:migrate --remote\`.`,
     )
   if (ids.includes("extras/email"))
     steps.push(
