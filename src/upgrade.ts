@@ -4,7 +4,7 @@ import { Effect, type FileSystem, type Path } from "effect"
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser"
 import { parseDocument } from "yaml"
 import { type AddonManifest, addonIdsFor, type LoadedAddon } from "./addon.ts"
-import { presentCardTransforms } from "./cards.ts"
+import { needsGuard, presentCardTransforms, sessionGuard } from "./cards.ts"
 import { checkConsistency, sourceFiles } from "./consistency.ts"
 import { BIN } from "./contract.ts"
 import { unifiedDiff } from "./diff.ts"
@@ -831,11 +831,33 @@ export const planUpgrade = (
       },
     })
     for (const s of consistency.seams) note(s.file, s.what)
+    // a server file of efforge's that stays (an older dashboard of yours imports it) keeps its
+    // server functions: with auth they get requireSession, as add gives an add-on's, so the
+    // project's lint holds after the upgrade (sessionGate already guards them at runtime)
+    const guarded = new Map<string, string>()
+    if (stack.auth !== "none")
+      for (const h of consistency.holds) {
+        const text = changes.get(h.path) ?? at(h.path)
+        if (text === undefined || !needsGuard(h.path, text)) continue
+        const tree = new Map([[h.path, text]])
+        const next = yield* runTransform(tree, sessionGuard({ target: h.path })).pipe(
+          Effect.catchTag("TransformAnchorMissing", () =>
+            Effect.succeed(tree as ReadonlyMap<string, string>),
+          ),
+        )
+        const after = next.get(h.path)
+        if (after === undefined || after === text) continue
+        changes.set(h.path, after)
+        guarded.set(h.path, after)
+        note(h.path, "requireSession on its server functions")
+      }
     const heldFiles = new Map(consistency.holds.map((h) => [h.path, h]))
     for (const h of consistency.holds) {
       rehash.delete(h.path)
       unhash.delete(h.path)
     }
+    // the guarded file is still efforge's: its hash says so, so the next plan holds it again
+    for (const [p, text] of guarded) rehash.set(p, hash(text))
 
     // efforge.jsonc: the version this project now matches, and the hashes of what efforge wrote
     const manifestText = at("efforge.jsonc")

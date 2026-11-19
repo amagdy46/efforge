@@ -341,13 +341,17 @@ export const checkConsistency = (input: ConsistencyInput): ConsistencyResult => 
     workspaceOf()
     const files = new Set([...input.sources, ...changes.keys()])
     for (const from of files) {
-      if (holds.has(from)) continue
-      const text = final(from)
+      // a held file stays as it is on disk, so, like a file efforge doesn't write, it keeps what
+      // it imports: a change to that holds back too
+      const held = holds.has(from)
+      if (held && !exists(from)) continue
+      const text = held ? disk(from) : final(from)
       const fi = info(from, text)
       if (fi === undefined) continue
-      const fromPlanned = todayPlanned(from)
+      const fromPlanned = !held && todayPlanned(from)
       // efforge's own file as it is today, written now or already there, expects today's tree
-      const expectsToday = fromPlanned || (text !== undefined && text === today.get(from))
+      const expectsToday =
+        !held && (fromPlanned || (text !== undefined && text === today.get(from)))
       for (const edge of fi.imports) {
         const t = resolve(from, edge.spec)
         if (t.kind === "package") {

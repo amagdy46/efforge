@@ -307,6 +307,33 @@ it("an efforge file you import, whose new version drops what you use, is held wi
   await consistent(dir, r)
 })
 
+it("a held file keeps what it imports: efforge's file it needs is held back with it", async () => {
+  const dir = await project()
+  // older greeting.ts and outcome.ts, both as efforge wrote them; greeting.ts uses a helper the
+  // new outcome.ts no longer has, and a file of yours keeps greeting.ts as it is
+  olderTemplate(
+    dir,
+    "apps/web/src/server/outcome.ts",
+    'export const shout = (s: string) => s + "!"\n',
+  )
+  olderTemplate(
+    dir,
+    "apps/web/src/server/greeting.ts",
+    'import { shout } from "./outcome"\n\nexport const getGreeting = () => shout("hello")\n',
+  )
+  writeFileSync(
+    join(dir, "apps/web/src/server/mine.ts"),
+    'import { getGreeting } from "./greeting"\n\nexport const twice = () => getGreeting() + getGreeting()\n',
+  )
+  const r = await check(dir)
+  expect(r.changes.has("apps/web/src/server/greeting.ts")).toBe(false)
+  expect(r.changes.has("apps/web/src/server/outcome.ts")).toBe(false)
+  expect(r.kept.find((k) => k.path === "apps/web/src/server/outcome.ts")).toMatchObject({
+    status: "held",
+    reason: expect.stringContaining("apps/web/src/server/greeting.ts imports `shout`"),
+  })
+})
+
 it("a file efforge no longer generates goes, unless a file of yours imports it", async () => {
   const dir = await project()
   // what an older efforge wrote and no longer generates, unedited
