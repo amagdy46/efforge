@@ -5,17 +5,31 @@ import { join, relative, sep } from "node:path"
 /** `file` relative to the project root, with forward slashes. */
 const projectPath = (context) => relative(context.cwd, context.filename).split(sep).join("/")
 
-/** The local names `createServerFn` is imported as, from `@tanstack/react-start`. */
+/**
+ * How `createServerFn` from `@tanstack/react-start` is reachable in a file: the local names it is
+ * imported as, and the namespaces the package is imported as (`Start.createServerFn`).
+ */
 const serverFnNames = (program) => {
   const names = new Set()
+  const namespaces = new Set()
   for (const node of program.body) {
     if (node.type !== "ImportDeclaration" || node.source.value !== "@tanstack/react-start") continue
-    for (const spec of node.specifiers)
+    for (const spec of node.specifiers) {
       if (spec.type === "ImportSpecifier" && spec.imported.name === "createServerFn")
         names.add(spec.local.name)
+      if (spec.type === "ImportNamespaceSpecifier") namespaces.add(spec.local.name)
+    }
   }
-  return names
+  return { names, namespaces }
 }
+
+/** Whether `callee` is `createServerFn`, by one of its local names or through a namespace. */
+const isServerFn = (callee, { names, namespaces }) =>
+  (callee.type === "Identifier" && names.has(callee.name)) ||
+  (callee.type === "MemberExpression" &&
+    callee.object.type === "Identifier" &&
+    namespaces.has(callee.object.name) &&
+    callee.property.name === "createServerFn")
 
 /** The calls chained on `call`: `createServerFn(...).middleware([...]).handler(...)`. */
 const chainOf = (call) => {
@@ -73,13 +87,13 @@ const serverFnSession = {
     if (!existsSync(join(context.cwd, guard))) return {}
     const file = projectPath(context)
     const open = new Set(options.public?.[file] ?? [])
-    let names = new Set()
+    let imported = { names: new Set(), namespaces: new Set() }
     return {
       Program(program) {
-        names = serverFnNames(program)
+        imported = serverFnNames(program)
       },
       CallExpression(node) {
-        if (node.callee.type !== "Identifier" || !names.has(node.callee.name)) return
+        if (!isServerFn(node.callee, imported)) return
         const { links, top } = chainOf(node)
         const name = nameOf(top)
         if (name !== undefined && open.has(name)) return

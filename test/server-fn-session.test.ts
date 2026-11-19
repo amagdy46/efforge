@@ -110,14 +110,25 @@ it("the rule names an unguarded server function on an auth stack, and is off wit
     'export const exportAll = createServerFn({ method: "GET" }).handler(() => "rows")',
     "",
   ].join("\n")
-  const withAuth = new Map(await run(generate(stack({}), addons))).set(
-    "apps/web/src/server/export.ts",
-    handwritten,
-  )
+  // the same through a namespace import
+  const namespaced = [
+    'import * as Start from "@tanstack/react-start"',
+    "",
+    'export const purge = Start.createServerFn({ method: "POST" }).handler(() => "gone")',
+    "",
+  ].join("\n")
+  const withAuth = new Map(await run(generate(stack({}), addons)))
+    .set("apps/web/src/server/export.ts", handwritten)
+    .set("apps/web/src/server/purge.ts", namespaced)
   const found = lint(join(tmp, "auth"), withAuth)
-  expect(found).toHaveLength(1)
-  expect(found[0]?.message).toMatch(
-    /^`exportAll` in apps\/web\/src\/server\/export\.ts runs without a session\..*\.middleware\(\[requireSession\]\)/,
+  expect(found).toHaveLength(2)
+  expect(found.map((d) => d.message)).toEqual(
+    expect.arrayContaining([
+      expect.stringMatching(
+        /^`exportAll` in apps\/web\/src\/server\/export\.ts runs without a session\..*\.middleware\(\[requireSession\]\)/,
+      ),
+      expect.stringMatching(/^`purge` in apps\/web\/src\/server\/purge\.ts runs without a session/),
+    ]),
   )
   const without = new Map(await run(generate(stack({ auth: "none" }), addons))).set(
     "apps/web/src/server/export.ts",
