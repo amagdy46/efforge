@@ -3,7 +3,7 @@ import tailwindcss from "@tailwindcss/vite"
 import { tanstackStart } from "@tanstack/react-start/plugin/vite"
 import viteReact from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
-import { regions } from "./regions"
+import { clientGuard, regions } from "./regions.ts"
 
 export default defineConfig({
   resolve: { tsconfigPaths: true },
@@ -15,6 +15,7 @@ export default defineConfig({
       persistState: { path: "../../.wrangler/state" },
     }),
     regions(),
+    clientGuard(),
     tanstackStart(),
     tailwindcss(),
     viteReact(),

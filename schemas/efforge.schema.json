@@ -90,7 +90,7 @@
         "extras"
       ],
       "additionalProperties": true,
-      "description": "The stack choices. `efforge add` reads them and writes the new ones back. `npx create-efforge list --json` lists the ids."
+      "description": "The stack choices. `efforge add` reads them and writes the new ones back. `npx -y create-efforge list --json` lists the ids."
     },
     "command": {
       "type": "string",

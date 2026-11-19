@@ -2,7 +2,7 @@
 
 # Browser
 
-A headless browser: a Browser service on a Cloudflare Container that runs Playwright (apps/browser).
+A headless browser: a Browser service on a Cloudflare Container that runs Playwright (apps/browser), and a dashboard card that opens a page.
 
 Id `extras/browser`. It is one of the Extras: a project can have any number of them. Template: [`templates/extras/browser/`](../../templates/extras/browser/).
 
@@ -36,7 +36,7 @@ Nothing.
 
 Your code asks for `Browser`, declared in `packages/core/src/browser.ts`. It has one member:
 
-- `run(url)`. Loads `url` and reports what the page did. Fails with `BrowserError`.
+- `run(url)`. Loads `url` and reports what the page did. Fails with `BrowserError` or `BrowserUnavailable` or `UrlRefused`.
 
 `BrowserLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
 
@@ -50,7 +50,8 @@ Your code asks for `Browser`, declared in `packages/core/src/browser.ts`. It has
 - `packages/core/src/browser.ts`
 - `apps/web/src/browser/BrowserContainer.ts`
 - `apps/web/src/server/browser.ts`
-- `apps/web/src/server/run-browser.ts`
+- `packages/core/test/browser-in-memory.ts`
+- `packages/core/test/browser.test.ts`
 - `apps/browser/Dockerfile`
 - `apps/browser/.dockerignore`
 - `apps/browser/package.json`
@@ -58,6 +59,8 @@ Your code asks for `Browser`, declared in `packages/core/src/browser.ts`. It has
 - `apps/browser/package-lock.json`
 - `apps/browser/src/url-policy.ts`
 - `apps/browser/src/server.ts`
+- `apps/web/src/capabilities/browser.tsx`
+- `apps/web/src/server/browser-demo.ts`
 
 ## Files it edits
 
@@ -86,9 +89,17 @@ Your code asks for `Browser`, declared in `packages/core/src/browser.ts`. It has
 
 - Declares `browser` and binds it to the Worker as `BROWSER`. Only with `infra=alchemy`.
 
-### `apps/web/src/server/run-browser.ts`
+### `AGENTS.md`
 
-- Runs `requireSession` before every server function in the file. Only with `auth=better-auth` or `auth=better-auth-orgs`.
+- Adds the rules under [Rules it adds to AGENTS.md](#rules-it-adds-to-agentsmd).
+
+### `apps/web/src/server/browser-demo.ts`
+
+- Runs `requireSession` before every server function in the file. Only with `auth=better-auth-orgs` or `auth=better-auth`.
+
+### `apps/web/src/capabilities/registry.ts`
+
+- Adds `browser` to `capabilities`.
 
 ### `apps/web/package.json`
 
@@ -127,7 +138,28 @@ None.
 
 ## Rules it adds to AGENTS.md
 
-None.
+### Browser
+
+- `Browser` (`packages/core/src/browser.ts`) opens a page and reports its title, request count and a screenshot; `visit(url)` is the program the dashboard card runs. `BrowserLive` (`apps/web/src/server/browser.ts`) sends the URL to Playwright in the `apps/browser` container (a Node server, `apps/browser/src/server.ts`), bound as `BROWSER` through `BrowserContainer` (`apps/web/src/browser/BrowserContainer.ts`).
+- The container refuses private and local addresses (`apps/browser/src/url-policy.ts`, answered as `UrlRefused`). Keep that policy: the container fetches whatever it is sent, so without it it is a request-forgery proxy into your network.
+- Keep the Dockerfile's Playwright image tag and the `playwright` version in `apps/browser/package.json` in step, and update `apps/browser/package-lock.json` with `npm install --package-lock-only` after a dependency change.
+- Test code that opens pages with `BrowserInMemory` from `packages/core/test/browser-in-memory.ts` (see `browser.test.ts`); it needs no container.
+- The dashboard card's server function is `visitPage` in `apps/web/src/server/browser-demo.ts` (on a project with the dashboard).
+- Locally the container needs Docker. A page that never loads in local dev usually means the container cannot reach the internet: a host firewall that drops traffic from Docker's bridge network to the host blocks it.
+
+Only with `infra=none`:
+
+- `pnpm dev` runs no container until `dev.enable_containers` is true in `wrangler.jsonc` (it is false, so `pnpm dev` starts without Docker); until then calls fail with `BrowserUnavailable`.
+
+Only with `infra=alchemy`:
+
+- `pnpm dev` (`alchemy dev`) runs the container with Docker; without Docker running, calls fail with `BrowserUnavailable`.
+
+Only with `auth=none`:
+
+#### Browser without auth
+
+- This project has no auth, so `visitPage` in `apps/web/src/server/browser-demo.ts` (on a project with the dashboard) is open: anyone who can reach the app can make the container load public pages. Add auth (`efforge add auth/better-auth`, which guards it) or remove the demo before deploying.
 
 ## Limits
 

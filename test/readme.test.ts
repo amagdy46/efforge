@@ -10,6 +10,7 @@ import { defaultTemplatesDir } from "../src/commands/create.ts"
 import { generate } from "../src/generate.ts"
 import {
   capabilities,
+  deployResources,
   fillReadme,
   planSteps,
   README_REGIONS,
@@ -120,6 +121,31 @@ it("the run steps are the ones each stack needs", async () => {
     const block = /```sh\n([\s\S]*?)\n```/.exec(await steps(c))?.[1]
     expect(block).toBe(renderSteps(planSteps(c, { installed: false })).join("\n"))
   }
+})
+
+it("every add-on that binds a Cloudflare resource is covered by Deploy, on both infras", async () => {
+  const bound = [...(await addons()).values()]
+    .map((a) => a.manifest)
+    .filter((m) => m.transforms.some((t) => t.name === "addWranglerBinding"))
+  expect(bound.length).toBeGreaterThan(5)
+  for (const m of bound)
+    for (const infra of ["none", "alchemy"] as const) {
+      const [slot, value] = m.id.split("/") as [string, string]
+      const config = withDefaults({
+        name: "app",
+        infra,
+        database: slot === "database" ? value : "d1",
+        orm: "drizzle",
+        auth: "none",
+        extras: slot === "extras" ? [value] : [],
+      } as Parameters<typeof withDefaults>[0])
+      const entry = deployResources(config)[m.id]
+      expect(entry, `${m.id} has no entry in deployResources (src/readme.ts)`).toBeDefined()
+      const text = region((await generated(config)).get("README.md") as string, "deploy")
+      expect(text, `${m.id} on infra=${infra}`).toContain(
+        infra === "alchemy" ? entry?.alchemy : entry?.wrangler,
+      )
+    }
 })
 
 it("deploy follows the infra: wrangler resources and secrets, or Alchemy stages", async () => {
@@ -239,7 +265,10 @@ it("add tells where each new add-on's card, AGENTS.md sections and docs are", as
   const result = await run(addAddons(dir, ["database/d1", "orm/drizzle", "realtime"], opts))
   const byId = new Map(result.added.map((a) => [a.id, a]))
   expect(byId.get("orm/drizzle")?.card).toBe("apps/web/src/capabilities/database.tsx")
-  expect(byId.get("orm/drizzle")?.agents).toEqual(["Queries and migrations (Drizzle)"])
+  expect(byId.get("orm/drizzle")?.agents).toEqual([
+    "Queries and migrations (Drizzle)",
+    "Notes without auth",
+  ])
   expect(byId.get("database/d1")?.agents).toEqual(["Database (Cloudflare D1)"])
   expect(byId.get("extras/realtime")?.card).toBe("apps/web/src/capabilities/realtime.tsx")
   expect(byId.get("extras/realtime")?.docs).toBe(
@@ -378,13 +407,13 @@ for (const [name, config, add] of b3)
 it("Add more suggests an add-on the project lacks, and none when it has them all", async () => {
   const more = async (c: StackConfig) =>
     region((await generated(c)).get("README.md") as string, "more")
-  expect(await more(minimal)).toContain("npx create-efforge add email")
+  expect(await more(minimal)).toContain("npx -y create-efforge add email")
   const withEmail = await more({ ...pg, extras: ["email"] })
   expect(withEmail).not.toContain("add email")
-  expect(withEmail).toContain("npx create-efforge add storage")
+  expect(withEmail).toContain("npx -y create-efforge add storage")
   const all = await more(house)
-  expect(all).toContain("npx create-efforge list")
-  expect(all).not.toContain("npx create-efforge add")
+  expect(all).toContain("npx -y create-efforge list")
+  expect(all).not.toContain("npx -y create-efforge add")
 })
 
 // W2-D review S3, S4: AGENTS.md sections follow the stack in a fixed order, stale ones go

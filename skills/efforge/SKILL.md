@@ -57,7 +57,7 @@ npx -y create-efforge@latest create my-app --json --dry-run --database=d1 --auth
 - `nextSteps`: commands still to run, in order, each with its `cwd`. Run them. A step with `longRunning: true` is the dev server (`pnpm dev`): start it in the background or leave it to the user.
 - `env`: env vars the project reads. `set: false` means efforge wrote it empty: fill it in (in `file`, `.dev.vars` or `.env` with Alchemy) before using the feature; `description` says what it is. `secret: true` means the value is a secret: never print it or commit the deployed one. `info` uses the same two fields.
 - `command`: a command that creates the same stack again without prompts.
-- `warnings`: things that didn't stop the run but the user should know (git commit skipped, unsupported Node, an install a previous run left undone). Read them and tell the user.
+- `warnings`: things that didn't stop the run but the user should know (git commit skipped, unsupported Node, an install a previous run left undone, git ignoring a project made with `--no-git`, which leaves `pnpm check` no files and the app unstyled until `git init` in the project). Read them and tell the user.
 
 ## Add a capability
 
@@ -113,7 +113,7 @@ It changes nothing. `status` is `needs-action` (something breaks the project; ex
 npx -y create-efforge@latest upgrade --json --cwd my-app
 ```
 
-It applies only what is still efforge's (pins, guards, scripts, files the user never changed, new files, and what new files need in files efforge edits in place), never a file the user changed, and runs `pnpm install`. With uncommitted changes it stops with `UncommittedChanges`. Then run `nextSteps` (the gate). `kept` lists files it left: `review` (the user changed it and so did efforge's template) and `held` (efforge's, held back because something of the user's depends on the old version). Tell the user about each, with `reason`; show efforge's version with `upgrade --check --diff --file <path>` and change a user's file only if they ask. A `needsAction` entry with `fix: null` (a set of pins half moved by the user) goes to the user with its `lines`.
+It applies only what is still efforge's (pins, guards, scripts, files the user never changed, new files, and what new files need in files efforge edits in place), never a file the user changed, and runs `pnpm install`. With uncommitted changes it stops with `UncommittedChanges`. New env vars the stack reads are appended to `.env.example` and listed in `env`; tell the user about any with `set: false`. Then run `nextSteps` (the gate, and `pnpm db:migrate` when the local database lacks a migration). `kept` lists files it left: `review` (the user changed it and so did efforge's template) and `held` (efforge's, held back because something of the user's depends on the old version). Tell the user about each, with `reason`; show efforge's version with `upgrade --check --diff --file <path>` and change a user's file only if they ask. A `needsAction` entry with `fix: null` (a set of pins half moved by the user) goes to the user with its `lines`.
 
 ## Errors
 
@@ -129,7 +129,7 @@ It applies only what is still efforge's (pins, guards, scripts, files the user n
 | `TargetNotEmpty` | The directory exists. With `project: true` it holds an efforge project: when `fix` isn't `null` it is the project this command started (same `stack` as `requested`): run `fix`, then `nextSteps`. When `fix` is `null` and `stack` differs from `requested`, it is a different project: ask the user for another name or whether to use it. With `project: false`, ask for another name. Never delete the directory yourself. |
 | `Interrupted` | The run was stopped (exit code 130). Run `fix` when it isn't `null`, then the rest of `nextSteps`. For `add` with `written: false`, run the same command again. |
 | `NotAnEfforgeProject` | Run `fix` when it isn't null (it points `--cwd` at the project). Otherwise the directory isn't an efforge project. |
-| `NoAddonIds` | Pick an id from `available`, or run `fix` (it lists them). `add` with no ids only shows its picker to a person at a terminal; with `--json` it is this error. |
+| `NoAddonIds` | Pick an id from `available` (`fix` is `null`; `list --json` says what each one adds). `add` with no ids only shows its picker to a person at a terminal; with `--json` it is this error. |
 | `LayersUnreadable` | `graph` can't find `export const AppLayer = Layer.mergeAll(...)` in `file`. Tell the user; `add` needs that call too. |
 | `ReadmeUnwritable` | `graph --write` left `README.md` alone (`problems` says why). Paste the `mermaid` from `graph --json` where the user wants it instead. |
 | `UnknownAddon` | Run `fix` when it isn't `null` (a clear typo, or the one id a fragment names). Otherwise pick from `suggestions`, or run `list --json` for the ids the project can add; if what the user wants isn't there, efforge doesn't offer it: tell them. |

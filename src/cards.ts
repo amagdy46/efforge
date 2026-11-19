@@ -1,4 +1,5 @@
-import type { AddonManifest, When } from "./addon.ts"
+import { posix } from "node:path"
+import type { AddonFile, AddonManifest, When } from "./addon.ts"
 import { slots } from "./slots.ts"
 import { type TransformCall, transformTargets } from "./transforms/index.ts"
 
@@ -17,6 +18,52 @@ const AUTH_OPTIONS = (slots.find((s) => s.id === "auth")?.options ?? [])
   .filter((id) => id !== "none")
 
 type CardTransform = TransformCall & { readonly when?: When }
+
+/** Where `createStart` gets the app's global middleware; `sessionGate` joins it on auth stacks. */
+export const START_FILE = "apps/web/src/start.ts"
+
+/** The server functions signed-out visitors may call, read by `sessionGate` and the lint rule. */
+export const PUBLIC_LIST_FILE = `${SERVER_DIR}public-server-fns.json`
+
+/** Where `requireSession` lives on auth stacks. */
+const GUARD_FILE = `${SERVER_DIR}require-session.ts`
+
+/**
+ * The server functions a signed-out visitor must reach, by file. Every other server function in
+ * apps/web requires a session on auth stacks: efforge adds the guard to add-on files, and the
+ * generated project's lint rule (`efforge/server-fn-session`, configured with this same list in
+ * templates/base/files/root/vite.config.ts) fails on any it does not see.
+ */
+export const PUBLIC_SERVER_FNS: Readonly<Record<string, ReadonlyArray<string>>> = {
+  [`${SERVER_DIR}session.ts`]: ["getSession", "getAppState"],
+  [`${SERVER_DIR}stack.ts`]: ["getStack"],
+}
+
+/** Whether efforge guards the server functions of a file with `source`, at `target`, on auth stacks. */
+export const needsGuard = (target: string, source: string): boolean =>
+  target.startsWith("apps/web/src/") &&
+  /\.tsx?$/.test(target) &&
+  !Object.hasOwn(PUBLIC_SERVER_FNS, target) &&
+  /\bcreateServerFn\s*\(/.test(source)
+
+/**
+ * `requireSession` on every server function in `file`, on auth stacks only. A file that no longer
+ * has a server function (the user rewrote it) is left alone.
+ */
+export const sessionGuard = (file: Pick<AddonFile, "target" | "when">): CardTransform => {
+  const from = posix.relative(posix.dirname(file.target), GUARD_FILE.replace(/\.ts$/, ""))
+  return {
+    name: "addServerFnMiddleware",
+    args: {
+      file: file.target,
+      middleware: "requireSession",
+      import: "requireSession",
+      from: from.startsWith(".") ? from : `./${from}`,
+      ifAny: "true",
+    },
+    when: withAuth(file.when),
+  }
+}
 
 /** `capabilities/realtime.tsx` -> `./realtime`, the specifier the registry imports it by. */
 const specifier = (target: string): string =>
@@ -44,16 +91,7 @@ export const cardTransforms = (manifest: AddonManifest): CardTransform[] => {
   if (card === undefined || module === undefined) return []
   const guards = card.files
     .filter((f) => f !== module && f.target.startsWith(SERVER_DIR))
-    .map((f): CardTransform => ({
-      name: "addServerFnMiddleware",
-      args: {
-        file: f.target,
-        middleware: "requireSession",
-        import: "requireSession",
-        from: "./require-session",
-      },
-      when: withAuth(f.when),
-    }))
+    .map(sessionGuard)
   const registration: CardTransform = {
     name: "addArrayItem",
     args: {

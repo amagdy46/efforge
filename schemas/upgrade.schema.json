@@ -428,6 +428,41 @@
             "additionalProperties": true
           }
         },
+        "env": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string",
+                "description": "Where the local value is read from (.dev.vars, or .env with Alchemy)."
+              },
+              "set": {
+                "type": "boolean",
+                "description": "efforge already wrote a working local value; false means fill it in."
+              },
+              "secret": {
+                "type": "boolean",
+                "description": "The value is a secret: the deployed one is never printed or committed."
+              }
+            },
+            "required": [
+              "name",
+              "description",
+              "file",
+              "set",
+              "secret"
+            ],
+            "additionalProperties": true
+          },
+          "description": "Env vars the stack reads that .env.example lacks: upgrade appends them there, and to the local settings file when there is one, changing no line already there."
+        },
         "kept": {
           "type": "array",
           "items": {
@@ -530,6 +565,7 @@
         "files",
         "seams",
         "scripts",
+        "env",
         "kept",
         "steps",
         "warnings"
@@ -697,6 +733,41 @@
           "type": "boolean",
           "description": "pnpm install ran."
         },
+        "env": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string",
+                "description": "Where the local value is read from (.dev.vars, or .env with Alchemy)."
+              },
+              "set": {
+                "type": "boolean",
+                "description": "efforge already wrote a working local value; false means fill it in."
+              },
+              "secret": {
+                "type": "boolean",
+                "description": "The value is a secret: the deployed one is never printed or committed."
+              }
+            },
+            "required": [
+              "name",
+              "description",
+              "file",
+              "set",
+              "secret"
+            ],
+            "additionalProperties": true
+          },
+          "description": "Env vars added to .env.example (and to the local settings file when there is one), as create and add report them."
+        },
         "kept": {
           "type": "array",
           "items": {
@@ -817,6 +888,7 @@
         "changed",
         "removed",
         "installed",
+        "env",
         "kept",
         "needsAction",
         "nextSteps",

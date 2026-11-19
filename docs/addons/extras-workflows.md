@@ -2,7 +2,7 @@
 
 # Workflows
 
-Durable background jobs: a Jobs service on Cloudflare Workflows, with an example workflow and server functions.
+Durable background jobs: a Jobs service on Cloudflare Workflows, an example workflow and a dashboard card that follows a run's steps.
 
 Id `extras/workflows`. It is one of the Extras: a project can have any number of them. Template: [`templates/extras/workflows/`](../../templates/extras/workflows/).
 
@@ -36,8 +36,9 @@ Nothing.
 
 Your code asks for `Jobs`, declared in `packages/core/src/jobs.ts`. Its members:
 
-- `start(job, payload)`. Fails with `JobError`.
+- `start(job, payload, options?)`. Fails with `JobError`.
 - `status(job, id)`. Fails with `JobError`.
+- `events(job, id, after)`. Events after event `after` (-1 for all), waiting a few seconds for the next one when none is new Fails with `JobError`.
 
 `JobsLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
 
@@ -51,7 +52,10 @@ Your code asks for `Jobs`, declared in `packages/core/src/jobs.ts`. Its members:
 - `packages/core/src/jobs.ts`
 - `apps/web/src/workflows/Example.ts`
 - `apps/web/src/server/jobs.ts`
-- `apps/web/src/server/example-job.ts`
+- `packages/core/test/jobs-in-memory.ts`
+- `packages/core/test/jobs.test.ts`
+- `apps/web/src/capabilities/workflows.tsx`
+- `apps/web/src/server/workflows-demo.ts`
 
 ## Files it edits
 
@@ -77,9 +81,17 @@ Your code asks for `Jobs`, declared in `packages/core/src/jobs.ts`. Its members:
 
 - Declares `exampleWorkflow` and binds it to the Worker as `EXAMPLE_WORKFLOW`. Only with `infra=alchemy`.
 
-### `apps/web/src/server/example-job.ts`
+### `AGENTS.md`
 
-- Runs `requireSession` before every server function in the file. Only with `auth=better-auth` or `auth=better-auth-orgs`.
+- Adds the rules under [Rules it adds to AGENTS.md](#rules-it-adds-to-agentsmd).
+
+### `apps/web/src/server/workflows-demo.ts`
+
+- Runs `requireSession` before every server function in the file. Only with `auth=better-auth-orgs` or `auth=better-auth`.
+
+### `apps/web/src/capabilities/registry.ts`
+
+- Adds `workflows` to `capabilities`.
 
 ### `efforge.jsonc`
 
@@ -99,7 +111,20 @@ None.
 
 ## Rules it adds to AGENTS.md
 
-None.
+### Workflows
+
+- `Jobs` (`packages/core/src/jobs.ts`) starts durable jobs and reads their status and events; `JobsLive` (`apps/web/src/server/jobs.ts`) runs them on Cloudflare Workflows. Each workflow is a class in `apps/web/src/workflows/` (the example is `Example.ts`, bound as `EXAMPLE_WORKFLOW` and exported from `apps/web/src/server.ts`).
+- To add a workflow: a class beside `Example.ts`, its payload in `JobPayloads`, its client in `make` in `server/jobs.ts`, a binding for it, and its export from `src/server.ts`.
+- Put side effects inside `Workflow.step(...)`: a step that succeeded is not run again, but code outside a step runs again each time the run resumes. Wait with `Workflow.sleep`, not `Effect.sleep` or `setTimeout`. Fail with `WorkflowStepNonRetryableError` when a retry cannot help.
+- A run belongs to whoever started it: `startExample` puts a hash of the owner (`currentOwner` from `apps/web/src/server/owner.ts`) at the start of the run id, and `watchExample` answers `UnknownRun` for an id that doesn't start with the caller's. Do the same for a workflow of your own whose runs are per user.
+- Test code that starts jobs with `JobsInMemory` from `packages/core/test/jobs-in-memory.ts` (see `jobs.test.ts`); it needs no Cloudflare.
+- `pnpm dev` runs workflows locally, with no Cloudflare account. The dashboard card's server functions are in `apps/web/src/server/workflows-demo.ts` (on a project with the dashboard).
+
+Only with `auth=none`:
+
+#### Workflows without auth
+
+- This project has no auth, so the card's server functions in `apps/web/src/server/workflows-demo.ts` (on a project with the dashboard) are open: anyone who can reach the app can start runs of the example workflow and watch any run. Add auth (`efforge add auth/better-auth`, which guards them) or remove the demo before deploying.
 
 ## Limits
 

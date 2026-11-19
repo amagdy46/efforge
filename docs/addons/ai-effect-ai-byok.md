@@ -2,7 +2,7 @@
 
 # Effect AI (bring your own key)
 
-An Llm service on Effect AI with Anthropic, OpenAI, OpenRouter and Ollama providers; keys come from the environment, or are saved encrypted per organization when auth has organizations.
+An Llm service on Effect AI with Anthropic, OpenAI, OpenRouter and Ollama providers; keys come from the environment, or are saved encrypted per organization when auth has organizations. A dashboard card streams an answer.
 
 Id `ai/effect-ai-byok`. It fills the AI slot: a project makes one AI choice, or none. Template: [`templates/ai/effect-ai-byok/`](../../templates/ai/effect-ai-byok/).
 
@@ -34,9 +34,10 @@ Nothing.
 
 ## Service and layer
 
-Your code asks for `Llm`, declared in `packages/core/src/llm.ts`. It has one member:
+Your code asks for `Llm`, declared in `packages/core/src/llm.ts`. Its members:
 
 - `generateText(prompt)`. Fails with `LlmError` or `LlmNotConfigured`.
+- `streamText(prompt)`. The answer as it is written. Fails before streaming when no model is configured. Fails with `LlmNotConfigured`.
 
 `LlmLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`.
 
@@ -52,6 +53,8 @@ Your code asks for `Llm`, declared in `packages/core/src/llm.ts`. It has one mem
 | `packages/core/src/llm.ts` | Always |
 | `apps/web/src/server/llm-provider.ts` | Always |
 | `apps/web/src/server/ai.ts` | Always |
+| `packages/core/test/llm-fixed.ts` | Always |
+| `packages/core/test/llm.test.ts` | Always |
 | `apps/web/src/server/llm.ts` | Always |
 | `packages/core/src/llm-crypto.ts` | `auth=better-auth-orgs` |
 | `packages/core/test/llm-crypto.test.ts` | `auth=better-auth-orgs` |
@@ -63,6 +66,8 @@ Your code asks for `Llm`, declared in `packages/core/src/llm.ts`. It has one mem
 | `packages/db/migrations/0003_llm_credential.sql` | `orm=effect-sql` and `auth=better-auth-orgs` |
 | `packages/db/drizzle/20261018161056_llm_credential/migration.sql` | `orm=drizzle` and `auth=better-auth-orgs` |
 | `packages/db/drizzle/20261018161056_llm_credential/snapshot.json` | `orm=drizzle` and `auth=better-auth-orgs` |
+| `apps/web/src/capabilities/ai.tsx` | Always |
+| `apps/web/src/server/ai-demo.ts` | Always |
 
 ## Files it edits
 
@@ -91,6 +96,7 @@ Your code asks for `Llm`, declared in `packages/core/src/llm.ts`. It has one mem
 ### `infra/alchemy.run.ts`
 
 - Imports `* as Config` from `effect/Config`. Only with `infra=alchemy`.
+- Imports `* as Redacted` from `effect/Redacted`. Only with `auth=none` or `auth=better-auth` and `infra=alchemy`.
 - Declares `llmEncryptionKey` and binds it to the Worker as `LLM_ENCRYPTION_KEY`. Only with `auth=better-auth-orgs` and `infra=alchemy`.
 - Declares `llmProvider` and binds it to the Worker as `LLM_PROVIDER`. Only with `auth=none` or `auth=better-auth` and `infra=alchemy`.
 - Declares `llmModel` and binds it to the Worker as `LLM_MODEL`. Only with `auth=none` or `auth=better-auth` and `infra=alchemy`.
@@ -108,6 +114,18 @@ Your code asks for `Llm`, declared in `packages/core/src/llm.ts`. It has one mem
 ### `AGENTS.md`
 
 - Adds the rules under [Rules it adds to AGENTS.md](#rules-it-adds-to-agentsmd).
+
+### `apps/web/src/server/ai-settings.ts`
+
+- Runs `requireSession` before every server function in the file. Only with `auth=better-auth-orgs`.
+
+### `apps/web/src/server/ai-demo.ts`
+
+- Runs `requireSession` before every server function in the file. Only with `auth=better-auth-orgs` or `auth=better-auth`.
+
+### `apps/web/src/capabilities/registry.ts`
+
+- Adds `ai` to `capabilities`.
 
 ### `apps/web/package.json`
 
@@ -155,26 +173,29 @@ Only with `auth=none`:
 
 ### AI (Effect AI, bring your own key)
 
-- Use the `Llm` service from `@repo/core` (`generateText(prompt)`); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.
-- `apps/web/src/server/ai.ts` is a demo server function (`generateText`); it is NOT gated because this project has no auth: anyone who can reach the app can call it and spend the configured API key. Add auth (`efforge add auth/better-auth`) or remove the demo before deploying. Gate any server function you add that spends model tokens the same way.
-- Never log, return or store the API key in the clear.
+- Use the `Llm` service from `@repo/core` (`generateText(prompt)`, or `streamText(prompt)` for the answer as it is written; `ask` in `packages/core/src/llm.ts` is the program the dashboard card runs); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.
+- `apps/web/src/server/ai.ts` (`generateText`) and the dashboard card's `askModel` in `apps/web/src/server/ai-demo.ts` (on a project with the dashboard) are demo server functions; they are NOT gated because this project has no auth: anyone who can reach the app can call them and spend the configured API key. Add auth (`efforge add auth/better-auth`) or remove the demo before deploying. Gate any server function you add that spends model tokens the same way.
+- Test code that calls a model with `LlmFixed(answer)` (a fixed answer, streamed a word at a time) or `LlmUnconfigured` from `packages/core/test/llm-fixed.ts`; see `llm.test.ts`. Tests never call a provider.
+- Never log, return or store the API key in the clear. Never commit a key: `LLM_API_KEY` goes in the settings file `pnpm dev` reads, and in a Worker secret in production.
 
 Only with `auth=better-auth`:
 
 ### AI (Effect AI, bring your own key)
 
-- Use the `Llm` service from `@repo/core` (`generateText(prompt)`); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.
-- `apps/web/src/server/ai.ts` is a demo server function (`generateText`); it is gated by `requireSession`. Gate any server function you add that spends model tokens the same way.
-- Never log, return or store the API key in the clear.
+- Use the `Llm` service from `@repo/core` (`generateText(prompt)`, or `streamText(prompt)` for the answer as it is written; `ask` in `packages/core/src/llm.ts` is the program the dashboard card runs); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.
+- `apps/web/src/server/ai.ts` (`generateText`) and the dashboard card's `askModel` in `apps/web/src/server/ai-demo.ts` (on a project with the dashboard) are demo server functions that need a session: `sessionGate` (`apps/web/src/start.ts`) refuses any server function without one, yours included, and with `requireSession` chained the handler gets `context.session`. Sign-up is open, so any account can spend the key: see Auth.
+- Test code that calls a model with `LlmFixed(answer)` (a fixed answer, streamed a word at a time) or `LlmUnconfigured` from `packages/core/test/llm-fixed.ts`; see `llm.test.ts`. Tests never call a provider.
+- Never log, return or store the API key in the clear. Never commit a key: `LLM_API_KEY` goes in the settings file `pnpm dev` reads, and in a Worker secret in production.
 
 Only with `auth=better-auth-orgs`:
 
 ### AI (Effect AI, bring your own key)
 
-- Use the `Llm` service from `@repo/core` (`generateText(prompt)`); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.
+- Use the `Llm` service from `@repo/core` (`generateText(prompt)`, or `streamText(prompt)` for the answer as it is written; `ask` in `packages/core/src/llm.ts` is the program the dashboard card runs); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.
 - Each organization saves its own key at `/app/settings/ai`, stored in the `llm_credential` table (`packages/db`), encrypted with AES-GCM (WebCrypto) using `LLM_ENCRYPTION_KEY` (32 random bytes, base64: `openssl rand -base64 32`; the app refuses to start without a valid one). Rotating that key makes saved keys unreadable, so organizations must enter theirs again.
 - The key never goes back to the browser (only its last four characters, to owners and admins). Only owners and admins can set, clear or test it; keep that check on the server.
-- `apps/web/src/server/ai.ts` is a demo server function (`generateText`) behind `requireSession`. Gate any server function you add that spends model tokens the same way.
+- `apps/web/src/server/ai.ts` (`generateText`) and the dashboard card's `askModel` in `apps/web/src/server/ai-demo.ts` (on a project with the dashboard) are demo server functions that need a session: `sessionGate` (`apps/web/src/start.ts`) refuses any server function without one, yours included, and with `requireSession` chained the handler gets `context.session`. Sign-up is open, so any account can spend the key: see Auth.
+- Test code that calls a model with `LlmFixed(answer)` (a fixed answer, streamed a word at a time) or `LlmUnconfigured` from `packages/core/test/llm-fixed.ts`; see `llm.test.ts`. Tests never call a provider.
 - Never log, return or store the API key in the clear.
 
 ## Limits

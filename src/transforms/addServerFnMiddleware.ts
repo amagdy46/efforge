@@ -47,11 +47,54 @@ const oneCallPerLine = (text: string, calls: Node[], call: string, eol: string):
   return lines.map((l) => `${eol}${indent}${l}`).join("")
 }
 
+/** The `.middleware(...)` call of a chain, if it has one. */
+const middlewareCall = (links: Node[]): CallExpression | undefined =>
+  links.find((n): n is CallExpression => {
+    if (!Node.isCallExpression(n)) return false
+    const callee = n.getExpression()
+    return Node.isPropertyAccessExpression(callee) && callee.getName() === "middleware"
+  })
+
+/** The `createServerFn(...)` calls in `text`. */
+const serverFnCalls = (file: string, text: string): CallExpression[] =>
+  parseTs(file, text)
+    .getDescendants()
+    .filter(
+      (n): n is CallExpression =>
+        Node.isCallExpression(n) && n.getExpression().getText() === "createServerFn",
+    )
+
+/** The name a chain is exported as (`export const greet = createServerFn(...)...`). */
+const nameOf = (top: Node): string =>
+  top
+    .getFirstAncestor((n) => Node.isVariableDeclaration(n))
+    ?.getSymbol()
+    ?.getName() ?? "a server function"
+
 /**
- * args: `{ file, middleware, import?, from? }` — adds `.middleware([<middleware>])` right after
- * every `createServerFn(...)` in `file`, so those server functions run behind that TanStack Start
- * middleware (for example an auth gate). A function that already calls `.middleware(...)` is left
- * alone, and the import is added when `import` and `from` are given. Idempotent.
+ * The server functions in `text` whose chain has no `.middleware([...])` list naming `middleware`,
+ * by name. `add` reports each one it could not guard (the list is not written out, so it cannot
+ * add to it): the generated project's own lint rule fails on them too.
+ */
+export const unguardedServerFns = (file: string, text: string, middleware: string): string[] =>
+  serverFnCalls(file, text).flatMap((fn) => {
+    const links = chain(fn)
+    const list = middlewareCall(links)?.getArguments()[0]
+    const guarded =
+      list !== undefined &&
+      Node.isArrayLiteralExpression(list) &&
+      list.getElements().some((e) => e.getText() === middleware)
+    return guarded ? [] : [nameOf(links.at(-1) as Node)]
+  })
+
+/**
+ * args: `{ file, middleware, import?, from?, ifAny? }` — puts `<middleware>` on every
+ * `createServerFn(...)` in `file`, so those server functions run behind that TanStack Start
+ * middleware (for example an auth gate): `.middleware([<middleware>])` right after the call, or,
+ * when the chain already has a `.middleware([...])` list, first in that list. A chain whose
+ * `.middleware(...)` is not a written-out list is left alone (`unguardedServerFns` names it). The
+ * import is added when `import` and `from` are given. With `ifAny`, a file without a server
+ * function is left as it is instead of failing. Idempotent.
  */
 export const addServerFnMiddleware: Transform = (tree, args) =>
   Effect.gen(function* () {
@@ -61,14 +104,9 @@ export const addServerFnMiddleware: Transform = (tree, args) =>
     const text = tree.get(file)
     if (text === undefined) return yield* missing(file, "file", snippet)
 
-    const sf = parseTs(file, text)
-    const calls = sf
-      .getDescendants()
-      .filter(
-        (n): n is CallExpression =>
-          Node.isCallExpression(n) && n.getExpression().getText() === "createServerFn",
-      )
-    if (calls.length === 0) return yield* missing(file, "createServerFn(...)", snippet)
+    const calls = serverFnCalls(file, text)
+    if (calls.length === 0)
+      return args.ifAny === "true" ? tree : yield* missing(file, "createServerFn(...)", snippet)
 
     // [start, end, replacement], applied from the end of the file
     const edits: Array<[number, number, string]> = []
@@ -77,15 +115,17 @@ export const addServerFnMiddleware: Transform = (tree, args) =>
     for (const fn of calls) {
       const links = chain(fn)
       const top = links.at(-1) as Node
-      const gated = top
-        .getDescendants()
-        .some(
-          (n) =>
-            Node.isPropertyAccessExpression(n) &&
-            n.getName() === "middleware" &&
-            n.getExpression().getText().startsWith("createServerFn"),
-        )
-      if (gated) continue
+      const existing = middlewareCall(links)
+      if (existing !== undefined) {
+        const list = existing.getArguments()[0]
+        if (list === undefined || !Node.isArrayLiteralExpression(list)) continue
+        const items = list.getElements()
+        if (items.some((e) => e.getText() === middleware)) continue
+        // first in the list: the session is checked before any other middleware runs
+        const at = list.getStart() + 1
+        edits.push([at, at, items.length === 0 ? middleware : `${middleware}, `])
+        continue
+      }
       const at = fn.getEnd()
       // a chain the formatter already broke one call per line gets the new call on its own line
       const broken = /^[ \t]*\r?\n([ \t]*)\./.exec(text.slice(at))
@@ -97,7 +137,8 @@ export const addServerFnMiddleware: Transform = (tree, args) =>
     let next = text
     for (const [start, end, replacement] of edits.toSorted((a, b) => b[0] - a[0]))
       next = `${next.slice(0, start)}${replacement}${next.slice(end)}`
-    if (args.import !== undefined && args.from !== undefined)
+    const uses = unguardedServerFns(file, next, middleware).length < calls.length
+    if (uses && args.import !== undefined && args.from !== undefined)
       next = addImportText(file, next, args.import, args.from) ?? next
     return withFile(tree, file, next)
   })

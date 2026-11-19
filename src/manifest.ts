@@ -21,7 +21,7 @@ export const EfforgeManifest = Schema.Struct({
   }),
   stack: StackConfig.annotate({
     description:
-      "The stack choices. `efforge add` reads them and writes the new ones back. `npx create-efforge list --json` lists the ids.",
+      "The stack choices. `efforge add` reads them and writes the new ones back. `npx -y create-efforge list --json` lists the ids.",
   }),
   command: Schema.String.annotate({
     description: "A non-interactive command that creates this stack again.",

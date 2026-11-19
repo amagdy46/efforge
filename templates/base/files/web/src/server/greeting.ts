@@ -9,7 +9,7 @@ const GreetInput = Schema.Struct({
 })
 
 /** Runs `greet` on the server; `InvalidName` comes back as data. */
-export const greet = createServerFn({ method: "POST" })
+export const greet = createServerFn({ method: "GET" })
   .validator(Schema.toStandardSchemaV1(GreetInput))
   .handler(({ data }) => runOutcome(greetProgram(data.name)))
 // #endregion

@@ -35,6 +35,21 @@ export interface Capability {
   readonly test: { readonly path: string; readonly name: string }
   /** The AGENTS.md section to read */
   readonly agents: string
+  /**
+   * Who may use the demo and what that lets them do. `reads` for a demo that changes nothing.
+   * `writes` (it stores something) and `spends` (it costs money or sends something out: a model
+   * call, an email, a browser container) put a notice on the card: on a project without auth,
+   * "Open endpoint." and `open`; with auth, `signedIn`, since anyone can sign up.
+   */
+  readonly access?:
+    | { readonly effect: "reads" }
+    | {
+        readonly effect: "writes" | "spends"
+        /** Without auth: what anyone who can reach the app can do with it, and what to do */
+        readonly open: string
+        /** With auth: what any signed-in user can do with it, and whose data it is */
+        readonly signedIn: string
+      }
   /** The working demo. Handle loading, empty, error and not-configured states. */
   readonly Demo: ComponentType
 }

@@ -6,14 +6,20 @@ export const brand = {
 } as const
 
 /**
- * The tempering sequence for diagrams (`efforge graph`), one per layer, always in this order: a
- * light tint behind Iron text, edged in the colour, so a node reads on light and dark pages.
+ * The layer colours for diagrams (`efforge graph`), one per layer, always in this order, the
+ * dashboard's own: a light tint behind Iron text, edged in the colour, so a node reads on light
+ * and dark pages.
  */
 export const temperNodes = [
-  { name: "Straw", fill: "#efe3c6", stroke: "#E2C275", ink: "#1C1D20" },
+  { name: "Straw", fill: "#d6d0af", stroke: "#9A8C33", ink: "#1C1D20" },
   { name: "Bronze", fill: "#dbc4b1", stroke: "#A8683A", ink: "#1C1D20" },
-  { name: "Temper purple", fill: "#c6bbd1", stroke: "#6C4E96", ink: "#1C1D20" },
+  { name: "Temper purple", fill: "#cab9cf", stroke: "#774990", ink: "#1C1D20" },
   { name: "Blued steel", fill: "#b0bfd7", stroke: "#2F5AA8", ink: "#1C1D20" },
+  { name: "Sky", fill: "#b2d4dc", stroke: "#3496B4", ink: "#1C1D20" },
+  { name: "Gold", fill: "#dfcda9", stroke: "#B38323", ink: "#1C1D20" },
+  { name: "Plum", fill: "#d0bbc3", stroke: "#8A4F6E", ink: "#1C1D20" },
+  { name: "Slate", fill: "#c5c6c7", stroke: "#6B7078", ink: "#1C1D20" },
+  { name: "Teal", fill: "#b5ccc5", stroke: "#3D7F73", ink: "#1C1D20" },
 ] as const
 
 /** Diagram colours that are not a layer's: the composition (Iron) and what a layer needs (Steel). */

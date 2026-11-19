@@ -51,12 +51,13 @@ const cli = (args: string[], answers: Parameters<typeof scriptedPromptIO>[0] = [
 
 it("incompatible flags say why, unknown values say unknown", async () => {
   await cli(["app", "-y", "--dry-run", "--database=none", "--orm=drizzle"])
-  expect(plain(errors.join("\n"))).toContain(
+  // errors wrap at 80 columns: read them as one line
+  expect(plain(errors.join("\n")).replaceAll("\n", " ")).toContain(
     "--orm=drizzle can't be used here: an ORM needs a database, and the database is none",
   )
   errors.length = 0
   await cli(["app", "-y", "--dry-run", "--database=mysql"])
-  expect(plain(errors.join("\n"))).toContain(
+  expect(plain(errors.join("\n")).replaceAll("\n", " ")).toContain(
     "Unknown --database=mysql. Options: postgres, d1, none",
   )
 })

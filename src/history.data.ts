@@ -176,6 +176,42 @@ export const releases: Readonly<Record<string, Release>> = {
         typecheck: ["tsc --noEmit"],
       },
     },
+    scriptStacks: {
+      "apps/browser/package.json": {
+        start: {
+          extras: ["browser", "email", "realtime", "storage", "workflows"],
+        },
+        typecheck: {
+          extras: ["browser", "email", "realtime", "storage", "workflows"],
+        },
+      },
+      "package.json": {
+        "db:migrate": {
+          database: ["d1", "postgres"],
+          orm: ["drizzle", "effect-sql"],
+        },
+        deploy: {
+          infra: ["alchemy"],
+        },
+        destroy: {
+          infra: ["alchemy"],
+        },
+      },
+      "packages/db/package.json": {
+        "db:generate": {
+          database: ["d1", "postgres"],
+          orm: ["drizzle"],
+        },
+        "db:migrate": {
+          database: ["d1", "postgres"],
+          orm: ["drizzle", "effect-sql"],
+        },
+        typecheck: {
+          database: ["d1", "postgres"],
+          orm: ["drizzle", "effect-sql"],
+        },
+      },
+    },
     records: {
       ".github/workflows/deploy.yml":
         "AUisAUptAXGzAekkAi5iA0r3A11IA86SA9FmBiLwBkPDBp/qBuzoBvWFCAyvCS5/Ca6aCbs5CiwlCjGFCsrKCw6JC0kQDAwQDKccDMzEDcVKDfO9DfXrDjiMDlqRD07cEIGwEYUWEam9EhG6E44tFApHFBstFF4oFHa9FPdfFVNLFX47FsE5FyXJGO7nGUPlGc2QG3cYG6nxHCu7HbO9Hgq/Hm8hHpj1HvBhH+nTIWzLIaFKIbLIIfubIg+5IsZOIumMI1SWI1wqI36II46UJC/yJD4IJLNAJXwTJbB5Jbs+Jh45JjhWJqu4Jz1lJ9ukJ/pxKblPKflcKiPoKsUALAsSLMRiLp4lLrxULuQxL8ijL82OMCDlMHi4MI+6MZyGMqyMMroCMydPM5fBM7U2NDWZNMLPNOnXNQLSNgHmNiALNszsNyGXN6ZhN6wkOKT+OOxGObcfObhiOfegOiE+O6qWO6xjO9EoO/eIPDnHPYhUPimwPkc+PzhSP1GiP3LeQFY/QOdlQRH7QoEsQ23AQ4xUQ/QbRAckRGhERJIJRifPRmgiRmw3RsIBRvk6Ryn3R4tLSKK4SMg4SWIGSm0gSomMSpWjSsvMSwt4TIpATSdDTYj1TfFYTvj4TzixT0jmUQtqUURZUavZUljwU7GCU8TBVCwhVLDMVSLwVZn5VnSFVu4fV+72WKk3WRoRWT6aWkY9XFI+XHWHXYJYXaINXjVJX26LX28NX4+2X+oFYCHdYJ1zYMPaYOKhYbjnYgfBYkAaYktzYlVRYoN1YyPqY0LjY0mtY211Y8laZCL+ZIv9ZLClZVUCZZM6ZeQWZls6Z0W+aCwNaTnRaUsdaU+babPaacG3bAcSbBD3bX0IbZ4BbbbBbg4Ebjp1bzbsb28zb8CNcBhkcCjVcCjhcEqacIf0cS7LcVcrck70cp1tdK6pdpCGeKw2eZD5eZLAehvWe2jAe8ZafD9sfNImfNV6fXYofZnyfhZAfo6Nf0qCf4OCf7dagCa7gZ1cgdlkgekxg0cJg24Pg5/QhQmHhj1ohrWnhrzjh2fih7TeiAu1iMHniiF7ij02itXIi8SdjdYwje8NkCQIkDFtkKbnkKvCkZT8kuL1kyHQk2b1k7h6lCoYlH86lM1nlSZXlbm1lzNNl88fmCxKmD6jmKGZmMgOmTFcmZ6MmbDnmbfQmb2jmoDAmwdRmzM3m1V9nI29nfuxnhYpnlRWnqzynwI+n4Kbn5omn7wUn80foMADonLmo4wDpCzGpZrrpaGzpm5HpnfvpusupvQrpxOKp+iNqFkcqF4vqcP4qtIlqxlFq7dmrD5OrpcrsVRzsWaUsnq8s/totMKztTiQtWWhtrDFtzqft0Tct4HFt5tkt+yRuPuTuXSduXyVuj36vF+JvTPrvgGhvkcZvlM9vo3HvpcOvtI9wC4uwUg7wnSpxawEx1a3x43hx8X7x/bfyDF+yELzyJtDyLx9yUHPyXn5yZquydvKyejoyupgy2SozE74zbCLzgHmzmw1zqK6zqrRz3Z+z5m7z6Hb0Q1J0SmZ0Txx0Y4c0ffp0isn0r9i00zU07O11DI/1DKt1EFf1TX01W6z1dQ91f3f1gtI1kZ31pNT1sLj1xbe15Od19am2JN32Roh2UOW2bsx2dMA2d0k2hNb2nnF2wHE2yEq22Lg2+fb3UQn3eqX3grr3jKE3qS/3uqw395a4EQ54PWs4P0s4SSh4XYE4cnF4rOP4yMA5PMq5Zn+5eJc5yoI55h16MPv6MmB6OfS6j5E6lSJ6wrJ7EaK7I5d7NmS7WS47c2G7e6R7oDl79Ey8Cud8E2E8Jpj8J+58d5j8jFC8ySE83N888WW9DvM9Tp09keX9oqv9uaN9xUM+BZB+LTO+Lrk+Xtj+bak+h1M+pmc/IdD/U0W/U33/Vxv/chs/iug/qgi/0OR/49V",
@@ -380,6 +416,42 @@ export const releases: Readonly<Record<string, Release>> = {
         "db:generate": ["drizzle-kit generate"],
         "db:migrate": ["node scripts/migrate.ts"],
         typecheck: ["tsc --noEmit"],
+      },
+    },
+    scriptStacks: {
+      "apps/browser/package.json": {
+        start: {
+          extras: ["browser", "email", "realtime", "storage", "workflows"],
+        },
+        typecheck: {
+          extras: ["browser", "email", "realtime", "storage", "workflows"],
+        },
+      },
+      "package.json": {
+        "db:migrate": {
+          database: ["d1", "postgres"],
+          orm: ["drizzle", "effect-sql"],
+        },
+        deploy: {
+          infra: ["alchemy"],
+        },
+        destroy: {
+          infra: ["alchemy"],
+        },
+      },
+      "packages/db/package.json": {
+        "db:generate": {
+          database: ["d1", "postgres"],
+          orm: ["drizzle"],
+        },
+        "db:migrate": {
+          database: ["d1", "postgres"],
+          orm: ["drizzle", "effect-sql"],
+        },
+        typecheck: {
+          database: ["d1", "postgres"],
+          orm: ["drizzle", "effect-sql"],
+        },
       },
     },
     records: {
@@ -588,6 +660,42 @@ export const releases: Readonly<Record<string, Release>> = {
         "db:generate": ["drizzle-kit generate"],
         "db:migrate": ["node scripts/migrate.ts"],
         typecheck: ["tsc --noEmit"],
+      },
+    },
+    scriptStacks: {
+      "apps/browser/package.json": {
+        start: {
+          extras: ["browser", "email", "realtime", "storage", "workflows"],
+        },
+        typecheck: {
+          extras: ["browser", "email", "realtime", "storage", "workflows"],
+        },
+      },
+      "package.json": {
+        "db:migrate": {
+          database: ["d1", "postgres"],
+          orm: ["drizzle", "effect-sql"],
+        },
+        deploy: {
+          infra: ["alchemy"],
+        },
+        destroy: {
+          infra: ["alchemy"],
+        },
+      },
+      "packages/db/package.json": {
+        "db:generate": {
+          database: ["d1", "postgres"],
+          orm: ["drizzle"],
+        },
+        "db:migrate": {
+          database: ["d1", "postgres"],
+          orm: ["drizzle", "effect-sql"],
+        },
+        typecheck: {
+          database: ["d1", "postgres"],
+          orm: ["drizzle", "effect-sql"],
+        },
       },
     },
     records: {

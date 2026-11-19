@@ -18,11 +18,12 @@ const statusText: Record<RoomStatus, string> = {
   connecting: "Connecting",
   open: "Connected",
   closed: "Disconnected, retrying",
+  refused: "Not signed in",
 }
 
 /** Open the dashboard in two tabs: messages sent in one appear in the other, through a Durable Object. */
 function RealtimeDemo() {
-  const { messages, status, send } = useRoom("demo")
+  const { messages, status, reason, send } = useRoom("demo")
   const [text, setText] = useState("")
   const server = useServerCall(announce)
   const tooLarge = isMessageTooLarge(text)
@@ -51,6 +52,14 @@ function RealtimeDemo() {
           {statusText[status]}
         </p>
       </div>
+      {status === "refused" ? (
+        <FailureNote
+          error={{
+            _tag: "Unauthorized",
+            message: `${reason || "Not signed in"}: the room only lets signed-in users join. Sign in again, then reload.`,
+          }}
+        />
+      ) : null}
       <ul
         aria-label="Room messages"
         aria-live="polite"
@@ -149,5 +158,11 @@ export const realtime: Capability = {
     name: "refuses a message over the size limit with MessageTooLarge",
   },
   agents: "Realtime",
+  access: {
+    effect: "writes",
+    open: "This project has no auth, so the room has no access check: anyone who can reach the app can join it and read what is sent. Add auth and it refuses a socket without a session.",
+    signedIn:
+      "There is one room: every signed-in user on the dashboard reads what is sent to it. Sign-up is open to anyone until you close it (AGENTS.md, Auth).",
+  },
   Demo: RealtimeDemo,
 }

@@ -7,7 +7,7 @@ import { addExport } from "./addExport.ts"
 import { addImport } from "./addImport.ts"
 import { addLayer } from "./addLayer.ts"
 import { addRegion } from "./addRegion.ts"
-import { addServerFnMiddleware } from "./addServerFnMiddleware.ts"
+import { addServerFnMiddleware, unguardedServerFns } from "./addServerFnMiddleware.ts"
 import { addWorkflowSecret, WORKFLOW_FILE } from "./addWorkflowSecret.ts"
 import { addWranglerBinding, WRANGLER_FILE } from "./addWranglerBinding.ts"
 import { AGENTS_FILE, appendAgentsSection } from "./appendAgentsSection.ts"
@@ -17,7 +17,7 @@ import { setWranglerValue } from "./setWranglerValue.ts"
 import type { Transform } from "./util.ts"
 
 export type { Transform }
-export { TransformAnchorMissing, UnknownTransform }
+export { TransformAnchorMissing, UnknownTransform, unguardedServerFns }
 
 export interface TransformCall {
   readonly name: string

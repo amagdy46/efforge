@@ -5,7 +5,7 @@ import pc from "picocolors"
 import { type AddonManifest, loadAddons, type When } from "../addon.ts"
 import { cardTransforms } from "../cards.ts"
 import { BIN, type Failure, Invocation, printSuccess, report } from "../contract.ts"
-import { alternative, fix } from "../fix.ts"
+import { alternative } from "../fix.ts"
 import { introLine } from "../intro.ts"
 import { slots, whyUnavailable } from "../slots.ts"
 import type { SlotId, StackConfig } from "../stack.ts"
@@ -358,18 +358,18 @@ export const infoFailure = (
   e._tag === "NoAddonId"
     ? {
         code: "NoAddonIds",
-        message: `Name the add-on to describe: ${(e.available as string[]).join(", ")}.`,
-        fix: fix(
-          args,
-          (i) => ({
+        message: `Name the add-on to describe: ${(e.available as string[]).join(", ")}.${(() => {
+          const list = alternative(args, (i) => ({
             ...i,
             verb: "list",
             word: "list",
             operands: [],
             flags: i.flags.filter((f) => f.name === "json" || f.name === "cwd"),
-          }),
-          { list: true },
-        ),
+          }))
+          return list === null ? "" : ` What each one adds: ${list}`
+        })()}`,
+        // listing isn't describing: which add-on is the caller's choice (`available`)
+        fix: null,
         details: { available: e.available as string[] },
       }
     : (() => {

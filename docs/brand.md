@@ -69,6 +69,20 @@ Straw, Bronze, Temper purple and Blued steel are the colours steel passes throug
 
 Pairs the assets use: Paper on Blued steel 6.11:1 (the colour mark's letters, the avatar, the terminal cell); Iron on Paper 15.44:1 (the light lockup, the social preview); Paper on Iron 15.44:1 (the dark lockup, the badge text, the command on the social preview); Blued steel on Iron 2.52:1 (the badge's punch edge, a shape); the badge's edge, Steel at 35% over Iron, on GitHub dark `#0d1117` 2.77:1 (a shields.io `#555` label is 2.53:1); Blued steel on GitHub light `#ffffff` 6.66:1 and on GitHub dark `#0d1117` 2.83:1 (the punch's edge; on dark the letters inside, at 6.11:1, carry the mark).
 
-Text needs 4.5:1 (WCAG AA); shapes and large text need 3:1. Where the "On Iron" ratio is below that, the next column gives the value to use on Iron and other dark backgrounds. Straw and Steel are too light for text on Paper: use them as fills behind Iron text (Iron on Straw 9.79:1). Bronze is 4.09:1 on Paper, so it is for shapes, not text. The tempering sequence for diagrams is Straw, Bronze, Temper purple, Blued steel, one colour per layer, always in that order.
+Text needs 4.5:1 (WCAG AA); shapes and large text need 3:1. Where the "On Iron" ratio is below that, the next column gives the value to use on Iron and other dark backgrounds. Straw and Steel are too light for text on Paper: use them as fills behind Iron text (Iron on Straw 9.79:1). Bronze is 4.09:1 on Paper, so it is for shapes, not text. The tempering sequence is Straw, Bronze, Temper purple, Blued steel, in that order: the first four layer colours below.
+
+| # | Layer colour | Light | On light card and page | Apart from next (ΔE) | Dark | On dark card and page | Apart from next (ΔE) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Straw | `#9A8C33` | 3.11:1 | 30 | `#E2C275` | 9.12:1 | 25 |
+| 2 | Bronze | `#A8683A` | 4.09:1 | 70 | `#C98A58` | 5.42:1 | 68 |
+| 3 | Temper purple | `#774990` | 6.13:1 | 25 | `#BC8BD5` | 5.82:1 | 28 |
+| 4 | Blued steel | `#2F5AA8` | 6.11:1 | 42 | `#7DA2E3` | 6.09:1 | 25 |
+| 5 | Sky | `#3496B4` | 3.12:1 | 84 | `#A9C9E6` | 9.10:1 | 76 |
+| 6 | Gold | `#B38323` | 3.11:1 | 67 | `#BF8D2E` | 5.28:1 | 64 |
+| 7 | Plum | `#8A4F6E` | 5.62:1 | 30 | `#C58AA8` | 5.66:1 | 28 |
+| 8 | Slate | `#6B7078` | 4.56:1 | 25 | `#A3A7AE` | 6.50:1 | 24 |
+| 9 | Teal | `#3D7F73` | 4.29:1 |  | `#7FBFB2` | 7.47:1 |  |
+
+The dashboard's layer graph and cards, and `efforge graph`, colour layers in this order. Each value reaches 3:1, what a shape needs, on both surfaces of its theme (card `#FCFBF8` and page `#F6F5F1` light, `#222327` and `#1C1D20` dark), and is at least 20 apart (CIE76 ΔE) from its neighbours. The named colours keep their brand values above for brand use; on the dashboard, Straw, Bronze and Temper purple use the variants in this table. Every layer is also named in text, so colour is never the only cue.
 
 <!-- /generated -->

@@ -63,6 +63,11 @@ Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`. It has one m
 | `apps/web/src/server/auth-route.ts` | Always |
 | `apps/web/src/server/session.ts` | Always |
 | `apps/web/src/server/require-session.ts` | Always |
+| `apps/web/src/server/owner.ts` (*replaces*) | Always |
+| `apps/web/src/server/socket-session.ts` | Always |
+| `apps/web/src/server/public-server-fns.json` | Always |
+| `apps/web/src/server/api-session.ts` | Always |
+| `apps/web/src/server/public-api-paths.json` | Always |
 | `apps/web/src/lib/auth-client.ts` | Always |
 | `apps/web/src/lib/redirect.ts` | Always |
 | `apps/web/src/lib/form.ts` | Always |
@@ -100,6 +105,11 @@ Your code asks for `Auth`, declared in `packages/core/src/Auth.ts`. It has one m
 ### `apps/web/src/server/routes.ts`
 
 - Adds `authRoute` to `workerRoutes`.
+- Adds `requireApiSession` to `workerRoutes`.
+
+### `apps/web/src/start.ts`
+
+- Adds `sessionGate` to `functionMiddleware`.
 
 ### `packages/db/src/index.ts`
 
@@ -169,6 +179,11 @@ None.
 - Server: `apps/web/src/server/auth.ts` builds the Better Auth instance (`makeAuth`); `auth-live.ts` provides it and the `Auth` service from `@repo/core`. Read the session in Effect code through `Auth.currentSession`, never from cookies directly.
 - `/api/auth/*` is served by `auth-route.ts` (a `workerRoutes` entry). Client: `authClient` in `apps/web/src/lib/auth-client.ts`.
 - Route guard: `routes/app.tsx` redirects signed-out visitors to `/sign-in?redirect=...`; build redirects with `safeRedirect`, never from raw input.
+- Server functions: `sessionGate` (`require-session.ts`) runs before every server function, from `functionMiddleware` in `apps/web/src/start.ts`, and refuses a call without a session with `Unauthorized`. Only the functions listed in `apps/web/src/server/public-server-fns.json` (by file and name) answer signed-out visitors; keep that list short. Chain `.middleware([requireSession])` too, to get `context.session` in the handler: the lookup still runs once, and the lint rule `efforge/server-fn-session` asks for it as early feedback.
+- Routes: `requireApiSession` (`api-session.ts`), first in `workerRoutes`, answers 401 to any request under `/api/` without a session, whether a Worker route or a route file's `server: { handlers }` would answer it; `public-api-paths.json` lists the exceptions (`/api/auth/`). A route outside `/api/` checks the session itself: a WebSocket upgrade with `requireSocketSession` from `socket-session.ts`, which closes a socket without a session with 4401 "Not signed in", anything else with `signedIn(request.headers)` from the same file. Keep `socket-session.ts` and `api-session.ts` out of anything the browser loads.
+- Sign-up is open: anyone can register and then call every server function, the demos that spend included (the AI key, the test email, the browser container). A session stops anonymous callers, not registered ones. To close sign-up, set `emailAndPassword: { enabled: true, disableSignUp: true }` in `makeAuth` (`auth.ts`): existing users still sign in, and no one new can register.
+- Whose data: the storage card's uploads and the workflows card's runs belong to the signed-in user (`owner.ts`, per user); no other user can list, open, delete or watch them. The notes are shared by every user on purpose.
+- Start-up on Workers: never await a promise that outlives the request that made it, and never await one across requests. Better Auth finishes starting in a promise (`auth.$context`) that, under `pnpm dev`, loads a module (I/O owned by the request that started it). `auth-live.ts` hands it to `waitUntil` instead of awaiting it while building the layer: the layer is built once per isolate, so an await there makes every request that arrives meanwhile wait on another request's work, which workerd fails with "the Worker's code had hung", and a request that ends first would leave the promise cancelled. Keep layer construction synchronous; pass slow start-up work to `waitUntil`.
 
 Only with `orm=drizzle`:
 

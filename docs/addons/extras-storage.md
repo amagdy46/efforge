@@ -2,7 +2,7 @@
 
 # Storage
 
-Object storage: a Storage service on R2 with Worker-served signed download URLs.
+Object storage: a Storage service on R2 with Worker-served signed download URLs, and a dashboard card.
 
 Id `extras/storage`. It is one of the Extras: a project can have any number of them. Template: [`templates/extras/storage/`](../../templates/extras/storage/).
 
@@ -38,6 +38,7 @@ Your code asks for `Storage`, declared in `packages/core/src/storage.ts`. Its me
 
 - `put(key, body, options?)`. Fails with `StorageError`.
 - `get(key)`. Fails with `StorageError`.
+- `list(prefix)`. The objects whose key starts with `prefix`, at most 1000. Fails with `StorageError`.
 - `delete(key)`. Fails with `StorageError`.
 - `signedUrl(key, options?)`. Fails with `StorageError`.
 - `verify(key, expires, signature)`. Fails with `StorageError`.
@@ -56,6 +57,10 @@ Your code asks for `Storage`, declared in `packages/core/src/storage.ts`. Its me
 - `packages/core/src/storage.ts`
 - `apps/web/src/server/storage.ts`
 - `apps/web/src/server/storage-route.ts`
+- `packages/core/test/storage-in-memory.ts`
+- `packages/core/test/storage.test.ts`
+- `apps/web/src/capabilities/storage.tsx`
+- `apps/web/src/server/storage-demo.ts`
 
 ## Files it edits
 
@@ -87,6 +92,14 @@ Your code asks for `Storage`, declared in `packages/core/src/storage.ts`. Its me
 
 - Adds the rules under [Rules it adds to AGENTS.md](#rules-it-adds-to-agentsmd).
 
+### `apps/web/src/server/storage-demo.ts`
+
+- Runs `requireSession` before every server function in the file. Only with `auth=better-auth-orgs` or `auth=better-auth`.
+
+### `apps/web/src/capabilities/registry.ts`
+
+- Adds `storage` to `capabilities`.
+
 ### `.env.example`
 
 - Adds the environment variables listed below, each with its local value, or empty where it needs a real secret.
@@ -105,7 +118,7 @@ None.
 
 ## Environment variables
 
-- `STORAGE_SIGNING_SECRET`, for example `change-me-to-a-long-random-string`: HMAC secret for signed download URLs (wrangler secret put STORAGE_SIGNING_SECRET). Locally `dev-only-storage-signing-secret-replace-me`.
+- `STORAGE_SIGNING_SECRET`, for example `change-me-to-a-long-random-string`: HMAC secret for signed download URLs (production: a Worker secret, `wrangler secret put STORAGE_SIGNING_SECRET` or the deploy env with Alchemy). Locally `dev-only-storage-signing-secret-replace-me`.
 
 ## Package scripts
 
@@ -115,10 +128,17 @@ None.
 
 ### Storage
 
-- Use the `Storage` service from `@repo/core` (put, get, delete, signedUrl, verify); do not touch the R2 binding directly.
-- The implementation is `apps/web/src/server/storage.ts` on the `STORAGE` R2 binding; downloads are served by the Worker route in `storage-route.ts`.
-- Signed URLs are HMAC-signed with the `STORAGE_SIGNING_SECRET` secret (at least 32 characters; the app fails to start without it). Never log or return it.
+- Use the `Storage` service from `@repo/core` (put, get, list, delete, signedUrl, verify); do not touch the R2 binding directly. Programs that use it (`upload`, `listUploads`, `deleteUpload`) live next to it in `packages/core/src/storage.ts`. Each takes an owner and works only under that owner's prefix, `uploads/<owner>/`: the card passes `currentOwner` from `apps/web/src/server/owner.ts` (the signed-in user's id with auth; one owner everyone shares without), so no user can list, open or delete another's files.
+- The layer is `StorageLive` in `apps/web/src/server/storage.ts`, on the `STORAGE` R2 binding; downloads are served by the Worker route in `storage-route.ts`. The dashboard card's server functions are in `apps/web/src/server/storage-demo.ts` (on a project with the dashboard).
+- Signed URLs are HMAC-signed with the `STORAGE_SIGNING_SECRET` secret (at least 32 characters; without it, on a project with `apps/web/src/server/settings.ts`, every page says "Not configured yet" and names it). Never log or return it.
 - Storage keys are opaque: generate them on the server, never from raw user input. Files are served as attachments with `nosniff`, inline only for raster images.
+- Test with `StorageInMemory` from `packages/core/test/storage-in-memory.ts` (`layer(StorageInMemory)` from `@effect/vitest`), as `storage.test.ts` does; do not mock R2.
+
+Only with `auth=none`:
+
+#### Storage without auth
+
+- This project has no auth, so the upload and delete server functions in `apps/web/src/server/storage-demo.ts` (on a project with the dashboard) are open: anyone who can reach the app can store, list and delete files in the bucket, and every visitor shares one list. Add auth (`efforge add auth/better-auth`, which guards them) or remove the demo before deploying.
 
 ## Limits
 

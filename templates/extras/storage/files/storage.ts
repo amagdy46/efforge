@@ -6,15 +6,17 @@ import { WorkerEnvLive } from "./cloudflare"
 
 class StorageBucket extends R2.Tag<StorageBucket>()("StorageBucket") {}
 
+const SECRET = "STORAGE_SIGNING_SECRET"
+
 /** The signing secret, read once when the layer is built. Fails with a clear message if unusable. */
 const loadSecret = (provider: ConfigProvider.ConfigProvider) =>
-  Config.Redacted("STORAGE_SIGNING_SECRET").pipe(
+  Config.Redacted(SECRET).pipe(
     Effect.provideService(ConfigProvider.ConfigProvider, provider),
     Effect.mapError(
       () =>
         new StorageConfigError({
-          message:
-            "STORAGE_SIGNING_SECRET is not set. Set it to a random string of at least 32 characters (a Worker secret in production; .dev.vars locally, .env with Alchemy).",
+          setting: SECRET,
+          message: `${SECRET} is not set. Set it to a random string of at least 32 characters (a Worker secret in production; .dev.vars locally, .env with Alchemy).`,
         }),
     ),
     Effect.map(Redacted.value),
@@ -22,12 +24,22 @@ const loadSecret = (provider: ConfigProvider.ConfigProvider) =>
       (secret) => secret.length >= MIN_SECRET_LENGTH,
       () =>
         new StorageConfigError({
-          message: `STORAGE_SIGNING_SECRET is too short: use at least ${MIN_SECRET_LENGTH} characters.`,
+          setting: SECRET,
+          message: `${SECRET} is too short: use at least ${MIN_SECRET_LENGTH} characters.`,
         }),
     ),
   )
 
-const fail = (operation: string) => (cause: unknown) => new StorageError({ operation, cause })
+const failed: Record<string, string> = {
+  put: "Could not store the file.",
+  get: "Could not read the file.",
+  list: "Could not list the bucket.",
+  delete: "Could not delete the file.",
+  signedUrl: "Could not sign the link.",
+  verify: "Could not check the link.",
+}
+const fail = (operation: string) => (cause: unknown) =>
+  new StorageError({ operation, message: failed[operation] ?? "Storage failed.", cause })
 
 const make = Effect.gen(function* () {
   const bucket = yield* StorageBucket
@@ -38,7 +50,7 @@ const make = Effect.gen(function* () {
         .put(
           key,
           body,
-          options?.contentType === undefined
+          options?.contentType === undefined || options.contentType === ""
             ? {}
             : { httpMetadata: { contentType: options.contentType } },
         )
@@ -47,6 +59,7 @@ const make = Effect.gen(function* () {
             key: o.key,
             size: o.size,
             contentType: o.httpMetadata?.contentType,
+            uploaded: o.uploaded,
           })),
           Effect.mapError(fail("put")),
         ),
@@ -59,9 +72,22 @@ const make = Effect.gen(function* () {
           key,
           size: object.size,
           contentType: object.httpMetadata?.contentType,
+          uploaded: object.uploaded,
           body: object.body,
         })
       }).pipe(Effect.mapError(fail("get"))),
+    list: (prefix) =>
+      bucket.list({ prefix, include: ["httpMetadata"] }).pipe(
+        Effect.map((page) =>
+          page.objects.map((o) => ({
+            key: o.key,
+            size: o.size,
+            contentType: o.httpMetadata?.contentType,
+            uploaded: o.uploaded,
+          })),
+        ),
+        Effect.mapError(fail("list")),
+      ),
     delete: (key) => bucket.delete(key).pipe(Effect.mapError(fail("delete"))),
     signedUrl: (key, options) =>
       Effect.gen(function* () {
@@ -77,8 +103,10 @@ const make = Effect.gen(function* () {
   })
 })
 
-/** `Storage` on the `STORAGE` R2 bucket binding. */
+// #region card
+/** `Storage` on the `STORAGE` R2 bucket; it signs links with a secret. */
 export const StorageLive = Layer.effect(Storage, make).pipe(
   Layer.provide(StorageBucket.layer({ binding: "STORAGE" })),
   Layer.provide(WorkerEnvLive),
 )
+// #endregion

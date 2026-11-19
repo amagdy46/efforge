@@ -7,7 +7,14 @@ import { sameJsonc } from "../structure.ts"
 import pc from "picocolors"
 import { parseDocument } from "yaml"
 import { type AddonLoadError, type AddonManifest, addonIdsFor, loadAddons } from "../addon.ts"
-import { CARDS_DIR, cardTransforms, presentCardTransforms, REGISTRY_FILE } from "../cards.ts"
+import {
+  CARDS_DIR,
+  cardTransforms,
+  PUBLIC_LIST_FILE,
+  presentCardTransforms,
+  REGISTRY_FILE,
+  START_FILE,
+} from "../cards.ts"
 import {
   cardSources,
   GRAPH_REGION,
@@ -62,9 +69,11 @@ import {
   nameOf,
   renderGroups,
 } from "../env.ts"
+import { migrateOwed } from "../migrations.ts"
 import { WRANGLER_FILE } from "../transforms/addWranglerBinding.ts"
 import {
   runTransform,
+  unguardedServerFns,
   transformTargets,
   type TransformAnchorMissing,
   type UnknownTransform,
@@ -217,6 +226,9 @@ export const waysOut = (stack: StackConfig, named: ReadonlySet<string>): string[
 const isNewPackageJson = (target: string) => target.endsWith("/package.json")
 
 const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+
+/** The web app's sources, where a project's own server functions are. */
+const WEB_SRC = "apps/web/src/"
 
 /** `email`, `extras/email`, `ai/effect-ai-byok`, `ai=effect-ai-byok`, `ai` (a slot with one option) -> slot + option. */
 export const parseId = (
@@ -405,9 +417,13 @@ export const addAddons = (
     const hasRegistry = (yield* read(REGISTRY_FILE)) !== undefined
     const notes: string[] = []
     const cardsSkipped: string[] = []
+    const demosSkipped: string[] = []
     const cardFiles = (m: AddonManifest) => {
       const files = (m.card?.files ?? []).filter((f) => switchedOn(m.id, f.when))
-      if (files.length > 0 && !hasRegistry) cardsSkipped.push(m.title)
+      if (files.length > 0 && !hasRegistry) {
+        cardsSkipped.push(m.title)
+        demosSkipped.push(...files.slice(1).map((f) => f.target))
+      }
       return hasRegistry ? files : []
     }
 
@@ -469,7 +485,7 @@ export const addAddons = (
     }
     if (cardsSkipped.length > 0)
       notes.push(
-        `No dashboard card for ${cardsSkipped.join(", ")}: this project has no ${REGISTRY_FILE} (made before efforge 0.3, or its dashboard was removed). The add-on works without it; there is nothing to do.`,
+        `No dashboard card for ${cardsSkipped.join(", ")}: this project has no ${REGISTRY_FILE} (made before efforge 0.3, or its dashboard was removed). Each add-on's service, layer and tests are written; its card${demosSkipped.length > 0 ? ` and the card's server functions (${demosSkipped.join(", ")})` : ""} are not. Nothing else is needed: call the service from your own server functions.`,
       )
     if (conflicts.length > 0)
       return yield* new OverlayConflict({
@@ -537,7 +553,20 @@ export const addAddons = (
     const seams = new Set<string>()
     for (const t of active) {
       const prev = current
-      current = yield* runTransform(prev, t)
+      // a transform with `ifMissing` is a hardening of a file the user may have from an older
+      // efforge: without its anchor, the add goes on and says what to change by hand
+      const ifMissing = t.args.ifMissing
+      if (ifMissing === undefined) current = yield* runTransform(prev, t)
+      else {
+        const ran = yield* runTransform(prev, t).pipe(
+          Effect.catchTag("TransformAnchorMissing", () => Effect.succeed(undefined)),
+        )
+        if (ran === undefined) {
+          notes.push(ifMissing)
+          continue
+        }
+        current = ran
+      }
       for (const [file, content] of current)
         if (prev.get(file) !== content) {
           seams.add(file)
@@ -557,6 +586,49 @@ export const addAddons = (
           else out.delete(AGENTS_FILE)
         }
       }
+    }
+    // with sessionGate in start.ts, every server function requires a session at runtime
+    const gated = /\bsessionGate\b/.test(current.get(START_FILE) ?? (yield* read(START_FILE)) ?? "")
+    // a server function the guard could not reach (its `.middleware(...)` is not a written-out
+    // list) is named, with the fix; the project's own lint rule fails on it until then
+    for (const t of active) {
+      if (t.name !== "addServerFnMiddleware" || t.args.file === undefined) continue
+      const text = current.get(t.args.file)
+      if (text === undefined) continue
+      const middleware = t.args.middleware ?? "requireSession"
+      for (const fn of unguardedServerFns(t.args.file, text, middleware))
+        notes.push(
+          `${fn} in ${t.args.file} has no ${middleware}: its .middleware(...) is not a list efforge can add to. Put ${middleware} first in it, as .middleware([${middleware}, ...]), and import it from "${t.args.from ?? "./require-session"}". ${gated ? "sessionGate still refuses a signed-out call at runtime, but" : "Until then it answers signed-out requests, and"} pnpm check fails on it (efforge/server-fn-session).`,
+        )
+    }
+    // auth added now: say what changed for the owner's own server functions, and how to open one
+    if (gated && newIds.some((id) => id.startsWith("auth/"))) {
+      const own: string[] = []
+      // efforge's own files: written by a release (hashed) or by an add-on of this stack
+      const efforgeFiles = new Set([
+        ...Object.keys(manifest.files),
+        ...written,
+        ...scope.flatMap(({ manifest: m }) =>
+          [...m.files, ...(m.card?.files ?? [])].map((f) => f.target),
+        ),
+      ])
+      const names = yield* fs
+        .readDirectory(path.join(dir, WEB_SRC), { recursive: true })
+        .pipe(Effect.orElseSucceed(() => [] as string[]))
+      const files = names
+        .map((n) => `${WEB_SRC}${n.split(path.sep).join("/")}`)
+        .filter((f) => /\.tsx?$/.test(f) && !f.endsWith(".d.ts"))
+        .toSorted(byName)
+      for (const file of files) {
+        if (efforgeFiles.has(file)) continue
+        const text = current.get(file) ?? (yield* read(file))
+        if (text === undefined || !text.includes("createServerFn")) continue
+        for (const m of text.matchAll(/export const (\w+)\s*=\s*[\w.]*createServerFn\b/g))
+          own.push(`${m[1]} (${file})`)
+      }
+      notes.push(
+        `Every server function now requires a session: sessionGate runs before each one (${START_FILE}), ${own.length > 0 ? `yours too: ${own.join(", ")}` : "including any you write later"}. A signed-out call gets Unauthorized. To let signed-out visitors call one, add its file and name to ${PUBLIC_LIST_FILE}, as getSession and getStack are.`,
+      )
     }
     const transformed = new Set<string>()
     for (const file of seams) {
@@ -1068,8 +1140,9 @@ export const addFailure = (
       const available = e.available as string[]
       return {
         code: "NoAddonIds",
-        message: `Name the add-ons to add${available.length > 0 ? `: ${available.join(", ")}` : "; this project already has every add-on"}.`,
-        fix: fix(args, asList, { list: true }),
+        message: `Name the add-ons to add${available.length > 0 ? `: ${available.join(", ")}` : "; this project already has every add-on"}.${available.length > 0 ? seeList().replace("See which ones this project can add:", "What each one adds:") : ""}`,
+        // listing isn't adding: which add-on is the caller's choice (`available`)
+        fix: null,
         details: { available },
       }
     }
@@ -1347,10 +1420,14 @@ export const addHandler = (input: {
     // a new database needs its tables before the app (or sign-up) can use it; when the last
     // install never finished, neither did the steps after it, so count the ids already there too
     const touched = [...result.added.map((a) => a.id), ...(owed ? result.skipped : [])]
-    // the same setup steps `create` and the README's "Run it" give for this stack
-    const afterInstall: Step[] = touched.some((id) => id.startsWith("database/"))
-      ? setupSteps(result.stack)
-      : []
+    // the same setup steps `create` and the README's "Run it" give for this stack: the database
+    // when one was added, and `pnpm db:migrate` whenever the local database lacks a migration (an
+    // earlier run that never migrated, or one this add brings), read as doctor reads it
+    const migrate = migrateOwed(dir, result.stack, [...result.created, ...result.written])
+    const newDatabase = touched.some((id) => id.startsWith("database/"))
+    const afterInstall: Step[] = setupSteps(result.stack).filter((s) =>
+      s.command === "pnpm db:migrate" ? migrate : newDatabase,
+    )
     const steps: Step[] = [
       ...(!installs && (owed || !installed || (changes && depsChanged))
         ? [{ command: INSTALL }]
@@ -1553,13 +1630,13 @@ const addInterrupted = (
 export const addCommand = Command.make("add", addConfig, addHandler).pipe(
   Command.withDescription("Add an add-on to an existing efforge project"),
   Command.withExamples([
-    { command: "npx create-efforge add email", description: "Add the email add-on" },
+    { command: "npx -y create-efforge add email", description: "Add the email add-on" },
     {
-      command: "npx create-efforge add ai/effect-ai-byok extras/storage --dry-run",
+      command: "npx -y create-efforge add ai/effect-ai-byok extras/storage --dry-run",
       description: "Show what would change; write nothing",
     },
     {
-      command: "npx create-efforge add database/d1 orm/effect-sql auth/better-auth",
+      command: "npx -y create-efforge add database/d1 orm/effect-sql auth/better-auth",
       description: "Add a database, an ORM and auth together",
     },
   ]),

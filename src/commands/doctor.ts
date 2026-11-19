@@ -131,9 +131,9 @@ export const doctorCommand = Command.make(
 ).pipe(
   Command.withDescription("Check this project's checkout and say what is wrong and how to fix it"),
   Command.withExamples([
-    { command: "npx create-efforge doctor", description: "Every check, one line each" },
+    { command: "npx -y create-efforge doctor", description: "Every check, one line each" },
     {
-      command: "npx create-efforge doctor --json",
+      command: "npx -y create-efforge doctor --json",
       description: "The checks as data; exit code 2 when one fails",
     },
   ]),

@@ -34,7 +34,7 @@ So:
   `efforge.jsonc`. For everything else, `src/history.ts`: what each release generated, written by
   `scripts/history.ts` from the release's own source at release time, with a test that this
   efforge's version is in it. A release's entry has its pins, `packageManager`, `engines`, every
-  package.json's dependencies and scripts (for any stack), and for each file efforge edits in place
+  package.json's dependencies and scripts (for any stack, and for a script only some stacks get, which stacks: a script missing from a project is one the owner removed only if a release wrote it for that project's stack; otherwise `upgrade` adds it), and for each file efforge edits in place
   a fingerprint record: every run of five tokens it wrote, hashed to 24 bits (`src/record.ts`).
   Tokens, so formatting and line breaks don't count; runs, so a line the owner adds brings runs no
   release wrote. A pin, script or dependency a release wrote (since the one that made the project)
@@ -49,7 +49,7 @@ So:
   declaration only when the record shows it is efforge's own older one. A file efforge doesn't write
   keeps what it imported: if efforge's new version of a file drops a name an owner's file uses, or
   changes its type (asked of the project's own TypeScript when `node_modules` is there; any change
-  of the text counts when it isn't), that file is held back. A held file holds back what needs it,
+  of the text counts when it isn't), that file is held back. A held file holds back what needs it, and, since it stays as it is, keeps what it imports,
   to a fixed point, and each one is reported with the reason and, where efforge can name them, the
   lines that would let it apply.
 - **Two answers.** `needs-action` (a guard missing, efforge's pins of a set at two releases'

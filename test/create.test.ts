@@ -184,7 +184,10 @@ it("an existing non-empty target is refused", async () => {
   process.exitCode = undefined
   await cli(["app", "-y", "--no-install", "--no-git", ...stackFlags]).p
   expect(process.exitCode).toBe(1)
-  expect(String(err.mock.calls.at(-1)?.[0])).toContain("already holds an efforge project")
+  // wrapped at 80 columns: read it as one line
+  expect(String(err.mock.calls.at(-1)?.[0]).replaceAll("\n", " ")).toContain(
+    "already holds an efforge project",
+  )
   expect(readFileSync(join(tmp, "app", "mine.txt"), "utf8")).toBe("keep")
 })
 

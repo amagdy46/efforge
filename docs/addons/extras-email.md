@@ -2,7 +2,7 @@
 
 # Email
 
-Transactional email: a Mailer service on Cloudflare Email Service, printed to the console in development, plus invitation emails with organizations.
+Transactional email: a Mailer service on Cloudflare Email Service, printed to the console in development, a dashboard card, plus invitation emails with organizations.
 
 Id `extras/email`. It is one of the Extras: a project can have any number of them. Template: [`templates/extras/email/`](../../templates/extras/email/).
 
@@ -34,8 +34,10 @@ Nothing.
 
 ## Service and layer
 
-Your code asks for `Mailer`, declared in `packages/core/src/mailer.ts`. It has one member:
+Your code asks for `Mailer`, declared in `packages/core/src/mailer.ts`. Its members:
 
+- `transport`.
+- `from`. The sender of every message
 - `send(message)`. Fails with `MailerError`.
 
 `MailerLive` implements it, and `efforge add` puts it in `AppLayer` in `apps/web/src/server/layers.ts`. Building the layer fails with `MailerConfigError` when a setting is missing or invalid.
@@ -53,6 +55,10 @@ Your code asks for `Mailer`, declared in `packages/core/src/mailer.ts`. It has o
 | `packages/core/src/mailer.ts` | Always |
 | `apps/web/src/server/mailer.ts` | Always |
 | `apps/web/src/server/invitation-email.ts` | `auth=better-auth-orgs` |
+| `packages/core/test/mailer-in-memory.ts` | Always |
+| `packages/core/test/mailer.test.ts` | Always |
+| `apps/web/src/capabilities/email.tsx` | Always |
+| `apps/web/src/server/email-demo.ts` | Always |
 
 ## Files it edits
 
@@ -89,6 +95,14 @@ Your code asks for `Mailer`, declared in `packages/core/src/mailer.ts`. It has o
 
 - Adds the rules under [Rules it adds to AGENTS.md](#rules-it-adds-to-agentsmd).
 
+### `apps/web/src/server/email-demo.ts`
+
+- Runs `requireSession` before every server function in the file. Only with `auth=better-auth-orgs` or `auth=better-auth`.
+
+### `apps/web/src/capabilities/registry.ts`
+
+- Adds `email` to `capabilities`.
+
 ### `.env.example`
 
 - Adds the environment variables listed below, each with its local value, or empty where it needs a real secret.
@@ -118,9 +132,16 @@ None.
 
 ### Email
 
-- Send mail through the `Mailer` service from `@repo/core` (`send({ to, subject, text, html? })`); do not use the `EMAIL` binding directly. Always send a `text` body.
-- `apps/web/src/server/mailer.ts` picks the transport from `MAIL_TRANSPORT`: `console` (the local value in `.env.example`) prints the message to the dev server log, anything else sends through Cloudflare Email Service with the `EMAIL` `send_email` binding. `MAIL_FROM` must be an address on a domain enabled for sending: `wrangler email sending enable <domain>`.
+- Send mail through the `Mailer` service from `@repo/core` (`send({ to, subject, text, html? })`); do not use the `EMAIL` binding directly. Always send a `text` body. `sendTestEmail` in `packages/core/src/mailer.ts` is a program that uses it.
+- `MailerLive` in `apps/web/src/server/mailer.ts` picks the transport from `MAIL_TRANSPORT`: `console` (the local value) prints the message to the dev server log, anything else sends through Cloudflare Email Service with the `EMAIL` `send_email` binding. `MAIL_FROM` must be an address on a domain enabled for sending: `wrangler email sending enable <domain>`. The dashboard card's server functions are in `apps/web/src/server/email-demo.ts` (on a project with the dashboard).
+- Test with `MailerInMemory` from `packages/core/test/mailer-in-memory.ts`, which records messages in `SentMail` instead of sending them, as `mailer.test.ts` does.
 - Transactional mail only (invitations, receipts, password resets); use a dedicated platform for marketing or bulk sends.
+
+Only with `auth=none`:
+
+#### Email without auth
+
+- This project has no auth, so the test email server function in `apps/web/src/server/email-demo.ts` (on a project with the dashboard) is open: with `MAIL_TRANSPORT=cloudflare`, anyone who can reach the app can send mail from your domain. Add auth (`efforge add auth/better-auth`, which guards it) or remove the demo before deploying.
 
 Only with `auth=better-auth-orgs`:
 

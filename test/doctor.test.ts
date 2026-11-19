@@ -124,6 +124,7 @@ it("every check has a stable, unique id", () => {
     "node",
     "pnpm",
     "manifest",
+    "ignored",
     "install",
     "effect",
     "effect-guard",

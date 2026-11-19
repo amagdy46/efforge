@@ -131,6 +131,12 @@ Only with `database=postgres`:
 
 - The Postgres runner sends one statement per `;` (outside `$$` bodies): keep string literals in migrations free of `;`.
 
+Only with `auth=none`:
+
+#### Notes without auth
+
+- This project has no auth, so the database card's `addNote` in `apps/web/src/server/notes.ts` (on a project with the dashboard) is open: anyone who can reach the app can add notes, and every visitor reads them. Add auth (`efforge add auth/better-auth`, which guards it) or remove the demo before deploying.
+
 ## Limits
 
 None known. The general ones are in [Status and limits](../limits.md).

@@ -2,7 +2,7 @@ import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic"
 import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai"
 import { OpenRouterClient, OpenRouterLanguageModel } from "@effect/ai-openrouter"
 import { LlmError, type LlmProvider } from "@repo/core/llm"
-import { Effect, Layer, type Redacted } from "effect"
+import { Effect, Layer, type Redacted, Stream } from "effect"
 import { LanguageModel } from "effect/ai"
 import { FetchHttpClient, type HttpClient } from "effect/http"
 
@@ -53,4 +53,13 @@ export const generateWith = (settings: LlmSettings, prompt: string) =>
     // oxlint-disable-next-line effecttsgo/strict-effect-provide
     Effect.provide(makeLlmLayer(settings)),
     Effect.mapError((cause) => new LlmError({ operation: "generateText", cause })),
+  )
+
+/** One `streamText` call against `settings`: the text as the model writes it. */
+export const streamWith = (settings: LlmSettings, prompt: string) =>
+  LanguageModel.streamText({ prompt }).pipe(
+    Stream.filter((part) => part.type === "text-delta"),
+    Stream.map((part) => part.delta),
+    Stream.provide(makeLlmLayer(settings)),
+    Stream.mapError((cause) => new LlmError({ operation: "streamText", cause })),
   )

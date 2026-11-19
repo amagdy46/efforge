@@ -4,16 +4,26 @@ import { Effect, type FileSystem, type Path } from "effect"
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser"
 import { parseDocument } from "yaml"
 import { type AddonManifest, addonIdsFor, type LoadedAddon } from "./addon.ts"
-import { presentCardTransforms } from "./cards.ts"
+import { needsGuard, presentCardTransforms, sessionGuard } from "./cards.ts"
 import { checkConsistency, sourceFiles } from "./consistency.ts"
 import { BIN } from "./contract.ts"
 import { unifiedDiff } from "./diff.ts"
+import {
+  appendBlock,
+  assigns,
+  assignsValue,
+  ENV_EXAMPLE,
+  envGroups,
+  localEnvFile,
+  renderGroups,
+} from "./env.ts"
 import { type GenerateError, generate, isComputed, matches } from "./generate.ts"
 import {
   efforgeDeclared,
   efforgeGenerated,
   efforgePinned,
   efforgeScript,
+  efforgeWroteScript,
   enginesNew,
   recordFor,
   releasesSince,
@@ -170,6 +180,17 @@ export interface UpgradeStep {
   readonly covers?: ReadonlyArray<string>
 }
 
+/** An env var `upgrade` adds, as `create` and `add` report one. */
+export interface EnvVarAdded {
+  readonly name: string
+  readonly description: string
+  /** The file the local value is read from: `.dev.vars`, or `.env` with Alchemy. */
+  readonly file: string
+  /** A local value is there (efforge wrote one, or you had); false means fill it in. */
+  readonly set: boolean
+  readonly secret: boolean
+}
+
 export interface UpgradeReport {
   readonly directory: string
   readonly stack: StackConfig
@@ -187,6 +208,8 @@ export interface UpgradeReport {
   readonly files: ReadonlyArray<FileDrift>
   readonly seams: ReadonlyArray<Seam>
   readonly scripts: ReadonlyArray<ScriptDrift>
+  /** Env vars the stack reads today that `.env.example` lacks: `upgrade` appends them. */
+  readonly env: ReadonlyArray<EnvVarAdded>
   readonly kept: ReadonlyArray<Kept>
   /** What `upgrade` applies, by kind, for the step that runs it. */
   readonly covers: ReadonlyArray<string>
@@ -705,7 +728,7 @@ export const planUpgrade = (
         const own = scalar(have[script])
         if (own === undefined) {
           // a script no release wrote here is new; one a release wrote is one you removed
-          if (!releasesSince(made).some(([, r]) => r.scripts[path]?.[script] !== undefined)) {
+          if (!efforgeWroteScript(made, path, script, stack)) {
             nextScripts[script] = cmd
             note(path, `script ${script}`)
           }
@@ -831,11 +854,33 @@ export const planUpgrade = (
       },
     })
     for (const s of consistency.seams) note(s.file, s.what)
+    // a server file of efforge's that stays (an older dashboard of yours imports it) keeps its
+    // server functions: with auth they get requireSession, as add gives an add-on's, so the
+    // project's lint holds after the upgrade (sessionGate already guards them at runtime)
+    const guarded = new Map<string, string>()
+    if (stack.auth !== "none")
+      for (const h of consistency.holds) {
+        const text = changes.get(h.path) ?? at(h.path)
+        if (text === undefined || !needsGuard(h.path, text)) continue
+        const tree = new Map([[h.path, text]])
+        const next = yield* runTransform(tree, sessionGuard({ target: h.path })).pipe(
+          Effect.catchTag("TransformAnchorMissing", () =>
+            Effect.succeed(tree as ReadonlyMap<string, string>),
+          ),
+        )
+        const after = next.get(h.path)
+        if (after === undefined || after === text) continue
+        changes.set(h.path, after)
+        guarded.set(h.path, after)
+        note(h.path, "requireSession on its server functions")
+      }
     const heldFiles = new Map(consistency.holds.map((h) => [h.path, h]))
     for (const h of consistency.holds) {
       rehash.delete(h.path)
       unhash.delete(h.path)
     }
+    // the guarded file is still efforge's: its hash says so, so the next plan holds it again
+    for (const [p, text] of guarded) rehash.set(p, hash(text))
 
     // efforge.jsonc: the version this project now matches, and the hashes of what efforge wrote
     const manifestText = at("efforge.jsonc")
@@ -965,12 +1010,53 @@ export const planUpgrade = (
         fix: opts.here("pnpm install"),
       })
 
+    // env vars: what the stack reads today and .env.example lacks is appended, as `add` does, and
+    // to the local settings file when there is one; no line already there changes. A project
+    // without .env.example (you removed it) gets none.
+    const env: EnvVarAdded[] = []
+    const exampleText = at(ENV_EXAMPLE)
+    if (exampleText !== undefined) {
+      const have = new Set(exampleText.split("\n").map((l) => l.split("=")[0]?.trim()))
+      const missing = envGroups(stack, loaded)
+        .map((g) => ({ id: g.id, title: g.title, vars: g.vars.filter((v) => !have.has(v.name)) }))
+        .filter((g) => g.vars.length > 0)
+      if (missing.length > 0) {
+        changes.set(ENV_EXAMPLE, appendBlock(exampleText, renderGroups(missing)))
+        const envFile = localEnvFile(stack)
+        const localText = at(envFile)
+        let localAfter = localText
+        if (localText !== undefined) {
+          const toWrite = missing
+            .map((g) => ({
+              id: g.id,
+              title: g.title,
+              vars: g.vars.filter((v) => !assigns(localText, v.name)),
+            }))
+            .filter((g) => g.vars.length > 0)
+          if (toWrite.length > 0) {
+            localAfter = appendBlock(localText, renderGroups(toWrite))
+            changes.set(envFile, localAfter)
+          }
+        }
+        for (const g of missing)
+          for (const v of g.vars)
+            env.push({
+              name: v.name,
+              description: v.description,
+              file: envFile,
+              set: v.dev !== undefined || assignsValue(localAfter, v.name),
+              secret: v.secret === true,
+            })
+      }
+    }
+
     const covers = [
       ...(fixGuard ? ["effect-overrides"] : []),
       ...(!pmOk && !otherManager ? ["package-manager"] : []),
       ...(moves.length > 0 ? ["pins"] : []),
       ...(scripts.some((s) => s.status === "behind") ? ["scripts"] : []),
       ...(seams.length > 0 ? ["seams"] : []),
+      ...(env.length > 0 ? ["env"] : []),
       ...(filesOut.some((f) => f.status === "refresh" && f.held === undefined) ? ["refresh"] : []),
       ...(filesOut.some((f) => f.status === "new" && f.held === undefined) ? ["new"] : []),
       ...(removes.size > 0 ? ["remove"] : []),
@@ -1004,7 +1090,7 @@ export const planUpgrade = (
     if (behind)
       steps.push({
         id: "upgrade",
-        description: `Apply what efforge can, leaving your changes alone: ${summary(filesOut, moves.length, seams, scripts, removes.size, fixGuard || !pmOk)}${installAfter ? ", then pnpm install" : ""}. It writes nothing if any step fails, and refuses uncommitted changes so git diff shows exactly what it did.`,
+        description: `Apply what efforge can, leaving your changes alone: ${summary(filesOut, moves.length, seams, scripts, removes.size, fixGuard || !pmOk, env.length)}${installAfter ? ", then pnpm install" : ""}. It writes nothing if any step fails, and refuses uncommitted changes so git diff shows exactly what it did.`,
         command: `${BIN} upgrade`,
         cwd: dir,
         covers: [...covers, ...(installAfter ? ["install"] : [])],
@@ -1050,6 +1136,7 @@ export const planUpgrade = (
       files: filesOut,
       seams,
       scripts,
+      env,
       kept,
       covers,
       steps,
@@ -1067,6 +1154,7 @@ const summary = (
   scripts: ReadonlyArray<ScriptDrift>,
   removed: number,
   guard: boolean,
+  envVars: number,
 ) => {
   const n = (s: FileStatus) => files.filter((f) => f.status === s && f.held === undefined).length
   return (
@@ -1079,6 +1167,7 @@ const summary = (
       n("refresh") > 0 ? `${plural(n("refresh"), "file")} refreshed` : undefined,
       n("new") > 0 ? `${n("new")} added` : undefined,
       seams.length > 0 ? `${plural(seams.length, "file")} given what the new ones need` : undefined,
+      envVars > 0 ? `${plural(envVars, "env var")} added to .env.example` : undefined,
       removed > 0 ? `${removed} it no longer generates removed` : undefined,
     ]
       .filter((x) => x !== undefined)

@@ -16,7 +16,7 @@ export default defineConfig({
     categories: { correctness: "error", suspicious: "error", perf: "error" },
     // an explicit list replaces oxlint's defaults, so keep oxc/typescript/unicorn
     plugins: ["oxc", "typescript", "unicorn", "react", "import", "effecttsgo"],
-    jsPlugins: ["./lint/effect-tests.js"],
+    jsPlugins: ["./lint/effect-tests.js", "./lint/efforge.js"],
     options: { typeAware: true, typeCheck: true },
     rules: {
       "typescript/no-explicit-any": "error",
@@ -51,6 +51,28 @@ export default defineConfig({
       ],
     },
     overrides: [
+      {
+        files: ["apps/web/**"],
+        rules: {
+          // with auth, sessionGate runs before every server function (apps/web/src/start.ts);
+          // this rule is early feedback: a function without `.middleware([requireSession])` is an
+          // error unless it is in the public list, which the runtime reads too
+          "efforge/server-fn-session": [
+            "error",
+            { publicList: "apps/web/src/server/public-server-fns.json" },
+          ],
+          // only ?region=<name> may import a file as text; the rest would ship it to the browser
+          "efforge/no-whole-file-import": [
+            "error",
+            { allow: { "apps/web/src/server/manifest.ts": ["../../../../efforge.jsonc?raw"] } },
+          ],
+        },
+      },
+      {
+        // shared packages reach the browser too, through the app's imports
+        files: ["packages/**"],
+        rules: { "efforge/no-whole-file-import": "error" },
+      },
       {
         files: ["**/*.test.ts", "**/*.test.tsx"],
         rules: { "effect-tests/no-manual-runtime": "error" },

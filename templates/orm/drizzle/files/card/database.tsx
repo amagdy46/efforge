@@ -103,5 +103,11 @@ export const database: Capability = {
   ],
   test: { path: "packages/core/test/notes.test.ts", name: "stores the trimmed title" },
   agents: "Database",
+  access: {
+    effect: "writes",
+    open: "This project has no auth, so anyone who can reach the app can add notes, and every visitor reads them. Add auth before you deploy it.",
+    signedIn:
+      "Notes are shared on purpose: every user reads and adds to the same list. Sign-up is open to anyone until you close it (AGENTS.md, Auth).",
+  },
   Demo: DatabaseDemo,
 }

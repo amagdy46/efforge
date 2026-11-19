@@ -56,3 +56,15 @@ export const parseAppLayer = (source: string): LayerEntry[] => {
     provided: [...arg.matchAll(/Layer\.provide(?:Merge)?\(\s*([\w$.]+)/g)].map((m) => m[1] ?? ""),
   }))
 }
+
+/**
+ * How many layers each row of the graph holds, at most `columns` a row: as few rows as that
+ * allows, as even as they can be, so no row is a single layer left over (nine in four columns is
+ * three rows of three, not 4, 4 and 1).
+ */
+export const rowSizes = (count: number, columns: number): number[] => {
+  if (count <= 0) return []
+  const rows = Math.ceil(count / columns)
+  const base = Math.floor(count / rows)
+  return Array.from({ length: rows }, (_, i) => (i < count % rows ? base + 1 : base))
+}

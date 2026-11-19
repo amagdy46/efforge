@@ -1,9 +1,10 @@
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { expect, it } from "vitest"
-import { assets } from "../scripts/brand/assets.ts"
+import { assets, deltaE, onSurfaces } from "../scripts/brand/assets.ts"
 import { decodePng } from "../scripts/brand/raster.ts"
-import { copy, mark, repo } from "../scripts/brand/source.ts"
+import { copy, layerColors, mark, repo } from "../scripts/brand/source.ts"
+import { temperNodes } from "../src/brand.ts"
 import { text } from "../scripts/brand/text.ts"
 import { colorLevel, introLine } from "../src/intro.ts"
 
@@ -70,4 +71,33 @@ it("the intro is plain without a colour terminal and coloured with one", () => {
     "\x1b[1;38;2;246;245;241;48;2;47;90;168m ef \x1b[0m efforge 1.2.3",
   )
   expect(introLine("", "256", "1.2.3")).toBe("\x1b[1;38;5;255;48;5;25m ef \x1b[0m efforge 1.2.3")
+})
+
+it("each of the nine layer colours reaches 3:1 on its theme's surfaces and stands apart from its neighbours", () => {
+  expect(layerColors).toHaveLength(9)
+  for (const theme of ["light", "dark"] as const) {
+    for (const c of layerColors)
+      expect(onSurfaces(c[theme], theme), `${c.name} ${theme}`).toBeGreaterThanOrEqual(3)
+    for (let i = 0; i + 1 < layerColors.length; i++) {
+      const [a, b] = [layerColors[i], layerColors[i + 1]] as [
+        (typeof layerColors)[number],
+        (typeof layerColors)[number],
+      ]
+      expect(deltaE(a[theme], b[theme]), `${a.name} ${b.name} ${theme}`).toBeGreaterThanOrEqual(20)
+    }
+    // any two, not only neighbours: Straw and Gold were 8.5 apart in the dark theme
+    for (const a of layerColors)
+      for (const b of layerColors)
+        if (a !== b)
+          expect(deltaE(a[theme], b[theme]), `${a.name} ${b.name} ${theme}`).toBeGreaterThan(15)
+  }
+  // efforge graph draws with the same values the dashboard's light theme uses
+  expect(temperNodes.map((n) => n.stroke.toLowerCase())).toEqual(
+    layerColors.map((c) => c.light.toLowerCase()),
+  )
+  const css = read("templates/base/files/web/src/styles.css")
+  for (const [i, c] of layerColors.entries()) {
+    expect(css).toContain(`--temper-${i + 1}: ${c.light.toLowerCase()};`)
+    expect(css).toContain(`--temper-${i + 1}: ${c.dark.toLowerCase()};`)
+  }
 })

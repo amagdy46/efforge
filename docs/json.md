@@ -52,7 +52,16 @@ A signal in the first fraction of a second, before efforge has started, can end 
 
 ## Not part of the contract
 
-`--help`, `--completions` and `--wizard` print text for people, with or without `--json`. `--version --json` prints the envelope alone (`{ efforge, contract, ok: true }`), which is the cheapest way to check which CLI and contract you have.
+The flags every command gets from the CLI library behave the same with or without a terminal, and none of them prompts:
+
+| Flag | What it does |
+|---|---|
+| `--help`, `-h` | Prints the help for the command as text on stdout and exits `0`, with or without `--json`. |
+| `--version`, `-v` | Prints `create-efforge v<version>` and exits `0`. With `--json` it prints the envelope alone (`{ efforge, contract, ok: true }`), which is the cheapest way to check which CLI and contract you have. |
+| `--completions <shell>` | Prints a completion script for `bash`, `zsh`, `fish` or `powershell` as text and exits `0`, with or without `--json`. |
+| `--log-level <level>` | Accepted by every command and changes nothing efforge prints: efforge logs nothing. Any other value is an `InvalidFlagValue` error. |
+
+The library's `--wizard` is not one of efforge's flags (efforge's own prompts do its job): it is an `UnknownFlag` error with `fix: null`.
 
 ## `create`
 
@@ -60,7 +69,7 @@ A signal in the first fraction of a second, before efforge has started, can end 
 
 `env` lists every env var the project reads: `file` is where the local value lives (`.dev.vars`, or `.env` with Alchemy) and `set` says whether efforge wrote a value there that works locally. When `set` is false (an API key only you have), efforge wrote it empty, in `file` and in `.env.example`, and the feature that reads it fails until it is filled in. `secret` says the value is a secret (a key, a password, a signing secret): the deployed value is set with `wrangler secret put` or the deploy env, and is never printed or committed. A secret can still have a local value (`BETTER_AUTH_SECRET` does: `secret: true`, `set: true`). These two fields mean the same in `create`, `add` and `info`.
 
-`nextSteps` are the commands still to run, in order, each with the directory to run it in (`cwd`). A step with `longRunning: true` (the dev server) doesn't exit on its own: start it in the background or leave it to the user.
+`nextSteps` are the commands still to run, in order, each with the directory to run it in (`cwd`). `pnpm db:migrate` is in them while it is owed: on D1, while the local database lacks a migration (what `doctor`'s `migrations` check reads), in `add`, `upgrade` and an `Interrupted` document too; on Postgres, which can't be read without connecting, when the run writes a migration. A step with `longRunning: true` (the dev server) doesn't exit on its own: start it in the background or leave it to the user.
 
 <!-- example: create -->
 
@@ -125,6 +134,8 @@ npx -y create-efforge create my-app --json --database=d1 --auth=better-auth
   "warnings": []
 }
 ```
+
+When the project has no repository of its own (`--no-git`, or `git init` failed) and git ignores it (a `.gitignore` above it with `*`), `warnings` says so, with the rule and `git init` to run in the project: without it `pnpm check` sees no files and Tailwind styles nothing.
 
 With `--dry-run`, nothing is written: `files` is what would be, and `nextSteps` is the command without `--dry-run`, run where you are.
 
@@ -195,7 +206,7 @@ npx -y create-efforge create my-app --json --dry-run
 
 ## `add`
 
-`stack` is the project's stack afterwards. `added` has one entry per add-on this run added: its `id`, `title`, `docs` (its page in efforge's docs), `card` (its dashboard card module, when the project has one) and `agents` (the headings of the `AGENTS.md` sections this run added for it). `created` and `changed` are the files this run created and changed, `removed` the generated files it deleted (`wrangler.jsonc` when you add Alchemy), `skipped` the ids the project already had and files already as efforge would write them. `replacedScripts` names package scripts an add-on replaced. `packageManager` is `{from, to}` when `add` raised the root `packageManager` (projects made by efforge 0.2.0, whose pnpm ignored the Effect overrides), else `null`. `notes` are things left to do by hand, one line each (for example, the widgets line to add to a dashboard you edited). `installed` says whether `pnpm install` ran in this run; when it didn't and should, `nextSteps` starts with it. `env` lists only the env vars this run added.
+`stack` is the project's stack afterwards. `added` has one entry per add-on this run added: its `id`, `title`, `docs` (its page in efforge's docs), `card` (its dashboard card module, when the project has one) and `agents` (the headings of the `AGENTS.md` sections this run added for it). `created` and `changed` are the files this run created and changed, `removed` the generated files it deleted (`wrangler.jsonc` when you add Alchemy), `skipped` the ids the project already had and files already as efforge would write them. `replacedScripts` names package scripts an add-on replaced. `packageManager` is `{from, to}` when `add` raised the root `packageManager` (projects made by efforge 0.2.0, whose pnpm ignored the Effect overrides), else `null`. `notes` are things left to do by hand, one line each (for example, a card left out of a project with no dashboard registry, a server function `add` could not put `requireSession` on, with the fix, or, when auth is added, that every server function now requires a session and how to make one public). `installed` says whether `pnpm install` ran in this run; when it didn't and should, `nextSteps` starts with it. `env` lists only the env vars this run added.
 
 <!-- example: add -->
 
@@ -227,6 +238,7 @@ npx -y create-efforge add email --json --cwd my-app
       "id": "extras/email",
       "title": "Email",
       "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-email.md",
+      "card": "apps/web/src/capabilities/email.tsx",
       "agents": [
         "Email"
       ]
@@ -234,14 +246,19 @@ npx -y create-efforge add email --json --cwd my-app
   ],
   "skipped": [],
   "created": [
+    "apps/web/src/capabilities/email.tsx",
+    "apps/web/src/server/email-demo.ts",
     "apps/web/src/server/mailer.ts",
-    "packages/core/src/mailer.ts"
+    "packages/core/src/mailer.ts",
+    "packages/core/test/mailer-in-memory.ts",
+    "packages/core/test/mailer.test.ts"
   ],
   "changed": [
     ".dev.vars",
     ".env.example",
     "AGENTS.md",
     "README.md",
+    "apps/web/src/capabilities/registry.ts",
     "apps/web/src/server/layers.ts",
     "efforge.jsonc",
     "packages/core/src/index.ts",
@@ -271,6 +288,11 @@ npx -y create-efforge add email --json --cwd my-app
   "nextSteps": [
     {
       "command": "pnpm install --no-frozen-lockfile",
+      "cwd": "/home/me/projects/my-app"
+    },
+    {
+      "command": "pnpm db:migrate",
+      "note": "create the tables in the local D1",
       "cwd": "/home/me/projects/my-app"
     }
   ],
@@ -310,6 +332,7 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
       "id": "ai/effect-ai-byok",
       "title": "Effect AI (bring your own key)",
       "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/ai-effect-ai-byok.md",
+      "card": "apps/web/src/capabilities/ai.tsx",
       "agents": [
         "AI (Effect AI, bring your own key)"
       ]
@@ -318,6 +341,7 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
       "id": "extras/storage",
       "title": "Storage",
       "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-storage.md",
+      "card": "apps/web/src/capabilities/storage.tsx",
       "agents": [
         "Storage"
       ]
@@ -325,15 +349,23 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
   ],
   "skipped": [],
   "created": [
+    "apps/web/src/capabilities/ai.tsx",
+    "apps/web/src/capabilities/storage.tsx",
+    "apps/web/src/server/ai-demo.ts",
     "apps/web/src/server/ai.ts",
     "apps/web/src/server/llm-provider.ts",
     "apps/web/src/server/llm.ts",
+    "apps/web/src/server/storage-demo.ts",
     "apps/web/src/server/storage-route.ts",
     "apps/web/src/server/storage.ts",
     "packages/core/src/llm.ts",
     "packages/core/src/storage-security.ts",
     "packages/core/src/storage.ts",
-    "packages/core/test/storage-security.test.ts"
+    "packages/core/test/llm-fixed.ts",
+    "packages/core/test/llm.test.ts",
+    "packages/core/test/storage-in-memory.ts",
+    "packages/core/test/storage-security.test.ts",
+    "packages/core/test/storage.test.ts"
   ],
   "changed": [
     ".dev.vars",
@@ -341,6 +373,7 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
     "AGENTS.md",
     "README.md",
     "apps/web/package.json",
+    "apps/web/src/capabilities/registry.ts",
     "apps/web/src/server/layers.ts",
     "apps/web/src/server/routes.ts",
     "efforge.jsonc",
@@ -384,7 +417,7 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
     },
     {
       "name": "STORAGE_SIGNING_SECRET",
-      "description": "HMAC secret for signed download URLs (wrangler secret put STORAGE_SIGNING_SECRET)",
+      "description": "HMAC secret for signed download URLs (production: a Worker secret, `wrangler secret put STORAGE_SIGNING_SECRET` or the deploy env with Alchemy)",
       "file": ".dev.vars",
       "set": true,
       "secret": true
@@ -393,6 +426,11 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
   "nextSteps": [
     {
       "command": "pnpm install --no-frozen-lockfile",
+      "cwd": "/home/me/projects/my-app"
+    },
+    {
+      "command": "pnpm db:migrate",
+      "note": "create the tables in the local D1",
       "cwd": "/home/me/projects/my-app"
     }
   ],
@@ -613,7 +651,7 @@ npx -y create-efforge info email --json --cwd my-app
   "slot": "extras",
   "option": "email",
   "title": "Email",
-  "description": "Transactional email: a Mailer service on Cloudflare Email Service, printed to the console in development, plus invitation emails with organizations.",
+  "description": "Transactional email: a Mailer service on Cloudflare Email Service, printed to the console in development, a dashboard card, plus invitation emails with organizations.",
   "purpose": "Send invitations, receipts and password resets. Call `send` on the `Mailer` service. In production the layer sends through Cloudflare Email Service; in development (`MAIL_TRANSPORT=console`) it prints each message to the dev server log. With organizations, invitations are emailed too.",
   "docs": {
     "page": "docs/addons/extras-email.md",
@@ -630,10 +668,13 @@ npx -y create-efforge info email --json --cwd my-app
   "layer": "MailerLive",
   "files": [
     {
-      "path": "apps/web/src/server/mailer.ts"
+      "path": "apps/web/src/capabilities/email.tsx"
     },
     {
-      "path": "packages/core/src/mailer.ts"
+      "path": "apps/web/src/server/email-demo.ts"
+    },
+    {
+      "path": "apps/web/src/server/mailer.ts"
     }
   ],
   "edits": [
@@ -641,6 +682,18 @@ npx -y create-efforge info email --json --cwd my-app
       "file": "AGENTS.md",
       "transforms": [
         "appendAgentsSection"
+      ]
+    },
+    {
+      "file": "apps/web/src/capabilities/registry.ts",
+      "transforms": [
+        "addArrayItem"
+      ]
+    },
+    {
+      "file": "apps/web/src/server/email-demo.ts",
+      "transforms": [
+        "addServerFnMiddleware"
       ]
     },
     {
@@ -682,7 +735,10 @@ npx -y create-efforge info email --json --cwd my-app
   ],
   "requires": [],
   "conflicts": [],
-  "card": null,
+  "card": {
+    "module": "apps/web/src/capabilities/email.tsx",
+    "export": "email"
+  },
   "agents": [
     {
       "heading": "Email"
@@ -822,7 +878,7 @@ npx -y create-efforge graph --json --cwd my-app
       "kind": "needs"
     }
   ],
-  "mermaid": "flowchart LR\n  app[[\"AppLayer<br/>apps/web/src/server/layers.ts\"]]:::app\n  l0[\"<b>Logger.layer</b><br/>provides Logger\"]:::t1\n  l1[\"<b>DatabaseLayer</b><br/>provides Database, Notes\"]:::t2\n  l2[\"<b>AuthLive</b><br/>provides Auth, BetterAuth\"]:::t3\n  n0([\"WorkerEnvLive\"]):::need\n  n1([\"database binding\"]):::need\n  n2([\"BETTER_AUTH_SECRET\"]):::need\n  l0 --> app\n  l1 --> app\n  l2 --> app\n  n0 -.-> l1\n  n1 -.-> l1\n  n2 -.-> l2\n  classDef t1 fill:#efe3c6,stroke:#E2C275,color:#1C1D20,stroke-width:2px\n  classDef t2 fill:#dbc4b1,stroke:#A8683A,color:#1C1D20,stroke-width:2px\n  classDef t3 fill:#c6bbd1,stroke:#6C4E96,color:#1C1D20,stroke-width:2px\n  classDef app fill:#1C1D20,stroke:#C9CDD2,color:#F6F5F1\n  classDef need fill:#C9CDD2,stroke:#C9CDD2,color:#1C1D20",
+  "mermaid": "flowchart LR\n  app[[\"AppLayer<br/>apps/web/src/server/layers.ts\"]]:::app\n  l0[\"<b>Logger.layer</b><br/>provides Logger\"]:::t1\n  l1[\"<b>DatabaseLayer</b><br/>provides Database, Notes\"]:::t2\n  l2[\"<b>AuthLive</b><br/>provides Auth, BetterAuth\"]:::t3\n  n0([\"WorkerEnvLive\"]):::need\n  n1([\"database binding\"]):::need\n  n2([\"BETTER_AUTH_SECRET\"]):::need\n  l0 --> app\n  l1 --> app\n  l2 --> app\n  n0 -.-> l1\n  n1 -.-> l1\n  n2 -.-> l2\n  classDef t1 fill:#d6d0af,stroke:#9A8C33,color:#1C1D20,stroke-width:2px\n  classDef t2 fill:#dbc4b1,stroke:#A8683A,color:#1C1D20,stroke-width:2px\n  classDef t3 fill:#cab9cf,stroke:#774990,color:#1C1D20,stroke-width:2px\n  classDef app fill:#1C1D20,stroke:#C9CDD2,color:#F6F5F1\n  classDef need fill:#C9CDD2,stroke:#C9CDD2,color:#1C1D20",
   "written": null
 }
 ```
@@ -848,8 +904,9 @@ The rest:
 - `files`: each generated file by `status`. `current`: as efforge writes it today. `refresh`: efforge's own older output, and the template moved: `upgrade` replaces it. `review`: you changed it and so did the template. `yours`: you changed it; it has everything today's has. `deleted`: you removed it. `dropped`: efforge no longer generates it (`upgrade` removes it when it is efforge's, unedited). `new`: efforge generates it today. `inPlace: true` marks a file efforge edits in place (`layers.ts`, `AGENTS.md`), judged by the release record instead of a hash. `held` says why `upgrade` keeps one it would otherwise apply, `why` what efforge's change is for. With `--diff`, `diff` is a git diff from yours to efforge's.
 - `seams`: files `upgrade` edits in place, with `missing` (what it adds, one line each) and `diff`.
 - `scripts`: package.json scripts that differ from today's template: `behind` when a release wrote yours, `yours` otherwise.
+- `env`: env vars the stack reads today that `.env.example` lacks, each as `create` and `add` report one (`name`, `description`, `file`, `set`, `secret`). `upgrade` appends them to `.env.example`, and to the local settings file (`.dev.vars`, or `.env` with Alchemy) when there is one, as `add` does: no line already there changes. A script today's templates define that no release wrote for your stack is added the same way; one a release wrote that you removed stays removed.
 - `kept`: what `upgrade` won't change for you, each with `status` (`review`, `held`), `reason` and, where efforge can name them, the exact `lines` that would let it apply.
-- `steps`: what to do, in order, ending with the project's gate. The `upgrade` step's `covers` lists what it applies (`effect-overrides`, `package-manager`, `pins`, `scripts`, `seams`, `refresh`, `new`, `remove`, `manifest`, `install`), so an agent knows not to repeat any of it by hand.
+- `steps`: what to do, in order, ending with the project's gate. The `upgrade` step's `covers` lists what it applies (`effect-overrides`, `package-manager`, `pins`, `scripts`, `seams`, `env`, `refresh`, `new`, `remove`, `manifest`, `install`), so an agent knows not to repeat any of it by hand.
 
 `--file <path>` with `--diff` limits the diffs to one file.
 
@@ -939,6 +996,7 @@ npx -y create-efforge upgrade --check --json --cwd my-app
   ],
   "seams": [],
   "scripts": [],
+  "env": [],
   "kept": [],
   "steps": [],
   "warnings": []
@@ -1063,6 +1121,7 @@ npx -y create-efforge upgrade --check --json --cwd my-app
   ],
   "seams": [],
   "scripts": [],
+  "env": [],
   "kept": [],
   "steps": [
     {
@@ -1095,6 +1154,7 @@ npx -y create-efforge upgrade --check --json --cwd my-app
 - `efforgeVersion`: `from` what efforge.jsonc said, `to` what it says now.
 - `status`: `current`, or `needs-action` (exit code `2`) when something only you can fix still breaks the project; `needsAction` lists it.
 - `created`, `changed`, `removed`: the files, relative to the project. `installed`: whether `pnpm install` ran.
+- `env`: the env vars it added, as in `--check`.
 - `kept`: as above. `nextSteps`: the commands left to run, each with its `cwd`, ending with the project's gate.
 - With `--diff`, `diff` is what it changed, as one git diff.
 
@@ -1137,11 +1197,16 @@ npx -y create-efforge upgrade --json --cwd my-app
   ],
   "removed": [],
   "installed": true,
+  "env": [],
   "kept": [],
   "needsAction": [],
   "nextSteps": [
     {
       "command": "pnpm typecheck && pnpm check && pnpm test && pnpm build",
+      "cwd": "/home/me/projects/my-app"
+    },
+    {
+      "command": "pnpm db:migrate",
       "cwd": "/home/me/projects/my-app"
     }
   ],
@@ -1160,6 +1225,7 @@ Each of `checks` has a stable `id`, a `status` (`ok`, `warn`, `fail`, `skipped`,
 | `node` | Node against `engines` (efforge's own range when the project has none). |
 | `pnpm` | pnpm on PATH, and `packageManager` new enough to honour the Effect overrides. |
 | `manifest` | efforge.jsonc against its schema. |
+| `ignored` | Whether git ignores the project's files: a project that isn't its own repository, under a `.gitignore` that ignores everything (a dotfiles repository in `~` with `*`), has no files for `pnpm check` and no styles from Tailwind. `fix` is `git init` in the project; `details.rule` names the rule and its file. |
 | `install` | `node_modules` installed by pnpm and matching the package.json files, `pnpm-workspace.yaml` and `pnpm-lock.yaml`. |
 | `effect` | One Effect: every package released with `effect` resolved to the catalog's version, from the installed lockfile. |
 | `effect-guard` | The overrides that keep it so. |
@@ -1219,6 +1285,12 @@ npx -y create-efforge doctor --json --cwd my-app
       "id": "manifest",
       "status": "ok",
       "message": "efforge.jsonc is valid: made with efforge 0.2.1.",
+      "fix": null
+    },
+    {
+      "id": "ignored",
+      "status": "ok",
+      "message": "git doesn't ignore the project's files.",
       "fix": null
     },
     {
@@ -1493,7 +1565,8 @@ npx -y create-efforge create my-app
 ```
 
 ```text
-No terminal to ask for "preset": pass --preset=saas|ai|minimal or the stack flags, or --yes to accept the defaults.
+No terminal to ask for "preset": pass --preset=saas|ai|minimal or the stack
+flags, or --yes to accept the defaults.
 Try: npx -y create-efforge create my-app --yes
 ```
 
@@ -2038,7 +2111,7 @@ npx -y create-efforge add email --json
 
 `add` got no add-on ids and there is no terminal to pick them in (or `--json`), or `info` got no id.
 
-Fields: `available`: the ids the project can still add (for `info`, every id). `fix`: `list` for the same project.
+Fields: `available`: the ids the project can still add (for `info`, every id). `fix`: `null`: which add-on is your choice, and a list isn't an add. The message names the `list --json` command that says what each one adds.
 
 Here, `my-app` has D1, Drizzle and Better Auth.
 
@@ -2055,8 +2128,8 @@ npx -y create-efforge add --json --cwd my-app
   "ok": false,
   "error": {
     "code": "NoAddonIds",
-    "message": "Name the add-ons to add: infra/alchemy, ai/effect-ai-byok, extras/workflows, extras/realtime, extras/browser, extras/storage, extras/email.",
-    "fix": "npx -y create-efforge list --json --cwd my-app",
+    "message": "Name the add-ons to add: infra/alchemy, ai/effect-ai-byok, extras/workflows, extras/realtime, extras/browser, extras/storage, extras/email. What each one adds: npx -y create-efforge list --json --cwd my-app",
+    "fix": null,
     "available": [
       "infra/alchemy",
       "ai/effect-ai-byok",
@@ -2266,6 +2339,7 @@ npx -y create-efforge add ai --json --cwd my-app
         "id": "ai/effect-ai-byok",
         "title": "Effect AI (bring your own key)",
         "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/ai-effect-ai-byok.md",
+        "card": "apps/web/src/capabilities/ai.tsx",
         "agents": [
           "AI (Effect AI, bring your own key)"
         ]
@@ -2273,10 +2347,14 @@ npx -y create-efforge add ai --json --cwd my-app
     ],
     "skipped": [],
     "created": [
+      "apps/web/src/capabilities/ai.tsx",
+      "apps/web/src/server/ai-demo.ts",
       "apps/web/src/server/ai.ts",
       "apps/web/src/server/llm-provider.ts",
       "apps/web/src/server/llm.ts",
-      "packages/core/src/llm.ts"
+      "packages/core/src/llm.ts",
+      "packages/core/test/llm-fixed.ts",
+      "packages/core/test/llm.test.ts"
     ],
     "changed": [
       ".dev.vars",
@@ -2284,6 +2362,7 @@ npx -y create-efforge add ai --json --cwd my-app
       "AGENTS.md",
       "README.md",
       "apps/web/package.json",
+      "apps/web/src/capabilities/registry.ts",
       "apps/web/src/server/layers.ts",
       "efforge.jsonc",
       "packages/core/src/index.ts",
@@ -2326,6 +2405,11 @@ npx -y create-efforge add ai --json --cwd my-app
     "nextSteps": [
       {
         "command": "pnpm install --no-frozen-lockfile",
+        "cwd": "/home/me/projects/my-app"
+      },
+      {
+        "command": "pnpm db:migrate",
+        "note": "create the tables in the local D1",
         "cwd": "/home/me/projects/my-app"
       }
     ],

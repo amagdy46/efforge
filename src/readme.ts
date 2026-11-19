@@ -70,10 +70,16 @@ export const runSteps = (stack: StackConfig): Step[] => {
 export const setupSteps = (stack: StackConfig): Step[] =>
   runSteps(stack).filter((s) => s.longRunning !== true)
 
-/** What to run after `create`: the install when it was skipped, then {@link runSteps}. */
-export const planSteps = (stack: StackConfig, o: { readonly installed: boolean }): Step[] => [
+/**
+ * What to run after `create`: the install when it was skipped, then {@link runSteps}; without
+ * `pnpm db:migrate` when `migrate` is false (src/migrations.ts says whether it is owed).
+ */
+export const planSteps = (
+  stack: StackConfig,
+  o: { readonly installed: boolean; readonly migrate?: boolean },
+): Step[] => [
   ...(o.installed ? [] : [{ command: INSTALL }]),
-  ...runSteps(stack),
+  ...runSteps(stack).filter((s) => o.migrate !== false || s.command !== "pnpm db:migrate"),
 ]
 
 /** `command  # note` lines, the notes aligned. */
@@ -344,16 +350,59 @@ const capabilityList = (input: ReadmeInput): string => {
   return lines.map((l) => `- ${l}`).join("\n")
 }
 
-/** What `infra/alchemy.run.ts` creates for each add-on, beside the Worker. */
-const alchemyResources = (stack: StackConfig): Record<string, string> => ({
-  "database/postgres": "a Hyperdrive config for the Postgres at `DATABASE_URL`",
-  "database/d1": `a D1 database (migrated from \`packages/db/${stack.orm === "drizzle" ? "drizzle" : "migrations"}\`)`,
-  "extras/storage": "an R2 bucket",
-  "extras/realtime": "the `Room` Durable Object",
-  "extras/workflows": "the example Workflow",
-  "extras/browser": "the browser Container (its image is built from `apps/browser` with Docker)",
-  "extras/email": "an Email Sending binding",
+/** How the Deploy section covers an add-on that binds a Cloudflare resource. */
+export interface DeployResource {
+  /** What `infra/alchemy.run.ts` creates for it, beside the Worker */
+  readonly alchemy: string
+  /** The words the wrangler steps use for it (a step or a note on the first deploy) */
+  readonly wrangler: string
+}
+
+/**
+ * Every add-on with a wrangler binding has an entry, and the Deploy section says it (a test in
+ * `test/readme.test.ts` fails for a new add-on until it does).
+ */
+export const deployResources = (stack: StackConfig): Record<string, DeployResource> => ({
+  "database/postgres": {
+    alchemy: "a Hyperdrive config for the Postgres at `DATABASE_URL`",
+    wrangler: "wrangler hyperdrive create",
+  },
+  "database/d1": {
+    alchemy: `a D1 database (migrated from \`packages/db/${stack.orm === "drizzle" ? "drizzle" : "migrations"}\`)`,
+    wrangler: "wrangler d1 create",
+  },
+  "extras/storage": { alchemy: "an R2 bucket", wrangler: "creates the R2 bucket" },
+  "extras/realtime": {
+    alchemy: "the `Room` Durable Object",
+    wrangler: "registers the `Room` Durable Object",
+  },
+  "extras/workflows": {
+    alchemy: "the example Workflow",
+    wrangler: "registers the example Workflow",
+  },
+  "extras/browser": {
+    alchemy: "the browser Container (its image is built from `apps/browser` with Docker)",
+    wrangler: "builds the `apps/browser` image",
+  },
+  "extras/email": {
+    alchemy: "an Email Sending binding",
+    wrangler: "wrangler email sending enable",
+  },
 })
+
+/**
+ * "Before you deploy": who can use the dashboard's demos once the app is public. With auth, any
+ * account, and sign-up is open; without auth, anyone. Empty for a stack with nothing to say.
+ */
+const beforeDeploy = (input: ReadmeInput): string => {
+  const { stack } = input
+  if (stack.auth !== "none")
+    return "Before you deploy: sign-up is open, so anyone can register and then use every card, the ones that spend included (an AI key, the test email, the browser container). Close sign-up with `disableSignUp: true` in `apps/web/src/server/auth.ts` (`AGENTS.md`, Auth), or remove the demos you don't want, before you deploy with real keys."
+  const ids = addonIdsFor(stack)
+  if (stack.orm === "none" && !ids.some((id) => id.startsWith("extras/") || id.startsWith("ai/")))
+    return ""
+  return "Before you deploy: this project has no auth, so the dashboard's demos answer anyone who can reach the app, and the ones that write or spend say so on their card. Add auth (`npx -y create-efforge add auth/better-auth`) or remove those demos first."
+}
 
 const deployWrangler = (input: ReadmeInput): string => {
   const { stack } = input
@@ -379,11 +428,10 @@ const deployWrangler = (input: ReadmeInput): string => {
     steps.push(
       `Write the production values of ${and(secrets.map(code))} to \`.env.production\` (gitignored; \`.env.example\` says what each is), then upload them: \`pnpm exec wrangler secret bulk .env.production\` (before the first deploy, wrangler asks to create the Worker: answer yes).${secrets.includes("BETTER_AUTH_URL") ? " `BETTER_AUTH_URL` can stay empty until the first deploy prints the URL." : ""}`,
     )
-  const notes = [
-    ...(ids.includes("extras/storage") ? ["creates the R2 bucket"] : []),
-    ...(ids.includes("extras/realtime") ? ["registers the `Room` Durable Object"] : []),
-    ...(ids.includes("extras/workflows") ? ["registers the example Workflow"] : []),
-  ]
+  const resources = deployResources(stack)
+  const notes = (["extras/storage", "extras/realtime", "extras/workflows"] as const)
+    .filter((id) => ids.includes(id))
+    .flatMap((id) => resources[id]?.wrangler ?? [])
   steps.push(
     `Deploy: \`pnpm run deploy\` (builds \`apps/web\`, then \`wrangler deploy\`).${notes.length > 0 ? ` The first deploy ${and(notes)}.` : ""}${ids.includes("extras/browser") ? " Docker must be running: the deploy builds the `apps/browser` image and pushes it (Containers need the Workers Paid plan)." : ""}`,
   )
@@ -397,9 +445,9 @@ const deployWrangler = (input: ReadmeInput): string => {
 const deployAlchemy = (input: ReadmeInput): string => {
   const { stack } = input
   const ids = addonIdsFor(stack)
-  const resources = Object.entries(alchemyResources(stack))
+  const resources = Object.entries(deployResources(stack))
     .filter(([id]) => ids.includes(id))
-    .map(([, r]) => r)
+    .map(([, r]) => r.alchemy)
   const env = [
     "CLOUDFLARE_API_TOKEN",
     "CLOUDFLARE_ACCOUNT_ID",
@@ -437,8 +485,8 @@ const more = (input: ReadmeInput): string => {
     SUGGESTED.find((e) => !stack.extras.includes(e)) ??
     (stack.infra === "none" ? "infra/alchemy" : undefined)
   return next === undefined
-    ? "Every capability is an add-on, and this project has the ones that add alone. List them all:\n\n```sh\nnpx create-efforge list\n```"
-    : `Every capability is an add-on. List them, then add one:\n\n\`\`\`sh\nnpx create-efforge list\nnpx create-efforge add ${next}\n\`\`\``
+    ? "Every capability is an add-on, and this project has the ones that add alone. List them all:\n\n```sh\nnpx -y create-efforge list\n```"
+    : `Every capability is an add-on. List them, then add one:\n\n\`\`\`sh\nnpx -y create-efforge list\nnpx -y create-efforge add ${next}\n\`\`\``
 }
 
 /** The content of every region for this project. */
@@ -448,7 +496,12 @@ export const readmeRegions = (input: ReadmeInput): Record<ReadmeRegion, string> 
   scripts: scripts(input),
   layout: layout(input),
   capabilities: capabilityList(input),
-  deploy: input.stack.infra === "alchemy" ? deployAlchemy(input) : deployWrangler(input),
+  deploy: [
+    beforeDeploy(input),
+    input.stack.infra === "alchemy" ? deployAlchemy(input) : deployWrangler(input),
+  ]
+    .filter((part) => part !== "")
+    .join("\n\n"),
   more: more(input),
 })
 

@@ -155,6 +155,12 @@ Only with `database=d1` and `infra=none`:
 
 - On D1, `pnpm db:migrate` copies them into `packages/db/migrations/` (the flat layout wrangler applies) before applying them; that directory is generated too.
 
+Only with `auth=none`:
+
+#### Notes without auth
+
+- This project has no auth, so the database card's `addNote` in `apps/web/src/server/notes.ts` (on a project with the dashboard) is open: anyone who can reach the app can add notes, and every visitor reads them. Add auth (`efforge add auth/better-auth`, which guards it) or remove the demo before deploying.
+
 ## Limits
 
 - `drizzle-orm` and `drizzle-kit` are pinned to a 1.0 release candidate, the version under Dependencies ([why](../decisions/0002-drizzle-rc-pin.md)).

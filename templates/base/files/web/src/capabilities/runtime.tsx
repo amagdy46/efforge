@@ -83,5 +83,6 @@ export const runtime: Capability = {
     name: "greets a trimmed name at the server's time",
   },
   agents: "Effect",
+  access: { effect: "reads" },
   Demo: RuntimeDemo,
 }

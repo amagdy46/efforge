@@ -56,6 +56,10 @@
       "target": "lint/effect-tests.js"
     },
     {
+      "path": "files/root/lint/efforge.js",
+      "target": "lint/efforge.js"
+    },
+    {
       "path": "files/web/components.json",
       "target": "apps/web/components.json"
     },
@@ -204,12 +208,20 @@
       "target": "apps/web/src/lib/use-server-call.ts"
     },
     {
+      "path": "files/web/src/lib/use-stack.ts",
+      "target": "apps/web/src/lib/use-stack.ts"
+    },
+    {
       "path": "files/web/src/lib/layer-graph.ts",
       "target": "apps/web/src/lib/layer-graph.ts"
     },
     {
       "path": "files/web/src/server/outcome.ts",
       "target": "apps/web/src/server/outcome.ts"
+    },
+    {
+      "path": "files/web/src/server/owner.ts",
+      "target": "apps/web/src/server/owner.ts"
     },
     {
       "path": "files/web/src/server/stack.ts",

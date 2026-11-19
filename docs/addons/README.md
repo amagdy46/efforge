@@ -31,12 +31,12 @@ A slot is one decision about the stack: the database, the ORM, auth, and so on. 
 
 ## AI (`ai`)
 
-- [Effect AI (bring your own key)](ai-effect-ai-byok.md) (`ai/effect-ai-byok`): An Llm service on Effect AI with Anthropic, OpenAI, OpenRouter and Ollama providers; keys come from the environment, or are saved encrypted per organization when auth has organizations.
+- [Effect AI (bring your own key)](ai-effect-ai-byok.md) (`ai/effect-ai-byok`): An Llm service on Effect AI with Anthropic, OpenAI, OpenRouter and Ollama providers; keys come from the environment, or are saved encrypted per organization when auth has organizations. A dashboard card streams an answer.
 
 ## Extras (`extras`)
 
-- [Browser](extras-browser.md) (`extras/browser`): A headless browser: a Browser service on a Cloudflare Container that runs Playwright (apps/browser).
-- [Email](extras-email.md) (`extras/email`): Transactional email: a Mailer service on Cloudflare Email Service, printed to the console in development, plus invitation emails with organizations.
+- [Browser](extras-browser.md) (`extras/browser`): A headless browser: a Browser service on a Cloudflare Container that runs Playwright (apps/browser), and a dashboard card that opens a page.
+- [Email](extras-email.md) (`extras/email`): Transactional email: a Mailer service on Cloudflare Email Service, printed to the console in development, a dashboard card, plus invitation emails with organizations.
 - [Realtime](extras-realtime.md) (`extras/realtime`): WebSockets: a Realtime service, a hibernating Room Durable Object, a useRoom hook and a dashboard card.
-- [Storage](extras-storage.md) (`extras/storage`): Object storage: a Storage service on R2 with Worker-served signed download URLs.
-- [Workflows](extras-workflows.md) (`extras/workflows`): Durable background jobs: a Jobs service on Cloudflare Workflows, with an example workflow and server functions.
+- [Storage](extras-storage.md) (`extras/storage`): Object storage: a Storage service on R2 with Worker-served signed download URLs, and a dashboard card.
+- [Workflows](extras-workflows.md) (`extras/workflows`): Durable background jobs: a Jobs service on Cloudflare Workflows, an example workflow and a dashboard card that follows a run's steps.

@@ -212,7 +212,11 @@ const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
     if (config.orm === "drizzle") yield* Effect.try(() => checkDbGenerate(dir))
     yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
     // a minimal stack's card files may have nothing outside their regions; auth and database ones do
-    yield* Effect.try(() => checkRegionsOnly(dir))
+    const checked = yield* Effect.try(() => checkRegionsOnly(dir))
+    if (checked === 0 && (config.auth !== "none" || config.database !== "none"))
+      return yield* Effect.fail(
+        new Error(`checkRegionsOnly checked no lines on ${JSON.stringify(config)}`),
+      )
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -234,6 +238,8 @@ const waitForServer = async (url: string) => {
 const browserFlow = (config: StackConfig): Effect.Effect<void, unknown> =>
   Effect.gen(function* () {
     const dir = yield* generateStack(config)
+    // the session guard's bypasses go in before the app runs: they must be refused
+    yield* Effect.tryPromise(async () => (await import("./browser-flow.ts")).plantBypasses(dir))
     const databaseUrl =
       process.env.EFFORGE_E2E_DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/app"
     const port = process.env.EFFORGE_E2E_PORT ?? "5199"
@@ -569,6 +575,10 @@ const upgradeOld = (ref: string, flags: string, edited: boolean): Effect.Effect<
     if (applied.exit !== 0 || applied.doc.ok !== true)
       throw new Error(`upgrade failed:\n${JSON.stringify(applied.doc, null, 2)}`)
     yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
+    // docs/deploy.md works on the upgraded project: the root deploy script a 0.2.0 wrangler
+    // project lacked is there. --dry-run builds and checks the config, and uploads nothing
+    if (!flags.includes("--infra=alchemy"))
+      yield* Effect.try(() => sh(dir, "pnpm run deploy --dry-run"))
     if (mine !== undefined) {
       // the owner's edits, byte for byte; layers.ts may only have gained the card region's markers
       const now = (f: string) => readFileSync(join(dir, f), "utf8")
@@ -625,7 +635,7 @@ describe("upgrade an old project", () => {
 
 describe.skipIf(process.env.EFFORGE_E2E_BROWSER !== "1")("browser flow", () => {
   it.effect(
-    "pg-drizzle-orgs + realtime: sign up, create org, see the widgets, invite, accept, both members visible",
+    "pg-drizzle-orgs + every add-on: sign up, create org, use every card, invite, accept, both members visible",
     () =>
       browserFlow(
         withDefaults({
@@ -634,7 +644,8 @@ describe.skipIf(process.env.EFFORGE_E2E_BROWSER !== "1")("browser flow", () => {
           orm: "drizzle",
           auth: "better-auth-orgs",
           infra: "none",
-          extras: ["realtime"],
+          ai: "effect-ai-byok",
+          extras: ["workflows", "realtime", "browser", "storage", "email"],
         }),
       ),
     { timeout: 15 * 60 * 1000 },
