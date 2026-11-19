@@ -326,9 +326,8 @@ export const writeGraph = (readme: string, g: LayerGraph): Filled => {
   const content = graphRegion(g)
   if (parsed.regions.some((r) => r.id === GRAPH_REGION))
     return fillRegions(readme, README_PREFIX, { [GRAPH_REGION]: content })
-  const after =
-    parsed.regions.find((r) => r.id === "capabilities") ??
-    (parsed.regions[parsed.regions.length - 1] as (typeof parsed.regions)[number])
+  const after = parsed.regions.find((r) => r.id === "capabilities") ?? parsed.regions.at(-1)
+  if (after === undefined) return { kind: "no-markers" }
   const cr = parsed.eol === "\r\n" ? "\r" : ""
   const lines = [...parsed.lines]
   lines.splice(
