@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve as resolvePath } from "node:path"
 import { NodeFileSystem, NodeServices } from "@effect/platform-node"
 import { describe, it } from "@effect/vitest"
@@ -443,6 +443,155 @@ describe("add on a real project", () => {
       }).pipe(Effect.provide(NodeServices.layer)),
     { timeout: 15 * 60 * 1000 },
   )
+})
+
+// --- upgrade an old project (ruling 1 of the W4-A2 review) -------------------------------------
+// A real project from an efforge release, with and without the owner's own edits in layers.ts and
+// the dashboard, then `upgrade` from this source, then the project's full gate. Whatever upgrade
+// applies must leave the project building, keep the owner's edits byte for byte, and leave both
+// commands with nothing to apply. Needs the release refs (`git fetch --tags origin release-0.2.1`).
+
+const repo = new URL("../..", import.meta.url).pathname
+const sources = new Map<string, string>()
+
+/** The efforge source at `ref`, installed, under .e2e (once per run). */
+const releaseSource = (ref: string): string => {
+  const hit = sources.get(ref)
+  if (hit !== undefined) return hit
+  const found = [ref, `origin/${ref}`].find(
+    (r) =>
+      spawnSync("git", ["rev-parse", "--verify", "-q", `${r}^{commit}`], { cwd: repo }).status ===
+      0,
+  )
+  if (found === undefined)
+    throw new Error(`${ref} isn't in this checkout: git fetch --tags origin release-0.2.1`)
+  mkdirSync(e2eRoot, { recursive: true })
+  const dir = mkdtempSync(`${e2eRoot}/efforge-${ref.replace(/\W+/g, "-")}-`)
+  sh(repo, `git archive ${found} | tar -x -C ${JSON.stringify(dir)}`)
+  sh(dir, "pnpm install --frozen-lockfile")
+  sources.set(ref, dir)
+  return dir
+}
+
+const LAYERS = "apps/web/src/server/layers.ts"
+const DASHBOARD = "apps/web/src/routes/app/index.tsx"
+
+/** The owner's own work: a layer of theirs in AppLayer, and a heading of theirs on the dashboard. */
+const ownerEdits = (dir: string) => {
+  const write = (file: string, f: (t: string) => string) =>
+    writeFileSync(join(dir, file), f(readFileSync(join(dir, file), "utf8")))
+  writeFileSync(
+    join(dir, "apps/web/src/server/billing.ts"),
+    'import { Layer } from "effect"\n\n/** Billing, ours. */\nexport const BillingLive = Layer.empty\n',
+  )
+  write(LAYERS, (t) =>
+    t
+      .replace(
+        'import { AuthLive } from "./auth-live"',
+        'import { AuthLive } from "./auth-live"\nimport { BillingLive } from "./billing"',
+      )
+      .replace("  AuthLive,\n", "  AuthLive,\n  BillingLive,\n"),
+  )
+  write(DASHBOARD, (t) => t.replace(">Dashboard<", ">Acme dashboard<"))
+  sh(dir, "pnpm format")
+  sh(
+    dir,
+    "git add -A && git -c user.name=e2e -c user.email=e2e@example.com commit -qm 'our billing layer and dashboard'",
+  )
+}
+
+const cliJson = (args: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const out: string[] = []
+    const log = vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => {
+      out.push(a.join(" "))
+    })
+    process.exitCode = undefined
+    yield* Effect.promise(() =>
+      Effect.runPromise(
+        runWith(args).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, PromptIOLive))),
+      ),
+    ).pipe(Effect.ensuring(Effect.sync(() => log.mockRestore())))
+    const exit = process.exitCode ?? 0
+    process.exitCode = undefined
+    return { doc: JSON.parse(out.join("\n")) as Record<string, unknown>, exit }
+  })
+
+const upgradeOld = (ref: string, flags: string, edited: boolean): Effect.Effect<void, unknown> =>
+  Effect.gen(function* () {
+    const source = releaseSource(ref)
+    const work = mkdtempSync(`${e2eRoot}/old-${ref.replace(/\W+/g, "-")}-`)
+    yield* Effect.try(() =>
+      sh(work, `node ${JSON.stringify(join(source, "src/bin.ts"))} old --yes ${flags}`),
+    )
+    const dir = join(work, "old")
+    // 0.2.1's own next step on Alchemy: the local values come from the example
+    if (flags.includes("--infra=alchemy"))
+      yield* Effect.try(() => sh(dir, "test -f .env || cp .env.example .env"))
+    if (edited) yield* Effect.try(() => ownerEdits(dir))
+    const mine = edited
+      ? {
+          layers: readFileSync(join(dir, LAYERS), "utf8"),
+          dashboard: readFileSync(join(dir, DASHBOARD), "utf8"),
+          billing: readFileSync(join(dir, "apps/web/src/server/billing.ts"), "utf8"),
+        }
+      : undefined
+    const applied = yield* cliJson(["upgrade", "--json", "--cwd", dir])
+    if (applied.exit !== 0 || applied.doc.ok !== true)
+      throw new Error(`upgrade failed:\n${JSON.stringify(applied.doc, null, 2)}`)
+    yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
+    if (mine !== undefined) {
+      // the owner's edits, byte for byte; layers.ts may only have gained the card region's markers
+      const now = (f: string) => readFileSync(join(dir, f), "utf8")
+      if (now(DASHBOARD) !== mine.dashboard)
+        throw new Error("upgrade changed the owner's dashboard")
+      if (now("apps/web/src/server/billing.ts") !== mine.billing)
+        throw new Error("upgrade changed billing.ts")
+      if (now(LAYERS).replace(/^\/\/ #(region card|endregion)\n/gm, "") !== mine.layers)
+        throw new Error(
+          `upgrade changed the owner's layers.ts beyond the region markers:\n${now(LAYERS)}`,
+        )
+    }
+    // both commands agree that nothing is left to apply
+    const again = yield* cliJson(["upgrade", "--check", "--strict", "--json", "--cwd", dir])
+    if (again.exit !== 0 || again.doc.status !== "current")
+      throw new Error(`upgrade --check after upgrade:\n${JSON.stringify(again.doc, null, 2)}`)
+    const before = process.env.DATABASE_URL
+    process.env.DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:9/app"
+    const doctor = yield* cliJson(["doctor", "--json", "--cwd", dir]).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (before === undefined) delete process.env.DATABASE_URL
+          else process.env.DATABASE_URL = before
+        }),
+      ),
+    )
+    const failed = (
+      doctor.doc.checks as Array<{ id: string; status: string; message: string }>
+    ).filter((c) => c.status === "fail" || (c.id === "upgrade" && c.status !== "ok"))
+    if (failed.length > 0)
+      throw new Error(
+        `doctor after upgrade:\n${failed.map((c) => `${c.id}: ${c.message}`).join("\n")}`,
+      )
+    rmSync(work, { recursive: true, force: true })
+  })
+
+describe("upgrade an old project", () => {
+  const releases: Array<[string, string, string]> = [
+    ["0.2.0", "v0.2.0", "--database=d1 --orm=effect-sql"],
+    [
+      "0.2.1",
+      "release-0.2.1",
+      "--database=d1 --orm=effect-sql --auth=better-auth --infra=alchemy --extras=storage,email",
+    ],
+  ]
+  for (const [version, ref, flags] of releases)
+    for (const edited of [false, true])
+      it.effect(
+        `${version}${edited ? " with the owner's edits in layers.ts and the dashboard" : ""}: upgrade, then the full gate`,
+        () => upgradeOld(ref, flags, edited),
+        { timeout: 20 * 60 * 1000 },
+      )
 })
 
 describe.skipIf(process.env.EFFORGE_E2E_BROWSER !== "1")("browser flow", () => {

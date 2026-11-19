@@ -307,6 +307,25 @@ it("an efforge file you import, whose new version drops what you use, is held wi
   await consistent(dir, r)
 })
 
+it("a file efforge no longer generates goes, unless a file of yours imports it", async () => {
+  const dir = await project()
+  // what an older efforge wrote and no longer generates, unedited
+  olderTemplate(dir, "apps/web/src/components/widgets.tsx", "export const widgets = []\n")
+  const unused = await check(dir)
+  expect(statusOf(unused, "apps/web/src/components/widgets.tsx")).toBe("dropped")
+  expect(unused.removes.has("apps/web/src/components/widgets.tsx")).toBe(true)
+  writeFileSync(
+    join(dir, "apps/web/src/routes/mine.tsx"),
+    'import { widgets } from "@/components/widgets"\n\nexport const count = widgets.length\n',
+  )
+  const used = await check(dir)
+  expect(used.removes.has("apps/web/src/components/widgets.tsx")).toBe(false)
+  expect(used.kept.find((k) => k.path === "apps/web/src/components/widgets.tsx")).toMatchObject({
+    status: "held",
+    reason: expect.stringContaining("apps/web/src/routes/mine.tsx imports"),
+  })
+})
+
 it("an unedited file whose template moved is refreshed, its hash recorded", async () => {
   const dir = await project()
   olderTemplate(dir, "apps/web/src/routes/app.tsx", "// what an older efforge wrote\n")

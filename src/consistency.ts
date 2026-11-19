@@ -134,8 +134,10 @@ export const checkConsistency = (input: ConsistencyInput): ConsistencyResult => 
 
   const resolveFile = (base: string): string | undefined => {
     const clean = base.replace(/\.js$/, ".ts")
-    if (SOURCE.test(clean) && exists(clean)) return clean
-    for (const e of EXTS) if (exists(`${clean}${e}`)) return `${clean}${e}`
+    // on disk too: an import of a file the plan removes still names that file
+    const there = (p: string) => exists(p) || disk(p) !== undefined
+    if (SOURCE.test(clean) && there(clean)) return clean
+    for (const e of EXTS) if (there(`${clean}${e}`)) return `${clean}${e}`
     // a file that doesn't exist yet: name what today's tree would resolve it to
     if (SOURCE.test(clean) && today.has(clean)) return clean
     for (const e of EXTS) if (today.has(`${clean}${e}`)) return `${clean}${e}`

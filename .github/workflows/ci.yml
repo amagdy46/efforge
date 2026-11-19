@@ -106,6 +106,26 @@ jobs:
       - run: pnpm test:e2e -t "^add on a real project > " --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/e2e.json"
       - run: node scripts/expect-tests-ran.ts "$RUNNER_TEMP/e2e.json" 1
 
+  # `efforge upgrade` on real projects made by efforge 0.2.0 and 0.2.1, with and without the
+  # owner's own edits, then each project's full gate. Needs the release refs, so a full fetch.
+  e2e-upgrade:
+    name: e2e (upgrade an old project)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git fetch --tags origin release-0.2.1
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: ${{ (github.event_name != 'schedule' && github.event_name != 'workflow_dispatch') && 'pnpm' || '' }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:e2e -t "^upgrade an old project > " --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/e2e.json"
+      - run: node scripts/expect-tests-ran.ts "$RUNNER_TEMP/e2e.json" 4
+
   # `pnpm smoke:pack`: checks the packed manifest has no dependencies, installs the tarball with
   # npm (its own cache, no lockfile, outside the repo), runs it through npm, npx and pnpm dlx,
   # creates the default stack, builds it, runs one `add` with the packed CLI and builds again.
