@@ -344,15 +344,44 @@ const capabilityList = (input: ReadmeInput): string => {
   return lines.map((l) => `- ${l}`).join("\n")
 }
 
-/** What `infra/alchemy.run.ts` creates for each add-on, beside the Worker. */
-const alchemyResources = (stack: StackConfig): Record<string, string> => ({
-  "database/postgres": "a Hyperdrive config for the Postgres at `DATABASE_URL`",
-  "database/d1": `a D1 database (migrated from \`packages/db/${stack.orm === "drizzle" ? "drizzle" : "migrations"}\`)`,
-  "extras/storage": "an R2 bucket",
-  "extras/realtime": "the `Room` Durable Object",
-  "extras/workflows": "the example Workflow",
-  "extras/browser": "the browser Container (its image is built from `apps/browser` with Docker)",
-  "extras/email": "an Email Sending binding",
+/** How the Deploy section covers an add-on that binds a Cloudflare resource. */
+export interface DeployResource {
+  /** What `infra/alchemy.run.ts` creates for it, beside the Worker */
+  readonly alchemy: string
+  /** The words the wrangler steps use for it (a step or a note on the first deploy) */
+  readonly wrangler: string
+}
+
+/**
+ * Every add-on with a wrangler binding has an entry, and the Deploy section says it (a test in
+ * `test/readme.test.ts` fails for a new add-on until it does).
+ */
+export const deployResources = (stack: StackConfig): Record<string, DeployResource> => ({
+  "database/postgres": {
+    alchemy: "a Hyperdrive config for the Postgres at `DATABASE_URL`",
+    wrangler: "wrangler hyperdrive create",
+  },
+  "database/d1": {
+    alchemy: `a D1 database (migrated from \`packages/db/${stack.orm === "drizzle" ? "drizzle" : "migrations"}\`)`,
+    wrangler: "wrangler d1 create",
+  },
+  "extras/storage": { alchemy: "an R2 bucket", wrangler: "creates the R2 bucket" },
+  "extras/realtime": {
+    alchemy: "the `Room` Durable Object",
+    wrangler: "registers the `Room` Durable Object",
+  },
+  "extras/workflows": {
+    alchemy: "the example Workflow",
+    wrangler: "registers the example Workflow",
+  },
+  "extras/browser": {
+    alchemy: "the browser Container (its image is built from `apps/browser` with Docker)",
+    wrangler: "builds the `apps/browser` image",
+  },
+  "extras/email": {
+    alchemy: "an Email Sending binding",
+    wrangler: "wrangler email sending enable",
+  },
 })
 
 const deployWrangler = (input: ReadmeInput): string => {
@@ -379,11 +408,10 @@ const deployWrangler = (input: ReadmeInput): string => {
     steps.push(
       `Write the production values of ${and(secrets.map(code))} to \`.env.production\` (gitignored; \`.env.example\` says what each is), then upload them: \`pnpm exec wrangler secret bulk .env.production\` (before the first deploy, wrangler asks to create the Worker: answer yes).${secrets.includes("BETTER_AUTH_URL") ? " `BETTER_AUTH_URL` can stay empty until the first deploy prints the URL." : ""}`,
     )
-  const notes = [
-    ...(ids.includes("extras/storage") ? ["creates the R2 bucket"] : []),
-    ...(ids.includes("extras/realtime") ? ["registers the `Room` Durable Object"] : []),
-    ...(ids.includes("extras/workflows") ? ["registers the example Workflow"] : []),
-  ]
+  const resources = deployResources(stack)
+  const notes = (["extras/storage", "extras/realtime", "extras/workflows"] as const)
+    .filter((id) => ids.includes(id))
+    .flatMap((id) => resources[id]?.wrangler ?? [])
   steps.push(
     `Deploy: \`pnpm run deploy\` (builds \`apps/web\`, then \`wrangler deploy\`).${notes.length > 0 ? ` The first deploy ${and(notes)}.` : ""}${ids.includes("extras/browser") ? " Docker must be running: the deploy builds the `apps/browser` image and pushes it (Containers need the Workers Paid plan)." : ""}`,
   )
@@ -397,9 +425,9 @@ const deployWrangler = (input: ReadmeInput): string => {
 const deployAlchemy = (input: ReadmeInput): string => {
   const { stack } = input
   const ids = addonIdsFor(stack)
-  const resources = Object.entries(alchemyResources(stack))
+  const resources = Object.entries(deployResources(stack))
     .filter(([id]) => ids.includes(id))
-    .map(([, r]) => r)
+    .map(([, r]) => r.alchemy)
   const env = [
     "CLOUDFLARE_API_TOKEN",
     "CLOUDFLARE_ACCOUNT_ID",

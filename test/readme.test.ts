@@ -10,6 +10,7 @@ import { defaultTemplatesDir } from "../src/commands/create.ts"
 import { generate } from "../src/generate.ts"
 import {
   capabilities,
+  deployResources,
   fillReadme,
   planSteps,
   README_REGIONS,
@@ -120,6 +121,31 @@ it("the run steps are the ones each stack needs", async () => {
     const block = /```sh\n([\s\S]*?)\n```/.exec(await steps(c))?.[1]
     expect(block).toBe(renderSteps(planSteps(c, { installed: false })).join("\n"))
   }
+})
+
+it("every add-on that binds a Cloudflare resource is covered by Deploy, on both infras", async () => {
+  const bound = [...(await addons()).values()]
+    .map((a) => a.manifest)
+    .filter((m) => m.transforms.some((t) => t.name === "addWranglerBinding"))
+  expect(bound.length).toBeGreaterThan(5)
+  for (const m of bound)
+    for (const infra of ["none", "alchemy"] as const) {
+      const [slot, value] = m.id.split("/") as [string, string]
+      const config = withDefaults({
+        name: "app",
+        infra,
+        database: slot === "database" ? value : "d1",
+        orm: "drizzle",
+        auth: "none",
+        extras: slot === "extras" ? [value] : [],
+      } as Parameters<typeof withDefaults>[0])
+      const entry = deployResources(config)[m.id]
+      expect(entry, `${m.id} has no entry in deployResources (src/readme.ts)`).toBeDefined()
+      const text = region((await generated(config)).get("README.md") as string, "deploy")
+      expect(text, `${m.id} on infra=${infra}`).toContain(
+        infra === "alchemy" ? entry?.alchemy : entry?.wrangler,
+      )
+    }
 })
 
 it("deploy follows the infra: wrangler resources and secrets, or Alchemy stages", async () => {
