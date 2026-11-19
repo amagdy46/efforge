@@ -1530,7 +1530,8 @@ npx -y create-efforge create my-app
 ```
 
 ```text
-No terminal to ask for "preset": pass --preset=saas|ai|minimal or the stack flags, or --yes to accept the defaults.
+No terminal to ask for "preset": pass --preset=saas|ai|minimal or the stack
+flags, or --yes to accept the defaults.
 Try: npx -y create-efforge create my-app --yes
 ```
 

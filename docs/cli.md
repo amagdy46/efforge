@@ -30,7 +30,7 @@ After the name, the first question is "Start from a preset, or choose each part?
 | `ai` | D1, Effect SQL, Better Auth, AI with your own key, and realtime |
 | `minimal` | No database and no auth: the app, its layers and the dashboard |
 
-Every prompt and every line of ordinary output fits 80 columns; a command too long for the line is printed whole on its own line, so it can be copied.
+Every prompt, every line of ordinary output and every error on stderr fits 80 columns, broken only between words of prose: a path or a command is never split, and a command too long for the line is printed whole on its own line, so it can be copied.
 
 Choosing one shows the stack and asks "Create it?" with three answers: Yes, Change parts, No. Change parts walks every part with the preset's as the defaults, so "SaaS, but on D1" is one change; the summary then reads "the SaaS preset, changed" and gives the flags that make the same stack without the prompts (`flags  --preset=saas --database=d1`). "Choose each part" walks the slots from the defaults, and Back from the first slot returns to this question.
 

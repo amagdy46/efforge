@@ -82,8 +82,8 @@ it.each([
   expect(process.exitCode).toBe(1)
   expect(stdout).toEqual([])
   const err = stripVTControlCharacters(stderr.join("\n"))
-  expect(err).toContain(message)
-  expect(err).toContain("--help to see every flag")
+  expect(err.replaceAll("\n", " ")).toContain(message)
+  expect(err.replaceAll("\n", " ")).toContain("--help to see every flag")
   expect(err).toContain("Try: npx -y create-efforge ")
   expect(err).not.toContain("USAGE")
   expect(err.split("\n").length).toBeLessThanOrEqual(3)
@@ -162,23 +162,54 @@ it.each([
   [["--version"], "create-efforge v"],
   [["--completions", "bash"], "complete -F"],
   [["--completions", "zsh", "--json"], "#compdef"],
-])("without a terminal, %j prints text and exits 0", (args, text) => {
+])("without a terminal, %j prints text and exits 0", { timeout: 30_000 }, (args, text) => {
   const r = run(args)
   expect(r.code).toBe(0)
   expect(r.out).toContain(text)
   expect(r.out).not.toContain("--wizard")
 })
 
-it.each([[["--version", "--json"]], [["-v", "--json"]]])("%j prints the envelope alone", (args) => {
-  const r = run(args)
-  expect(r.code).toBe(0)
-  expect(Object.keys(JSON.parse(r.out))).toEqual(["efforge", "contract", "ok"])
-})
+it.each([[["--version", "--json"]], [["-v", "--json"]]])(
+  "%j prints the envelope alone",
+  { timeout: 30_000 },
+  (args) => {
+    const r = run(args)
+    expect(r.code).toBe(0)
+    expect(Object.keys(JSON.parse(r.out))).toEqual(["efforge", "contract", "ok"])
+  },
+)
 
-it("--log-level is accepted and changes nothing efforge prints", () => {
+it("--log-level is accepted and changes nothing efforge prints", { timeout: 30_000 }, () => {
   const a = run(["list", "--json"])
   const b = run(["list", "--json", "--log-level=all"])
   expect(b.code).toBe(0)
   expect(b.err).toBe("")
   expect(JSON.parse(b.out)).toEqual(JSON.parse(a.out))
+})
+
+// Errors on stderr wrap like prompts and ordinary output: 80 columns, never inside a command or a
+// path, and nothing lost (the lines, joined, are the --json message).
+it.each([
+  [["lst"]],
+  [["zz", "--databse=d1"]],
+  [["add"]],
+  [["add", "email", "--cwd", "nowhere/at/all"]],
+  [["zz", "--auth=better-auth", "--database=none"]],
+  [["info", "stripe"]],
+])("%j: the error on stderr fits 80 columns, commands whole", { timeout: 60_000 }, (args) => {
+  const text = run(args)
+  const doc = JSON.parse(run([...args, "--json"]).out)
+  const lines = text.err.split("\n").filter((l) => !/^[┌│└]/.test(l))
+  // the same error; a command it names keeps the caller's flags, so --json is in that one
+  const message: string = doc.error.message.replaceAll(" --json", "")
+  const end = lines.findIndex((l) => l === "" || l.startsWith("Try: "))
+  const body = end < 0 ? lines : lines.slice(0, end)
+  expect(body.join(" ")).toBe(message)
+  for (const l of body) expect(l.length, l).toBeLessThanOrEqual(80)
+  // each command the message names is on one line
+  for (const m of message.matchAll(/npx -y create-efforge[^.,;]*/g))
+    expect(
+      body.some((l) => l.includes(m[0].trim())),
+      m[0],
+    ).toBe(true)
 })

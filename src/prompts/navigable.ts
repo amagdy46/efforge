@@ -2,6 +2,7 @@ import { stripVTControlCharacters } from "node:util"
 import * as p from "@clack/prompts"
 import { Cause, Context, Effect, type Exit, Layer, Schema } from "effect"
 import pc from "picocolors"
+import { wrapProse } from "../wrap.ts"
 
 /** Returned by a prompt when the user picked "Back". */
 export const GoBack: unique symbol = Symbol.for("efforge/GoBack")
@@ -158,32 +159,7 @@ const toOption = (c: Choice) =>
  * clack has no back/escape signal, so "go back" is a synthetic "← Back" entry: last in a select,
  * and in a multiselect (picking it alone goes back).
  */
-/** A command, alone on its line: never broken, so it can be copied. */
-export const isCommandLine = (line: string): boolean =>
-  /^\s*(?:npx|pnpm|cd|docker|git) /.test(stripVTControlCharacters(line))
-
-/**
- * Word-wraps prose to `width` columns, measured without colours. An indented line and a command
- * are kept whole: a command that doesn't fit is still one line, so it can be copied.
- */
-export const wrapProse = (text: string, width: number): string =>
-  text
-    .split("\n")
-    .flatMap((line) => {
-      if (/^\s/.test(line) || isCommandLine(line)) return [line]
-      const out: string[] = []
-      let current = ""
-      for (const word of line.split(" ")) {
-        const next = current === "" ? word : `${current} ${word}`
-        if (current !== "" && stripVTControlCharacters(next).length > width) {
-          out.push(current)
-          current = word
-        } else current = next
-      }
-      out.push(current)
-      return out
-    })
-    .join("\n")
+export { isCommandLine, wrapProse } from "../wrap.ts"
 
 export const clack = (common: p.CommonOptions = {}) => ({
   select: (o: SelectOptions, cursorAt?: string) =>
