@@ -275,8 +275,12 @@ export const mermaid = (g: LayerGraph): string => {
     }
   }
   for (const e of edges) lines.push(`  ${e.from} ${e.kind === "merges" ? "-->" : "-.->"} ${e.to}`)
-  temperNodes.forEach((c, i) => lines.push(`  classDef t${i + 1} ${style(c)},stroke-width:2px`))
-  lines.push(`  classDef app ${style(diagram.app)}`, `  classDef need ${style(diagram.need)}`)
+  // the styles this graph uses
+  temperNodes
+    .slice(0, g.layers.length)
+    .forEach((c, i) => lines.push(`  classDef t${i + 1} ${style(c)},stroke-width:2px`))
+  lines.push(`  classDef app ${style(diagram.app)}`)
+  if (nodes.some((n) => n.kind === "need")) lines.push(`  classDef need ${style(diagram.need)}`)
   return lines.join("\n")
 }
 

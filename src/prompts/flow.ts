@@ -68,15 +68,19 @@ const defaultFor = (slot: (typeof slots)[number], options: ReadonlyArray<OptionD
 /** The preset prompt's answer for "choose each part". */
 export const CUSTOM = "custom"
 
-/** The choices of the preset prompt: each preset, then "choose each part". */
-export const presetChoices = () => [
-  ...presets.map((p) => ({ value: p.id, label: p.title, hint: p.description })),
-  {
-    value: CUSTOM,
-    label: "Choose each part",
-    hint: "database, ORM, auth, infrastructure, AI, extras",
-  },
-]
+/** The choices of the preset prompt: each preset with what it holds, then "choose each part". */
+export const presetChoices = () => {
+  const all = [
+    ...presets.map((p) => ({ value: p.id, title: p.title, about: p.description })),
+    {
+      value: CUSTOM,
+      title: "Choose each part",
+      about: "database, ORM, auth, infrastructure, AI, extras",
+    },
+  ]
+  const width = Math.max(...all.map((c) => c.title.length))
+  return all.map((c) => ({ value: c.value, label: `${c.title.padEnd(width)}  ${c.about}` }))
+}
 
 /**
  * Asks for the name, then (when no stack flag and no `--yes` decided anything) whether to start from
