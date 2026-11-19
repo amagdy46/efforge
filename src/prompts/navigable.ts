@@ -17,10 +17,24 @@ export class NeedsInput extends Schema.TaggedError<NeedsInput>()("NeedsInput", {
 
 export type PromptError = Cancelled | NeedsInput
 
+/**
+ * What every command does when a person cancels a prompt (Ctrl-C or Escape): it says nothing was
+ * written and exits 130, like any Ctrl-C. Every prompt comes before the first write.
+ */
+export const cancelled: Effect.Effect<void, never, PromptIO> = Effect.gen(function* () {
+  const io = yield* PromptIO
+  yield* Effect.sync(() => {
+    process.exitCode = 130
+  })
+  yield* io.outro("Cancelled. Nothing written.")
+})
+
 export interface Choice {
   readonly value: string
   readonly label: string
   readonly hint?: string | undefined
+  /** Shown, not selectable; `hint` says why. */
+  readonly disabled?: boolean | undefined
 }
 
 /** `id` names the prompt (a slot id, or "name"/"confirm"); the live layer ignores it, the scripted layer records it. */
@@ -60,7 +74,6 @@ export interface PromptIOShape {
   readonly confirm: (o: ConfirmOptions) => Effect.Effect<boolean | GoBack, PromptError>
   /** Non-interactive output, kept on the service so tests stay silent. */
   readonly intro: (title: string) => Effect.Effect<void>
-  readonly section: (title: string) => Effect.Effect<void>
   readonly info: (message: string) => Effect.Effect<void>
   readonly warn: (message: string) => Effect.Effect<void>
   readonly note: (body: string, title: string) => Effect.Effect<void>
@@ -88,8 +101,18 @@ export const isCI = (): boolean => {
 /** Prompts need a terminal on stdin, and never run in CI: there a missing answer fails at once. */
 export const canPrompt = (): boolean => process.stdin.isTTY && !isCI()
 
-/** A section header waits for the first prompt under it, so a run that prompts for nothing prints none. */
-let pendingSection: string | undefined
+/**
+ * True right after a step's line: the next step goes on the line below, without the `│` spacer
+ * every other block starts with, so a run of steps is one line each.
+ */
+let afterStep = false
+
+/** Runs `print` (anything but a step), so the next step starts with a spacer again. */
+const block = (print: () => void) =>
+  Effect.sync(() => {
+    afterStep = false
+    print()
+  })
 
 const ask = <A>(
   id: string,
@@ -98,8 +121,7 @@ const ask = <A>(
 ): Effect.Effect<A, PromptError> =>
   canPrompt()
     ? Effect.sync(() => {
-        if (pendingSection !== undefined) p.log.step(pc.bold(pendingSection))
-        pendingSection = undefined
+        afterStep = false
       }).pipe(
         Effect.andThen(Effect.promise(run)),
         Effect.flatMap((v) =>
@@ -121,75 +143,123 @@ const clean = (line: string): string =>
   stripVTControlCharacters(line.split("\r").pop() ?? "").trimEnd()
 
 const toOption = (c: Choice) =>
-  (c.hint === undefined
-    ? { value: c.value, label: c.label }
-    : { value: c.value, label: c.label, hint: c.hint }) as p.Option<string>
+  ({
+    value: c.value,
+    label: c.label,
+    ...(c.hint === undefined ? {} : { hint: c.hint }),
+    ...(c.disabled === true ? { disabled: true } : {}),
+  }) as p.Option<string>
 
 /**
- * clack 1.8.1 has no back/escape signal, so "go back" is a synthetic "← Back"
- * entry: last in a select, and in a multiselect (picking it alone goes back).
+ * The clack calls behind the live prompts and output. `common` sends them to other streams: a test
+ * renders every prompt this way to see that it fits the terminal. `cursorAt` puts the cursor on an
+ * option, which is where its hint shows.
+ *
+ * clack has no back/escape signal, so "go back" is a synthetic "← Back" entry: last in a select,
+ * and in a multiselect (picking it alone goes back).
  */
+/** A command, alone on its line: never broken, so it can be copied. */
+export const isCommandLine = (line: string): boolean =>
+  /^\s*(?:npx|pnpm|cd|docker|git) /.test(stripVTControlCharacters(line))
+
+/**
+ * Word-wraps prose to `width` columns, measured without colours. An indented line and a command
+ * are kept whole: a command that doesn't fit is still one line, so it can be copied.
+ */
+export const wrapProse = (text: string, width: number): string =>
+  text
+    .split("\n")
+    .flatMap((line) => {
+      if (/^\s/.test(line) || isCommandLine(line)) return [line]
+      const out: string[] = []
+      let current = ""
+      for (const word of line.split(" ")) {
+        const next = current === "" ? word : `${current} ${word}`
+        if (current !== "" && stripVTControlCharacters(next).length > width) {
+          out.push(current)
+          current = word
+        } else current = next
+      }
+      out.push(current)
+      return out
+    })
+    .join("\n")
+
+export const clack = (common: p.CommonOptions = {}) => ({
+  select: (o: SelectOptions, cursorAt?: string) =>
+    p.select<string>({
+      ...common,
+      message: o.message,
+      options: [...o.options.map(toOption), ...(o.canGoBack ? [backChoice] : [])],
+      ...((cursorAt ?? o.initial) === undefined ? {} : { initialValue: cursorAt ?? o.initial }),
+    }),
+  multiselect: (o: MultiselectOptions, cursorAt?: string) =>
+    p.multiselect<string>({
+      ...common,
+      message: o.canGoBack ? `${o.message} ${pc.dim("(select Back alone to go back)")}` : o.message,
+      options: [...o.options.map(toOption), ...(o.canGoBack ? [backChoice] : [])],
+      initialValues: [...(o.initial ?? [])],
+      required: false,
+      ...(cursorAt === undefined ? {} : { cursorAt }),
+    }),
+  text: (o: TextOptions) =>
+    p.text({
+      ...common,
+      message: o.message,
+      ...(o.placeholder === undefined ? {} : { placeholder: o.placeholder }),
+      ...(o.defaultValue === undefined ? {} : { defaultValue: o.defaultValue }),
+      ...(o.validate === undefined
+        ? {}
+        : {
+            // an emptied field submits "" (not undefined) after an error; both mean the default
+            validate: (v: string | undefined) =>
+              o.validate?.(v === undefined || v === "" ? (o.defaultValue ?? "") : v),
+          }),
+    }),
+  confirm: (o: ConfirmOptions) =>
+    p.confirm({
+      ...common,
+      message: o.message,
+      ...(o.initial === undefined ? {} : { initialValue: o.initial }),
+    }),
+  intro: (title: string) => p.intro(title, common),
+  // clack leaves long log lines to the terminal, which wraps them under the guide
+  info: (message: string) => p.log.info(wrapProse(message, columnsOf(common) - 3), common),
+  warn: (message: string) => p.log.warn(wrapProse(message, columnsOf(common) - 3), common),
+  note: (body: string, title: string) => p.note(body, title, common),
+  outro: (message: string) => p.outro(message, common),
+})
+
+/** The width of the terminal `common` writes to. */
+const columnsOf = (common: p.CommonOptions): number =>
+  (common.output as { columns?: number } | undefined)?.columns || process.stdout.columns || 80
+
+const terminal = clack()
+
 export const livePromptIO: PromptIOShape = {
   select: (o) =>
     ask<string>(
       o.id,
       o.options.map((c) => c.value),
-      () =>
-        p.select<string>({
-          message: o.message,
-          options: [...o.options.map(toOption), ...(o.canGoBack ? [backChoice] : [])],
-          ...(o.initial === undefined ? {} : { initialValue: o.initial }),
-        }),
+      () => terminal.select(o),
     ).pipe(Effect.map((v) => (v === BACK ? GoBack : v))),
   multiselect: (o) =>
     ask<string[]>(
       o.id,
       o.options.map((c) => c.value),
-      () =>
-        p.multiselect<string>({
-          message: o.canGoBack
-            ? `${o.message} ${pc.dim("(select Back alone to go back)")}`
-            : o.message,
-          options: [...o.options.map(toOption), ...(o.canGoBack ? [backChoice] : [])],
-          initialValues: [...(o.initial ?? [])],
-          required: false,
-        }),
+      () => terminal.multiselect(o),
     ).pipe(
       Effect.map((v) =>
         v.includes(BACK) && v.length === 1 ? GoBack : v.filter((x) => x !== BACK),
       ),
     ),
-  text: (o) =>
-    ask<string>(o.id, [], () =>
-      p.text({
-        message: o.message,
-        ...(o.placeholder === undefined ? {} : { placeholder: o.placeholder }),
-        ...(o.defaultValue === undefined ? {} : { defaultValue: o.defaultValue }),
-        ...(o.validate === undefined
-          ? {}
-          : {
-              // an emptied field submits "" (not undefined) after an error; both mean the default
-              validate: (v: string | undefined) =>
-                o.validate?.(v === undefined || v === "" ? (o.defaultValue ?? "") : v),
-            }),
-      }),
-    ),
-  confirm: (o) =>
-    ask<boolean>(o.id, [], () =>
-      p.confirm({
-        message: o.message,
-        ...(o.initial === undefined ? {} : { initialValue: o.initial }),
-      }),
-    ),
-  intro: (title) => Effect.sync(() => p.intro(title)),
-  section: (title) =>
-    Effect.sync(() => {
-      pendingSection = title
-    }),
-  info: (message) => Effect.sync(() => p.log.info(message)),
-  note: (body, title) => Effect.sync(() => p.note(body, title)),
-  outro: (message) => Effect.sync(() => p.outro(message)),
-  warn: (message) => Effect.sync(() => p.log.warn(message)),
+  text: (o) => ask<string>(o.id, [], () => terminal.text(o)),
+  confirm: (o) => ask<boolean>(o.id, [], () => terminal.confirm(o)),
+  intro: (title) => block(() => terminal.intro(title)),
+  info: (message) => block(() => terminal.info(message)),
+  note: (body, title) => block(() => terminal.note(body, title)),
+  outro: (message) => block(() => terminal.outro(message)),
+  warn: (message) => block(() => terminal.warn(message)),
   // Spinners redraw the terminal: in CI or a pipe, print one line per step instead.
   step: (label, eff) => run(label, () => eff, false),
   task: (label, eff) => run(label, eff, true),
@@ -214,7 +284,7 @@ const spinner = (label: string) => {
   const render = () =>
     out.write(`\r\u001b[2K${pc.magenta(frames[frame++ % 4] ?? "")}  ${fit(text)}`)
   const showCursor = () => out.write("\u001b[?25h")
-  out.write(`${pc.gray("│")}\n\u001b[?25l`)
+  out.write(`${afterStep ? "" : `${pc.gray("│")}\n`}\u001b[?25l`)
   process.once("exit", showCursor)
   render()
   const timer = setInterval(render, 80)
@@ -226,6 +296,7 @@ const spinner = (label: string) => {
       clearInterval(timer)
       process.off("exit", showCursor)
       out.write(`\r\u001b[2K${symbol}  ${fit(s)}\n`)
+      afterStep = true
       showCursor()
     },
   }
@@ -252,12 +323,17 @@ const run = <A, E, R>(
       }
     }
     if (!interactive()) {
-      if (live) p.log.message(`${label}…`)
+      // one line per step, as in a terminal: a long one says it started, then how it ended
+      const line = (symbol: string, text: string) => {
+        process.stdout.write(`${afterStep ? "" : `${pc.gray("│")}\n`}${symbol}  ${text}\n`)
+        afterStep = true
+      }
+      if (live) line(pc.gray("│"), `${label}…`)
       return eff(() => {}).pipe(
         Effect.onExit((exit) =>
           Effect.sync(() => {
             const { ok, interrupted, msg } = done(exit)
-            ;(ok ? p.log.message : interrupted ? p.log.warn : p.log.error)(msg)
+            line(ok ? pc.gray("│") : interrupted ? pc.yellow("■") : pc.red("▲"), msg)
           }),
         ),
       )
@@ -288,6 +364,10 @@ export interface Shown {
   readonly id: string
   readonly options: ReadonlyArray<string>
   readonly canGoBack: boolean
+  /** The options shown but not selectable. */
+  readonly disabled?: ReadonlyArray<string>
+  /** The answer it starts on. */
+  readonly initial?: string | ReadonlyArray<string>
 }
 export interface Scripted {
   readonly layer: Layer.Layer<PromptIO>
@@ -297,15 +377,25 @@ export interface Scripted {
   readonly output: string[]
 }
 
-/** Answers are consumed in order; running out of answers is a test bug and dies. */
-export const scriptedPromptIO = (answers: ReadonlyArray<Answer>): Scripted => {
+/**
+ * Answers are consumed in order; running out of answers is a test bug and dies. Or a function
+ * answers each prompt as it is shown.
+ */
+export const scriptedPromptIO = (
+  answers: ReadonlyArray<Answer> | ((shown: Shown) => Answer),
+): Scripted => {
   const shown: Shown[] = []
   const output: string[] = []
   let next = 0
   const take = (s: Shown): Effect.Effect<Answer, PromptError> => {
     shown.push(s)
-    if (next >= answers.length) return Effect.die(`scripted PromptIO: no answer left for "${s.id}"`)
-    const a = answers[next++] as Answer
+    let a: Answer
+    if (typeof answers === "function") a = answers(s)
+    else {
+      if (next >= answers.length)
+        return Effect.die(`scripted PromptIO: no answer left for "${s.id}"`)
+      a = answers[next++] as Answer
+    }
     return a === CANCEL ? Effect.fail(new Cancelled()) : Effect.succeed(a)
   }
   const io: PromptIOShape = {
@@ -315,6 +405,7 @@ export const scriptedPromptIO = (answers: ReadonlyArray<Answer>): Scripted => {
         id: o.id,
         options: o.options.map((c) => c.value),
         canGoBack: o.canGoBack,
+        ...(o.initial === undefined ? {} : { initial: o.initial }),
       }) as Effect.Effect<string | GoBack, PromptError>,
     multiselect: (o) =>
       take({
@@ -322,6 +413,10 @@ export const scriptedPromptIO = (answers: ReadonlyArray<Answer>): Scripted => {
         id: o.id,
         options: o.options.map((c) => c.value),
         canGoBack: o.canGoBack,
+        ...(o.initial === undefined ? {} : { initial: o.initial }),
+        ...(o.options.some((c) => c.disabled === true)
+          ? { disabled: o.options.filter((c) => c.disabled === true).map((c) => c.value) }
+          : {}),
       }) as Effect.Effect<ReadonlyArray<string> | GoBack, PromptError>,
     // like the live prompt, an answer that fails `validate` is reported and asked again
     text: (o) => {
@@ -347,7 +442,6 @@ export const scriptedPromptIO = (answers: ReadonlyArray<Answer>): Scripted => {
         PromptError
       >,
     intro: (t) => Effect.sync(() => void output.push(`intro: ${t}`)),
-    section: (t) => Effect.sync(() => void output.push(`section: ${t}`)),
     info: (m) => Effect.sync(() => void output.push(`info: ${m}`)),
     warn: (m) => Effect.sync(() => void output.push(`warn: ${m}`)),
     note: (b, t) => Effect.sync(() => void output.push(`note ${t}: ${b}`)),

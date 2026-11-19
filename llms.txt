@@ -7,9 +7,17 @@ Coding agents: run the CLI with `--json` and no prompts. Needs create-efforge 0.
 ```sh
 npx -y create-efforge@latest --version --json
 npx -y create-efforge@latest create my-app --json --database=d1 --auth=better-auth
+npx -y create-efforge@latest create my-saas --json --preset=saas
 npx -y create-efforge@latest list --json --cwd my-app
+npx -y create-efforge@latest info email --json --cwd my-app
 npx -y create-efforge@latest add email --json --cwd my-app
+npx -y create-efforge@latest graph --json --cwd my-app
+npx -y create-efforge@latest doctor --json --cwd my-app
+npx -y create-efforge@latest upgrade --check --json --cwd my-app
+npx -y create-efforge@latest upgrade --json --cwd my-app
 ```
+
+Check your own work with `doctor --json`: one check per line of trouble (install, one Effect version, env vars, bindings, layers), each with the reason and a `fix`. `upgrade --check --json` says whether something breaks a project made by an older efforge (`needs-action`) or efforge has newer pins and templates for it (`behind`); `upgrade --json` applies what is still efforge's and leaves the user's changes alone. Both commands exit `2` when something breaks the project, with `ok: true`.
 
 ## Docs
 

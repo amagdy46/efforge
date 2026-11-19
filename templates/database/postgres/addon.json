@@ -62,6 +62,7 @@
   "envVars": [
     {
       "name": "DATABASE_URL",
+      "secret": true,
       "example": "postgres://postgres:postgres@localhost:5432/app",
 
       "dev": "postgres://postgres:postgres@localhost:5432/app",

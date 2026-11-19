@@ -37,13 +37,13 @@ You get a TypeScript monorepo: a [TanStack Start](https://tanstack.com/start) ap
 - **`efforge add` edits code, not docs.** Adding email later wires the layer, the exports, the binding and the secrets with AST transforms, and refuses to overwrite a file you've changed.
 - **Ready for coding agents.** The generated `AGENTS.md` describes the layout and its rules, and `pnpm check` runs format, lint (with Effect diagnostics) and types.
 
-CI generates 15 stacks on every change, installs them and runs typecheck, lint, tests and a build on each. There is no telemetry.
+CI generates 17 stacks on every change, installs them and runs typecheck, lint, tests and a build on each. There is no telemetry.
 
 Use something else if you want Next.js, a runtime other than Cloudflare, or plain async code without Effect: [create-effect-app](https://github.com/Effect-TS/examples) for an Effect project without the web stack, or `npm create cloudflare` for TanStack Start on Workers without Effect.
 
 ## Pick your stack
 
-The prompts walk through these (and let you go back). Each one is also a flag, so `npm create efforge my-app -- --yes --database=d1 --orm=effect-sql` asks nothing.
+The first question is a preset or each part. A preset is the whole stack in one choice: `saas` (Postgres, Drizzle, Better Auth with organizations, email and storage), `ai` (D1, Effect SQL, Better Auth, AI with your own key, realtime) or `minimal` (no database, no auth). `npx create-efforge list` shows them. Or answer each part (and go back). Each one is also a flag, so `npm create efforge my-app -- --yes --database=d1 --orm=effect-sql` asks nothing, and `npm create efforge my-app -- --preset=saas --database=d1` takes the preset with D1 instead.
 
 | Slot | Options | Default |
 |---|---|---|
@@ -54,14 +54,17 @@ The prompts walk through these (and let you go back). Each one is also a flag, s
 | `ai` | `none`, `effect-ai-byok` | `none` |
 | `extras` | `workflows`, `realtime`, `browser`, `storage`, `email` | none |
 
-`orm` is set exactly when `database` is, and `auth` needs a database. When it finishes, efforge prints the next steps for your stack (start Postgres, run migrations, `pnpm dev`) and a command that recreates the same stack.
+`orm` is set exactly when `database` is, and `auth` needs a database. When it finishes, efforge prints the next steps for your stack (start Postgres, run migrations, `pnpm dev`) and a command that recreates the same stack, flag by flag (a preset can change between versions).
 
 ## Add more later
 
 ```sh
 npx create-efforge list                     # every add-on, ✓ for the ones you have
+npx create-efforge add                      # pick from the ones you can add
 npx create-efforge add email                # wire one in
 npx create-efforge add ai/effect-ai-byok extras/storage --dry-run   # see what would change
+npx create-efforge info email               # what one add-on writes, edits and needs
+npx create-efforge graph                    # your layer graph, as Mermaid
 ```
 
 `add` reads the stack from `efforge.jsonc`, checks the new choice is compatible, writes the add-on's files and edits the files that compose the app. It computes everything first and writes nothing if any step fails. Files you've edited since they were generated are left alone unless you pass `--overwrite`, and it shows you the diff. When it's done it lists the new env vars to fill in. Run it with a clean git tree and review the result with `git diff`.
@@ -73,7 +76,9 @@ Tell your agent to use efforge, or install the skill: `npx skills add amagdy46/e
 ```sh
 npx -y create-efforge@latest create my-app --json --database=d1 --auth=better-auth
 npx -y create-efforge@latest list --json --cwd my-app
+npx -y create-efforge@latest info email --json --cwd my-app
 npx -y create-efforge@latest add email --json --cwd my-app
+npx -y create-efforge@latest graph --json --cwd my-app
 ```
 
 Then, in `my-app`: `pnpm typecheck && pnpm check && pnpm test && pnpm build`. The skill ([skills/efforge/SKILL.md](https://github.com/amagdy46/efforge/blob/main/skills/efforge/SKILL.md)) says what each error means; [docs/json.md](https://github.com/amagdy46/efforge/blob/main/docs/json.md) is the full contract, and [llms.txt](https://github.com/amagdy46/efforge/blob/main/llms.txt) lists the docs.

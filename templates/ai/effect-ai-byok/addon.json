@@ -275,6 +275,7 @@
   "envVars": [
     {
       "name": "LLM_ENCRYPTION_KEY",
+      "secret": true,
       "example": "openssl rand -base64 32",
       "dev": "ZGV2LW9ubHktbGxtLWtleS1yZXBsYWNlLW1lLTMyISE=",
       "description": "AES-GCM key (32 random bytes, base64) that encrypts each organization's saved API key; the app refuses to start without a valid one",
@@ -310,6 +311,7 @@
     },
     {
       "name": "LLM_API_KEY",
+      "secret": true,
       "example": "sk-...",
       "description": "Provider API key (not needed for a local Ollama); a Worker secret in production",
       "when": {

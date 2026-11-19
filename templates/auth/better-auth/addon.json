@@ -273,6 +273,7 @@
   "envVars": [
     {
       "name": "BETTER_AUTH_SECRET",
+      "secret": true,
       "example": "change-me-to-a-long-random-string",
 
       "dev": "dev-only-secret-replace-me-with-openssl-rand-base64-32",

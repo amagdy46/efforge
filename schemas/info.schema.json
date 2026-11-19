@@ -1,0 +1,429 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/create-efforge/schemas/info.schema.json",
+  "type": "object",
+  "properties": {
+    "efforge": {
+      "type": "string",
+      "description": "The CLI version that printed this."
+    },
+    "contract": {
+      "type": "number",
+      "enum": [
+        1
+      ],
+      "description": "The version of this contract. It changes only when a field is renamed, removed or changes meaning."
+    },
+    "ok": {
+      "type": "boolean",
+      "enum": [
+        true
+      ]
+    },
+    "id": {
+      "type": "string",
+      "description": "The add-on's full id, what `add` takes."
+    },
+    "slot": {
+      "type": "string"
+    },
+    "option": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "purpose": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "What it is for, in a paragraph."
+    },
+    "docs": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "string",
+          "description": "Its page in efforge's repo: docs/addons/<slot>-<option>.md."
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "page",
+        "url"
+      ],
+      "additionalProperties": true
+    },
+    "service": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "file": {
+              "type": "string"
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "name",
+            "file",
+            "errors"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The Effect service it adds, the file that declares it, its tagged errors."
+    },
+    "layer": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "What it adds to AppLayer in apps/web/src/server/layers.ts."
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "when": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Only on stacks where every listed slot has one of the listed values (extras: any of them). Absent: on every stack. Inside a project, `info` lists only what that project gets, without it."
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": true
+      },
+      "description": "The files it writes. A path can appear once per stack it is written differently on."
+    },
+    "edits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "transforms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "when": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Only on stacks where every listed slot has one of the listed values (extras: any of them). Absent: on every stack. Inside a project, `info` lists only what that project gets, without it."
+          }
+        },
+        "required": [
+          "file",
+          "transforms"
+        ],
+        "additionalProperties": true
+      },
+      "description": "The files it edits in place (the seams), with the transforms that edit each."
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "package": {
+            "type": "string",
+            "description": "The workspace package, `.` for the root."
+          },
+          "dev": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "package",
+          "dev"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "scripts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "package": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "package",
+          "name",
+          "command"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "env": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "example": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "boolean",
+            "description": "The value is a secret: the deployed one is never printed or committed."
+          },
+          "set": {
+            "type": "boolean",
+            "description": "efforge writes a working local value when it adds it; false means fill it in."
+          },
+          "when": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Only on stacks where every listed slot has one of the listed values (extras: any of them). Absent: on every stack. Inside a project, `info` lists only what that project gets, without it."
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "example",
+          "secret",
+          "set"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "requires": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "slot": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "slot",
+          "options",
+          "reason"
+        ],
+        "additionalProperties": true
+      },
+      "description": "What a project needs before it can have this add-on: one of `options` for each."
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Add-ons a project can't have with it."
+    },
+    "card": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "module": {
+              "type": "string"
+            },
+            "export": {
+              "type": "string"
+            },
+            "when": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "description": "Only on stacks where every listed slot has one of the listed values (extras: any of them). Absent: on every stack. Inside a project, `info` lists only what that project gets, without it."
+            }
+          },
+          "required": [
+            "module",
+            "export"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Its dashboard card module (on /app), or null."
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "heading": {
+            "type": "string"
+          },
+          "when": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Only on stacks where every listed slot has one of the listed values (extras: any of them). Absent: on every stack. Inside a project, `info` lists only what that project gets, without it."
+          }
+        },
+        "required": [
+          "heading"
+        ],
+        "additionalProperties": true
+      },
+      "description": "The AGENTS.md sections it adds, by heading."
+    },
+    "project": {
+      "type": "object",
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "installed": {
+          "type": "boolean"
+        },
+        "add": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The command that adds it to this project, or null (it has it, or can't add it alone)."
+        },
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "When it can't be added alone: each command that adds it with what it needs."
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "directory",
+        "installed",
+        "add",
+        "alternatives"
+      ],
+      "additionalProperties": true,
+      "description": "Only in an efforge project (--cwd, default: the current directory)."
+    }
+  },
+  "required": [
+    "efforge",
+    "contract",
+    "ok",
+    "id",
+    "slot",
+    "option",
+    "title",
+    "description",
+    "purpose",
+    "docs",
+    "service",
+    "layer",
+    "files",
+    "edits",
+    "dependencies",
+    "scripts",
+    "env",
+    "requires",
+    "conflicts",
+    "card",
+    "agents"
+  ],
+  "additionalProperties": true,
+  "title": "efforge info --json"
+}

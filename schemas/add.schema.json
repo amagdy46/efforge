@@ -227,13 +227,18 @@
           "set": {
             "type": "boolean",
             "description": "efforge already wrote a working local value; false means fill it in."
+          },
+          "secret": {
+            "type": "boolean",
+            "description": "The value is a secret: the deployed one is never printed or committed."
           }
         },
         "required": [
           "name",
           "description",
           "file",
-          "set"
+          "set",
+          "secret"
         ],
         "additionalProperties": true
       }

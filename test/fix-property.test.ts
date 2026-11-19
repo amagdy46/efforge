@@ -6,18 +6,23 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs"
 import { availableParallelism, tmpdir } from "node:os"
 import { delimiter, join, relative, resolve } from "node:path"
 import { afterAll, beforeAll, expect, it } from "vitest"
+import { Completions } from "effect/cli"
+import { root as cliRoot } from "../src/cli.ts"
 import { isTypo } from "../src/contract.ts"
 import { commands, reservedWords } from "../src/fix.ts"
+import { slots } from "../src/slots.ts"
 
 // "`fix` is a promise" (docs/json.md), tested as a property. Invocations are generated from a
-// seed (commands, typos, invented verbs, names, flags with good and bad values, `--` anywhere,
-// three working directories), plus the 2026-11 re-review's corpus as fixed cases. Each runs against
+// seed (every command and every flag the CLI defines, upgrade and doctor among them, typos of
+// each, invented verbs, names, flags with good and bad values, `--` anywhere, three working
+// directories), plus the 2026-11 re-review's corpus as fixed cases. Each runs against
 // the built CLI in its own copy of a sandbox, and its `fix` is followed up to three times. For
 // every one: stdout is one document under --json; nothing prompts; no project is created unless
 // the original was a create of that name; a fix of anything else never creates; a create's fix
@@ -89,26 +94,59 @@ const random = (seed: number) => {
   }
 }
 
-const verbs: Record<"create" | "add" | "list" | "other", ReadonlyArray<ReadonlyArray<string>>> = {
-  create: [[], ["create"], ["Create"], ["CREATE"], ["crate"], ["creat"]],
-  add: [["add"], ["ad"], ["Add"], ["ADD"], ["adds"]],
-  list: [["list"], ["lst"], ["lsit"], ["LIST"], ["List"]],
-  other: [
-    ["update"],
-    ["remove"],
-    ["init"],
-    ["new"],
-    ["install"],
-    ["help"],
-    ["version"],
-    ["ls"],
-    ["deploy"],
-    ["doctor"],
-    ["hlep"],
-    ["run"],
-    ["foo"],
-  ],
+// Commands and their flags come from the CLI's own definitions (what completions are made from),
+// so a new command or flag is generated without anyone listing it here.
+type FlagDef = {
+  readonly name: string
+  readonly aliases: ReadonlyArray<string>
+  readonly type: { readonly _tag: string; readonly values?: ReadonlyArray<string> }
 }
+type CommandDef = {
+  readonly name: string
+  readonly flags: ReadonlyArray<FlagDef>
+  readonly subcommands: ReadonlyArray<CommandDef>
+}
+const cli = Completions.fromCommand(cliRoot) as unknown as CommandDef
+const defs = new Map<string, CommandDef>(cli.subcommands.map((c) => [c.name, c]))
+
+/** Near misses people and agents type: a letter dropped, two swapped, one doubled, an s. */
+const typosOf = (w: string): string[] =>
+  w.length < 3
+    ? [`${w}s`]
+    : [
+        w.slice(0, -1),
+        `${w[0]}${w[2]}${w[1]}${w.slice(3)}`,
+        `${w.slice(0, 2)}${w[1]}${w.slice(2)}`,
+        `${w}s`,
+      ]
+
+const verbs: Record<string, ReadonlyArray<ReadonlyArray<string>>> = Object.fromEntries(
+  [...defs.keys()].map((c) => [
+    c,
+    [
+      ...(c === "create" ? [[]] : []),
+      [c],
+      [c.toUpperCase()],
+      [`${c[0]?.toUpperCase()}${c.slice(1)}`],
+      ...typosOf(c).map((t) => [t]),
+    ],
+  ]),
+)
+const other: ReadonlyArray<ReadonlyArray<string>> = [
+  ["update"],
+  ["remove"],
+  ["init"],
+  ["new"],
+  ["install"],
+  ["help"],
+  ["version"],
+  ["ls"],
+  ["deploy"],
+  ["check"],
+  ["hlep"],
+  ["run"],
+  ["foo"],
+]
 const names = [
   "my-app",
   "app2",
@@ -140,44 +178,51 @@ const ids = [
   "ai/none",
   "workflows",
 ]
-const flags = [
-  ["--dry-run"],
-  ["--no-install"],
-  ["--no-git"],
-  ["--yes"],
-  ["-y"],
-  ["--json=false"],
-  ["--cwd", "my-app"],
-  ["--cwd=my-app"],
-  ["--cwd"],
-  ["--cwd", "nope"],
-  ["--cwd", "my-app/package.json"],
-  ["--cwd", "empty1"],
-  ["--database=d1"],
-  ["--database=postgress"],
-  ["--database=mysql"],
-  ["--database=none"],
-  ["--database"],
-  ["--orm=drizle"],
-  ["--orm=none"],
-  ["--auth=better-auth"],
-  ["--auth=none"],
-  ["--extras=email,emial"],
-  ["--extras=stripe"],
-  ["--extras="],
-  ["--databse=d1"],
-  ["--jsn"],
-  ["--no-instal"],
-  ["--install=maybe"],
+/** Positional words each command takes, good and bad. */
+const operands: Record<string, ReadonlyArray<string>> = {
+  create: names,
+  add: ids,
+  info: ids,
+}
+const cwds = ["my-app", "nope", "my-app/package.json", "empty1", "my-app/apps/web"]
+/** Good values for a string flag, then bad ones. */
+const valuesOf = (flag: string): ReadonlyArray<string> => {
+  if (flag === "cwd") return cwds
+  const slot = slots.find((s) => s.id === flag)
+  const good = slot?.options.map((o) => o.id) ?? ["x"]
+  return [...good, ...good.flatMap((v) => typosOf(v).slice(0, 1)), "mysql", ""]
+}
+
+/** Every way to pass `f`: good and bad values, none, a typo of its name, its alias. */
+const formsOf = (f: FlagDef): string[][] => {
+  const forms: string[][] = []
+  const n = f.name
+  if (f.type._tag === "Boolean")
+    forms.push([`--${n}`], [`--no-${n}`], [`--${n}=maybe`], [`--${n}=false`])
+  else {
+    const values = f.type.values ?? valuesOf(n)
+    for (const v of values) forms.push([`--${n}=${v}`], [`--${n}`, v])
+    for (const v of f.type.values ?? [])
+      forms.push([`--${n}=${v.toUpperCase()}`], [`--${n}=${typosOf(v)[0]}`])
+    forms.push([`--${n}`], [`--${n}=nope`])
+  }
+  for (const t of typosOf(n).slice(0, 2)) forms.push([`--${t}`])
+  for (const a of f.aliases) forms.push([`-${a}`])
+  return forms
+}
+/** Each command's flags, in every form; and flags that belong to no command. */
+const flagsOf: Record<string, ReadonlyArray<ReadonlyArray<string>>> = Object.fromEntries(
+  [...defs].map(([c, d]) => [c, d.flags.flatMap(formsOf)]),
+)
+const strayFlags: ReadonlyArray<ReadonlyArray<string>> = [
   ["--completions=nushell"],
   ["--completions"],
   ["--log-level=nope"],
   ["--log-level=debug"],
   ["--name=n2"],
-  ["--overwrite"],
   ["--with-stripe"],
-  ["--ai"],
-  ["--infra=alchmy"],
+  ["--cwd"],
+  ["--patch"],
 ]
 const where = ["", "", "", "my-app", "my-app", "my-app/apps/web"]
 
@@ -192,16 +237,22 @@ const generate = (seed: number, count: number): Case[] => {
   const pick = <A>(xs: ReadonlyArray<A>): A => xs[Math.floor(next() * xs.length)] as A
   const cases: Case[] = []
   for (let n = 0; n < count; n++) {
-    const kind = pick(["create", "create", "add", "add", "list", "other"] as const)
-    const verb = [...pick(verbs[kind])]
+    // create and add twice as often: they write
+    const kind = pick(["create", "add", ...defs.keys(), "other"])
+    const verb = [...pick(kind === "other" ? other : (verbs[kind] ?? other))]
     const words: string[] = []
     const many = Math.floor(next() * 3)
-    for (let k = 0; k < many; k++)
-      words.push(kind === "add" ? pick(ids) : kind === "list" ? pick(["extra", "x"]) : pick(names))
+    for (let k = 0; k < many; k++) words.push(pick(operands[kind] ?? ["extra", "x"]))
     const opts: string[] = []
     if (next() < 0.85) opts.push("--json")
     const extra = Math.floor(next() * 4)
-    for (let k = 0; k < extra; k++) opts.push(...pick(flags))
+    // mostly the command's own flags, sometimes another command's, sometimes none of them
+    for (let k = 0; k < extra; k++) {
+      const r = next()
+      const own = flagsOf[kind] ?? flagsOf.create ?? []
+      const any = flagsOf[pick([...defs.keys()])] ?? []
+      opts.push(...pick(r < 0.7 ? own : r < 0.9 ? any : strayFlags))
+    }
     if (kind === "create" && next() < 0.6 && !opts.includes("--dry-run")) opts.push("--dry-run")
     // the command word usually comes first, sometimes after the flags
     let args = next() < 0.85 ? [...verb, ...words, ...opts] : [...opts, ...verb, ...words]
@@ -211,6 +262,14 @@ const generate = (seed: number, count: number): Case[] => {
     }
     cases.push({ args, cwd: pick(where) })
   }
+  // then every flag of every command at least once, in one of its forms, so a new flag is
+  // followed however the dice fall
+  for (const [c, d] of defs)
+    for (const f of d.flags) {
+      const form = pick(formsOf(f))
+      const verb = c === "create" ? ["create", pick(names)] : [c]
+      cases.push({ args: [...verb, "--json", ...form], cwd: pick(where) })
+    }
   return cases
 }
 
@@ -343,10 +402,58 @@ const reviewed: Case[] = [
     ["create", "my-app", "--json", "--database=postgres", "--extras=email"],
     ["create", "my-app", "--json", "--no-install", "--database=d1", "--auth=better-auth"],
   ].map((args) => ({ args, cwd: "" })),
+  // the presets, info and graph (reports/w4b-review.md)
+  ...[
+    ["create", "p1", "--json", "--preset=saas", "--database=none", "--no-install"],
+    ["create", "p2", "--json", "--dry-run", "--preset=minimal", "--auth=better-auth"],
+    ["create", "p3", "--json", "--dry-run", "--preset=minimal", "--database=d1"],
+    ["create", "p4", "--json", "--dry-run", "--preset=sass"],
+    ["create", "p5", "--json", "--dry-run", "--preset=SaaS"],
+    ["create", "p6", "--json", "--dry-run", "--preset"],
+    ["create", "p7", "--json", "--dry-run", "--preset=saas", "--preset=ai"],
+    ["create", "p8", "--json", "--dry-run", "--verbose"],
+    ["x1", "--write", "--json"],
+    ["x2", "--format=text", "--json"],
+    ["create", "x3", "--cwd", "my-app", "--json", "--dry-run"],
+    ["info", "emial", "--json"],
+    ["info", "--json"],
+    ["info", "email", "--json", "--cwd", "my-app"],
+    ["info", "auth/better-auth", "--json", "--cwd", "empty1"],
+    ["inf", "email", "--json"],
+    ["graph", "--json"],
+    ["graph", "--json", "--cwd", "my-app", "--format=txt"],
+    ["graph", "--json", "--cwd", "my-app", "--write"],
+    ["grap", "--json", "--cwd", "my-app"],
+    ["graph", "extra", "--json", "--cwd", "my-app"],
+    ["add", "--json", "--cwd", "my-app"],
+    // after --, a command's name is an argument (seed 4242 found `-- create` making ./create)
+    ["--json", "--", "create"],
+    ["--json", "--dry-run", "--", "add"],
+    ["--json", "--no-install", "--", "graph"],
+  ].map((args) => ({ args, cwd: "" })),
+  { args: ["graph", "--json", "--format=text"], cwd: "my-app/apps/web" },
   { args: ["update", "--json", "--no-install", "--no-git"], cwd: "my-app" },
   { args: ["--json"], cwd: "my-app" },
   { args: ["list", "--json"], cwd: "my-app/apps/web" },
   { args: ["add", "storage", "--json", "--dry-run"], cwd: "my-app/apps/web" },
+  // upgrade and doctor (W4-A)
+  { args: ["upgrade", "--json"], cwd: "my-app" },
+  { args: ["upgrade", "--check", "--json"], cwd: "my-app/apps/web" },
+  { args: ["upgrade", "--check", "--json"], cwd: "" },
+  { args: ["upgarde", "--check", "--json"], cwd: "my-app" },
+  { args: ["update", "--json"], cwd: "my-app" },
+  { args: ["upgrade", "--check", "--patch"], cwd: "my-app" },
+  { args: ["upgrade", "--dry-run", "--json"], cwd: "my-app" },
+  { args: ["upgrade", "--check", "--strict", "--json"], cwd: "my-app" },
+  { args: ["upgrade", "--check", "--json", "--file"], cwd: "my-app" },
+  { args: ["upgrade", "--chek", "--json"], cwd: "my-app" },
+  { args: ["doctor", "--json"], cwd: "my-app" },
+  { args: ["doctor", "--json"], cwd: "my-app/apps/web" },
+  { args: ["doctor", "extra", "--json", "--cwd", "my-app"], cwd: "" },
+  { args: ["docter", "--json", "--cwd", "my-app"], cwd: "" },
+  { args: ["doctor", "--json", "--overwrite"], cwd: "my-app" },
+  { args: ["my-app5", "--check", "--json"], cwd: "" },
+  { args: ["--cwd", "my-app", "doctor", "--json"], cwd: "" },
 ]
 
 // --- Running ------------------------------------------------------------------------------
@@ -394,7 +501,14 @@ const builtIn = (args: ReadonlyArray<string>) => {
   )
 }
 
-const valueFlags = ["database", "orm", "auth", "infra", "ai", "extras", "cwd", "runtime"]
+/** Flags that take a value, from the definitions. */
+const valueFlags = [
+  ...new Set(
+    [...defs.values()].flatMap((d) =>
+      d.flags.filter((f) => f.type._tag !== "Boolean").map((f) => f.name),
+    ),
+  ),
+]
 const valueFlags2 = ["completions", "log-level"]
 
 /** Positional words, read independently of the code under test. */
@@ -466,16 +580,7 @@ const projects = (dir: string): string[] => {
 }
 
 const knownFlags = new Set([
-  "json",
-  "dry-run",
-  "yes",
-  "install",
-  "no-install",
-  "git",
-  "no-git",
-  "overwrite",
-  "cwd",
-  ...valueFlags,
+  ...[...defs.values()].flatMap((d) => d.flags.flatMap((f) => [f.name, `no-${f.name}`])),
   ...valueFlags2,
 ])
 
@@ -495,9 +600,10 @@ const check = async (c: Case, n: number): Promise<string[]> => {
       const end = a.indexOf("--")
       return end < 0 ? [] : a.slice(end + 1)
     }
+    // every command but create, as the definitions name them
     const isCreate = (args: ReadonlyArray<string>) => {
-      const [first] = words(args)
-      return first !== "add" && first !== "list"
+      const first = words(args)[0]?.toLowerCase()
+      return first === undefined || first === "create" || !defs.has(first)
     }
     const seen = new Set<string>()
     let step: { args: string[]; cwd: string } | undefined = { args: [...c.args], cwd: start }
@@ -530,7 +636,10 @@ const check = async (c: Case, n: number): Promise<string[]> => {
           break
         }
         if (typeof doc?.ok !== "boolean") say(`hop ${hop}: no ok field`)
-        if ((r.status === 0) !== (doc?.ok === true))
+        // 2 and 3 are a check that ran and found something: upgrade and doctor only, with ok
+        const checks = ["upgrade", "doctor"].includes(words(step.args)[0]?.toLowerCase() ?? "")
+        const found = checks && (r.status === 2 || r.status === 3)
+        if ((r.status === 0 || found) !== (doc?.ok === true))
           say(`hop ${hop}: exit ${r.status}, ok ${doc?.ok}`)
         fix = doc?.error?.fix ?? null
         code = doc?.error?.code ?? ""
@@ -624,5 +733,260 @@ it(
   async () => {
     expect(existsSync(bin)).toBe(true)
     expect(await all(reviewed, 100_000)).toEqual([])
+  },
+)
+
+it("the generated invocations cover every command and every flag the CLI defines", () => {
+  expect([...defs.keys()].toSorted()).toEqual([...commands].toSorted())
+  const cases = generate(SEED, CASES)
+  for (const c of defs.keys())
+    expect(
+      cases.some((x) => x.args.includes(c)),
+      c,
+    ).toBe(true)
+  for (const d of defs.values())
+    for (const f of d.flags)
+      expect(
+        cases.some((x) => x.args.some((a) => a === `--${f.name}` || a.startsWith(`--${f.name}=`))),
+        `--${f.name}`,
+      ).toBe(true)
+})
+
+// --- doctor: a check's `fix` is a promise too -------------------------------------------------
+// For each check with a fix that can run here, a project broken in exactly that way: run doctor,
+// follow the check's fix, run doctor again. The check passes, and no other check is worse. pnpm is
+// a stub that installs what the workspace declares (the current lockfile pnpm would write); git
+// reports a clean tree. Not followed: `migrations` (wrangler) and `postgres` (docker), whose fixes
+// start a database.
+
+const rank = (status: string) =>
+  status === "fail" ? 2 : status === "warn" || status === "unverified" ? 1 : 0
+
+const yamlModule = join(root, "node_modules", "yaml", "dist", "index.js")
+const installStub = `#!/usr/bin/env node
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
+import { parse, stringify } from ${JSON.stringify(yamlModule)}
+const [cmd] = process.argv.slice(2)
+if (cmd === "--version") { console.log("12.21.0"); process.exit(0) }
+if (cmd === "peers") { console.log("{}"); process.exit(0) }
+if (cmd !== "install") process.exit(0)
+const ws = parse(readFileSync("pnpm-workspace.yaml", "utf8")) ?? {}
+const catalog = ws.catalog ?? {}
+const overrides = Object.fromEntries(Object.entries(ws.overrides ?? {}).map(([k, v]) => [k, v === "catalog:" ? String(catalog[k]) : String(v)]))
+const pinned = (name, version) => {
+  for (const [key, v] of Object.entries(overrides)) {
+    const at = key.indexOf("@", 1)
+    const pattern = at < 0 ? key : key.slice(0, at)
+    if (pattern.endsWith("*") ? name.startsWith(pattern.slice(0, -1)) : pattern === name) return v
+  }
+  return version
+}
+const dirs = ["."]
+for (const g of ws.packages ?? []) {
+  const parent = String(g).replace(/\\/\\*$/, "")
+  if (existsSync(parent)) for (const d of readdirSync(parent)) if (existsSync(join(parent, d, "package.json"))) dirs.push(parent + "/" + d)
+}
+const importers = {}
+const packages = {}
+for (const d of dirs) {
+  const pkg = JSON.parse(readFileSync(join(d, "package.json"), "utf8"))
+  const entry = {}
+  for (const field of ["dependencies", "devDependencies", "optionalDependencies"]) {
+    const deps = pkg[field] ?? {}
+    if (Object.keys(deps).length === 0) continue
+    entry[field] = {}
+    for (const [name, spec] of Object.entries(deps)) {
+      const version = spec.startsWith("workspace:") ? "link:../x" : pinned(name, spec === "catalog:" ? String(catalog[name]) : spec)
+      entry[field][name] = { specifier: spec, version }
+      if (!spec.startsWith("workspace:")) packages[name + "@" + version] = { resolution: { integrity: "sha512-x" } }
+    }
+  }
+  importers[d] = entry
+}
+const lock = stringify({
+  lockfileVersion: "9.0",
+  catalogs: { default: Object.fromEntries(Object.entries(catalog).map(([n, v]) => [n, { specifier: String(v), version: String(v) }])) },
+  overrides,
+  importers,
+  packages,
+})
+mkdirSync("node_modules/.pnpm", { recursive: true })
+writeFileSync("node_modules/.pnpm/lock.yaml", lock)
+writeFileSync("pnpm-lock.yaml", lock)
+const pm = /^pnpm@(.+)$/.exec(JSON.parse(readFileSync("package.json", "utf8")).packageManager ?? "")?.[1] ?? "12.21.0"
+writeFileSync("node_modules/.modules.yaml", JSON.stringify({ packageManager: "pnpm@" + pm }) + "\\n")
+`
+
+interface Broken {
+  readonly name: string
+  /** The check whose fix is followed. */
+  readonly check: string
+  readonly stack?: ReadonlyArray<string>
+  /** Breaks the installed project in exactly one way. */
+  readonly breakIt: (dir: string) => void
+}
+
+const editFile = (dir: string, file: string, f: (t: string) => string) =>
+  writeFileSync(join(dir, file), f(readFileSync(join(dir, file), "utf8")))
+
+const brokenProjects: ReadonlyArray<Broken> = [
+  {
+    name: "packageManager below 12.17",
+    check: "pnpm",
+    breakIt: (d) => editFile(d, "package.json", (t) => t.replace(/"pnpm@[^"]+"/, '"pnpm@12.4.2"')),
+  },
+  {
+    name: "a dependency declared after the install",
+    check: "install",
+    breakIt: (d) =>
+      editFile(d, "apps/web/package.json", (t) =>
+        t.replace('"dependencies": {', '"dependencies": {\n    "left-pad": "1.3.0",'),
+      ),
+  },
+  {
+    name: "two Effects installed, the overrides in place",
+    check: "effect",
+    breakIt: (d) =>
+      editFile(d, "node_modules/.pnpm/lock.yaml", (t) =>
+        t.replace(
+          /^packages:\n/m,
+          'packages:\n  "@effect/sql-sqlite-do@9.9.9":\n    resolution: { integrity: sha512-x }\n',
+        ),
+      ),
+  },
+  {
+    name: "the Effect overrides removed",
+    check: "effect-guard",
+    breakIt: (d) =>
+      editFile(d, "pnpm-workspace.yaml", (t) =>
+        t.replace(/^overrides:\n(?:[ #].*\n)*/m, 'overrides:\n  vite: "catalog:"\n'),
+      ),
+  },
+  {
+    name: "made by an older efforge",
+    check: "upgrade",
+    breakIt: (d) =>
+      editFile(d, "efforge.jsonc", (t) =>
+        t.replace(/"efforgeVersion": "[^"]*"/, '"efforgeVersion": "0.2.0"'),
+      ),
+  },
+  {
+    name: "made by an older efforge, without the guard",
+    check: "upgrade",
+    breakIt: (d) => {
+      editFile(d, "efforge.jsonc", (t) =>
+        t.replace(/"efforgeVersion": "[^"]*"/, '"efforgeVersion": "0.2.0"'),
+      )
+      editFile(d, "package.json", (t) => t.replace(/"pnpm@[^"]+"/, '"pnpm@12.4.2"'))
+    },
+  },
+  {
+    name: "a blanked secret",
+    check: "env",
+    breakIt: (d) =>
+      editFile(d, ".dev.vars", (t) => t.replace(/^BETTER_AUTH_SECRET=.*$/m, "BETTER_AUTH_SECRET=")),
+  },
+  {
+    name: "Alchemy without .env",
+    check: "env",
+    stack: ["--infra=alchemy"],
+    breakIt: (d) => rmSync(join(d, ".env")),
+  },
+]
+
+it(
+  "doctor: following a check's fix makes it pass, and nothing else gets worse",
+  { timeout: 600_000 },
+  async () => {
+    const box = mkdtempSync(join(work, "doctor-"))
+    const stubs = join(box, ".bin")
+    mkdirSync(stubs)
+    writeFileSync(join(stubs, "pnpm"), installStub)
+    writeFileSync(join(stubs, "git"), "#!/bin/sh\nexit 0\n")
+    chmodSync(join(stubs, "pnpm"), 0o755)
+    chmodSync(join(stubs, "git"), 0o755)
+    const denv = {
+      ...env,
+      PATH: `${stubs}${delimiter}${process.env.PATH ?? ""}`,
+      // the Postgres probe never reaches a real database
+      DATABASE_URL: "postgres://postgres:postgres@127.0.0.1:9/app",
+    }
+    const sh = (command: string, cwd: string) =>
+      spawnSync("sh", ["-c", command], { cwd, env: denv, encoding: "utf8" })
+    const doctor = (dir: string) => {
+      const r = spawnSync(process.execPath, [bin, "doctor", "--json"], {
+        cwd: dir,
+        env: denv,
+        encoding: "utf8",
+      })
+      return (
+        JSON.parse(r.stdout) as {
+          checks: Array<{ id: string; status: string; fix: string | null }>
+        }
+      ).checks
+    }
+    const problems: string[] = []
+    const bases = new Map<string, string>()
+    for (const b of brokenProjects) {
+      const key = (b.stack ?? []).join(" ")
+      let made = bases.get(key)
+      if (made === undefined) {
+        made = join(box, `made${bases.size}`)
+        mkdirSync(made)
+        const r = spawnSync(
+          process.execPath,
+          [
+            bin,
+            "create",
+            "app",
+            "--json",
+            "--database=d1",
+            "--auth=better-auth",
+            "--no-git",
+            ...(b.stack ?? []),
+          ],
+          { cwd: made, env: denv, encoding: "utf8" },
+        )
+        expect(r.status, r.stdout).toBe(0)
+        bases.set(key, made)
+      }
+      const dir = join(box, b.name.replace(/\W+/g, "-"))
+      cpSync(join(made, "app"), dir, { recursive: true })
+      b.breakIt(dir)
+      const before = doctor(dir)
+      const target = before.find((c) => c.id === b.check)
+      if (target === undefined || rank(target.status) === 0) {
+        problems.push(`${b.name}: ${b.check} didn't find it (${target?.status})`)
+        continue
+      }
+      if (target.fix === null) {
+        problems.push(`${b.name}: ${b.check} has no fix`)
+        continue
+      }
+      const followed = sh(
+        target.fix.replaceAll(
+          "npx -y create-efforge",
+          `${JSON.stringify(process.execPath)} ${JSON.stringify(bin)}`,
+        ),
+        dir,
+      )
+      if (followed.status !== 0 && followed.status !== 2)
+        problems.push(
+          `${b.name}: the fix exited ${followed.status}: ${target.fix}\n${followed.stdout}${followed.stderr}`,
+        )
+      const after = doctor(dir)
+      const now = after.find((c) => c.id === b.check)
+      if (now === undefined || now.status !== "ok")
+        problems.push(`${b.name}: after ${target.fix}, ${b.check} is ${now?.status}`)
+      for (const c of after) {
+        const was = before.find((x) => x.id === c.id)
+        if (was !== undefined && rank(c.status) > rank(was.status))
+          problems.push(
+            `${b.name}: after ${target.fix}, ${c.id} went from ${was.status} to ${c.status}`,
+          )
+      }
+    }
+    expect(problems).toEqual([])
   },
 )

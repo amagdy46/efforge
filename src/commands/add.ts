@@ -3,10 +3,20 @@ import { Effect, Exit, FileSystem, Path, Schema } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import type { ChildProcessSpawner } from "effect/process"
 import { type ParseError, parse } from "jsonc-parser"
+import { sameJsonc } from "../structure.ts"
 import pc from "picocolors"
 import { parseDocument } from "yaml"
 import { type AddonLoadError, type AddonManifest, addonIdsFor, loadAddons } from "../addon.ts"
-import { cardTransforms, presentCardTransforms, REGISTRY_FILE } from "../cards.ts"
+import { CARDS_DIR, cardTransforms, presentCardTransforms, REGISTRY_FILE } from "../cards.ts"
+import {
+  cardSources,
+  GRAPH_REGION,
+  graphRegion,
+  LAYERS_FILE,
+  layerGraph,
+  parseLayers,
+  projectCards,
+} from "../graph.ts"
 import { type Failure, internal, Invocation, printSuccess, report } from "../contract.ts"
 import { unifiedDiff } from "../diff.ts"
 import { type CommandFailed, exec, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
@@ -60,7 +70,14 @@ import {
   type TransformAnchorMissing,
   type UnknownTransform,
 } from "../transforms/index.ts"
-import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
+import {
+  canPrompt,
+  cancelled,
+  type Choice,
+  GoBack,
+  PromptIO,
+  type PromptIOShape,
+} from "../prompts/navigable.ts"
 import {
   effectOverrides,
   effectVersion,
@@ -70,7 +87,7 @@ import {
   pnpmWildcardOverrides,
   versions,
 } from "../versions.ts"
-import { type EnvVar, PnpmMissing, TemplatesDir } from "./create.ts"
+import { elapsed, type EnvVar, PnpmMissing, TemplatesDir } from "./create.ts"
 
 export class NotAnEfforgeProject extends Schema.TaggedError<NotAnEfforgeProject>()(
   "NotAnEfforgeProject",
@@ -198,40 +215,12 @@ export const waysOut = (stack: StackConfig, named: ReadonlySet<string>): string[
   return []
 }
 
-/** Same JSONC data and comments, ignoring formatting, key order and array order (earlier `add`s reorder bindings). */
-const sameJsonc = (a: string, b: string | undefined): boolean => {
-  if (b === undefined) return false
-  const canon = (v: unknown): unknown =>
-    Array.isArray(v)
-      ? v.map(canon).toSorted((x, y) => byName(JSON.stringify(x), JSON.stringify(y)))
-      : v !== null && typeof v === "object"
-        ? Object.fromEntries(
-            Object.entries(v as Record<string, unknown>)
-              .toSorted(([x], [y]) => byName(x, y))
-              .map(([k, x]) => [k, canon(x)]),
-          )
-        : v
-  const read = (t: string) => {
-    const errors: ParseError[] = []
-    const v = parse(t, errors, { allowTrailingComma: true }) as unknown
-    return errors.length > 0 ? undefined : JSON.stringify(canon(v))
-  }
-  // comments are user content too, and the parser drops them
-  const comments = (t: string) =>
-    (t.match(/\/\/.*$|\/\*[\s\S]*?\*\//gm) ?? [])
-      .map((c) => c.trim())
-      .toSorted()
-      .join("\n")
-  const x = read(a)
-  return x !== undefined && x === read(b) && comments(a) === comments(b)
-}
-
 const isNewPackageJson = (target: string) => target.endsWith("/package.json")
 
 const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
 /** `email`, `extras/email`, `ai/effect-ai-byok`, `ai=effect-ai-byok`, `ai` (a slot with one option) -> slot + option. */
-const parseId = (
+export const parseId = (
   raw: string,
 ): Effect.Effect<{ slot: SlotDef; option: string }, UnknownAddon | RemoveNotSupported> => {
   const id = raw.trim().toLowerCase()
@@ -276,7 +265,7 @@ const parseId = (
 }
 
 /** Applies `ids` to `stack`. Single-select slots may only go from `none` to a value. */
-const applyIds = (
+export const applyIds = (
   stack: StackConfig,
   ids: ReadonlyArray<string>,
 ): Effect.Effect<
@@ -807,6 +796,7 @@ export const addAddons = (
         description: v.description,
         file: envFile,
         set: v.dev !== undefined || assignsValue(local, v.name),
+        secret: v.secret === true,
       })),
     )
 
@@ -814,14 +804,36 @@ export const addAddons = (
     if (newIds.length > 0) {
       const readme = out.get(README_FILE) ?? (yield* read(README_FILE))
       if (readme !== undefined) {
-        const filled = fillReadme(
-          readme,
-          readmeRegions({
+        // the layer graph, when the README has its region (`graph --write`), follows the layers
+        const layersText = out.get(LAYERS_FILE) ?? (yield* read(LAYERS_FILE))
+        const layers = layersText === undefined ? undefined : parseLayers(layersText)
+        const withGraph =
+          layers !== undefined && readme.includes(`efforge:readme:${GRAPH_REGION} -->`)
+        const graph = withGraph
+          ? layerGraph({
+              layers,
+              stack,
+              addons,
+              cards: yield* cardSources(
+                stack,
+                addons,
+                new Map([
+                  ...(yield* projectCards(dir, (rel) =>
+                    read(rel).pipe(Effect.orElseSucceed(() => undefined)),
+                  )),
+                  ...[...out].filter(([f]) => f.startsWith(CARDS_DIR) && f.endsWith(".tsx")),
+                ]),
+              ),
+            })
+          : undefined
+        const filled = fillReadme(readme, {
+          ...readmeRegions({
             stack,
             addons,
             scripts: rootScripts(out.get("package.json") ?? (yield* read("package.json"))),
           }),
-        )
+          ...(graph === undefined ? {} : { [GRAPH_REGION]: graphRegion(graph) }),
+        })
         if (filled.kind !== "filled") notes.push(readmeNote(filled))
         else if (filled.text !== readme) {
           out.set(README_FILE, filled.text)
@@ -933,6 +945,100 @@ export const addable = (stack: StackConfig): string[] =>
         )
         .map((o) => `${s.id}/${o.id}`),
     )
+
+/**
+ * The picker `add` shows a person when it gets no ids: every add-on the project doesn't have, by
+ * slot, with its description; one in a slot the project already filled is shown disabled, with
+ * why. A pick the stack rules refuse (auth without a database) is said, and asked again.
+ */
+export const pickAddons = (
+  stack: StackConfig,
+  addons: ReadonlyMap<string, { readonly manifest: AddonManifest }>,
+  io: PromptIOShape,
+) =>
+  Effect.gen(function* () {
+    const choices: Choice[] = []
+    const width = Math.max(...slots.map((s) => s.id.length))
+    for (const s of slots) {
+      if (s.options.length <= 1) continue
+      const current = s.id === "extras" ? undefined : stack[s.id]
+      for (const o of s.options) {
+        if (o.id === "none") continue
+        const id = `${s.id}/${o.id}`
+        if (s.id === "extras" ? stack.extras.includes(o.id as never) : current === o.id) continue
+        const m = addons.get(id)?.manifest
+        const about = (m?.description ?? "").split(/[:;,]\s|\.(?:\s|$)/)[0] ?? ""
+        const blocked = current !== undefined && current !== "none"
+        const needs =
+          s.id === "auth" && stack.database === "none"
+            ? "needs a database too"
+            : s.id === "database"
+              ? "needs an ORM too"
+              : s.id === "orm" && stack.database === "none"
+                ? "needs a database too"
+                : undefined
+        // the hint shows beside the line under the cursor (always, for a disabled one), cut so
+        // the line fits 80 columns. clack wraps an option at 67 there (it counts the guide's
+        // colour codes as columns); "◻ " comes before the label, " (" and ")" around the hint
+        const label = `${s.id.padEnd(width)}  ${m?.title ?? o.label}`
+        const room = 67 - 2 - label.length - 3
+        const hint = blocked
+          ? `this project has ${current}; add can't swap it`
+          : needs === undefined
+            ? about
+            : `${needs}. ${about}`
+        choices.push({
+          value: id,
+          label,
+          hint: hint.length > room ? `${hint.slice(0, room - 1).trimEnd()}…` : hint,
+          ...(blocked ? { disabled: true } : {}),
+        })
+      }
+    }
+    let picked: ReadonlyArray<string> = []
+    for (;;) {
+      const answer = yield* io.multiselect({
+        id: "addons",
+        message: "Add which? (space picks, enter adds; none adds nothing)",
+        options: choices,
+        initial: picked,
+        canGoBack: false,
+      })
+      // in slot order, as `add` lists them
+      const order = choices.map((c) => c.value)
+      picked = (answer === GoBack ? [] : answer).toSorted(
+        (x, y) => order.indexOf(x) - order.indexOf(y),
+      )
+      if (picked.length === 0) return picked
+      const exit = Effect.runSyncExit(applyIds(stack, picked))
+      if (Exit.isSuccess(exit)) return picked
+      const e = exit.cause.reasons.find((r) => r._tag === "Fail")?.error as
+        | {
+            readonly _tag: string
+            readonly slot?: string
+            readonly value?: string
+            readonly current?: string
+            readonly reason?: string
+            readonly ways?: ReadonlyArray<ReadonlyArray<string>>
+          }
+        | undefined
+      if (e?._tag === "SlotAlreadySet") {
+        const both = picked.filter((id) => id.startsWith(`${e.slot ?? ""}/`))
+        yield* io.warn(`A project has one ${e.slot ?? ""}: pick one of ${both.join(", ")}.`)
+        continue
+      }
+      const needs = needsOf(e?.ways ?? [])
+        .map((n) => `one of ${n.options.join(", ")}`)
+        .join(" and ")
+      const why = (e?.reason ?? "it doesn't fit the stack").replace(
+        /\. Add (?:one|an ORM|one) in the same command.*$| \(alternatives lists the ways\)$/,
+        "",
+      )
+      yield* io.warn(
+        `Can't add ${e?.slot ?? ""}/${e?.value ?? ""} with that pick: ${why}.${needs === "" ? "" : ` Pick ${needs} with it.`}`,
+      )
+    }
+  })
 
 /** `--cwd` for `dir`, relative to where efforge runs. */
 const cwdArg = (dir: string) => relative(process.cwd(), dir) || "."
@@ -1188,6 +1294,7 @@ export const addHandler = (input: {
     pending: string[]
     partial: object | undefined
   } = { phase: "planning", pending: [], partial: undefined }
+  const start = performance.now()
   return Effect.gen(function* () {
     const path = yield* Path.Path
     const fs = yield* FileSystem.FileSystem
@@ -1204,12 +1311,29 @@ export const addHandler = (input: {
           task: (_label, eff) => eff(() => {}),
         }
       : live
-    if (!input.json && input.ids.length > 0)
-      yield* io.intro(introLine(`add ${input.ids.join(" ")}`))
+    // without ids, a person at a terminal picks them; anyone else (no terminal, --json) is told
+    // what there is to add, as before
+    const picking = input.ids.length === 0 && !input.json
+    if (!input.json && (input.ids.length > 0 || canPrompt()))
+      yield* io.intro(introLine(`add ${input.ids.join(" ")}`.trimEnd()))
 
     const manifest = yield* readManifest(dir)
-    // a picker for people belongs here later; for now, say what there is to add
-    if (input.ids.length === 0) return yield* new NoAddonIds({ available: addable(manifest.stack) })
+    let ids: ReadonlyArray<string> = input.ids
+    if (picking) {
+      const addons = yield* loadAddons(yield* TemplatesDir)
+      const picked = yield* pickAddons(manifest.stack, addons, io).pipe(
+        Effect.catchTag("NeedsInput", () => Effect.succeed(undefined)),
+      )
+      if (picked !== undefined && picked.length === 0)
+        return yield* io.outro("Nothing picked, nothing added.")
+      if (picked !== undefined) {
+        const args = yield* Invocation
+        const same = alternative(args, (i) => ({ ...i, operands: picked }))
+        if (same !== null) yield* io.info(`The same without the picker:\n${same}`)
+        ids = picked
+      }
+    }
+    if (ids.length === 0) return yield* new NoAddonIds({ available: addable(manifest.stack) })
     if (newer(manifest.efforgeVersion, efforgeVersion))
       yield* io.warn(
         `This project was made with efforge ${manifest.efforgeVersion}, newer than this CLI (${efforgeVersion}). Use npx -y create-efforge@latest add.`,
@@ -1225,7 +1349,7 @@ export const addHandler = (input: {
     // checked before anything is written: install and the route tree both need pnpm
     if (input.install && !input.dryRun && !(yield* has("pnpm"))) return yield* new PnpmMissing()
     // plan first (in memory): the dirty-tree warning only matters when something will change
-    const plan = yield* addAddons(dir, input.ids, { ...opts, dryRun: true })
+    const plan = yield* addAddons(dir, ids, { ...opts, dryRun: true })
     const changes = plan.written.length + plan.transformed.length + plan.removed.length > 0
     if (changes && !input.dryRun) {
       const dirty = yield* exec("git", ["status", "--porcelain"], dir).pipe(
@@ -1239,7 +1363,7 @@ export const addHandler = (input: {
     }
     if (!input.dryRun && changes) progress.phase = "writing"
     const result =
-      input.dryRun || !changes ? plan : yield* addAddons(dir, input.ids, { ...opts, dryRun: false })
+      input.dryRun || !changes ? plan : yield* addAddons(dir, ids, { ...opts, dryRun: false })
     if (progress.phase === "writing") progress.phase = "written"
     // only when dependencies changed: package.json files or the catalog
     const depsChanged = result.written.some(
@@ -1365,7 +1489,7 @@ export const addHandler = (input: {
         `${input.dryRun ? "Would raise" : "Raised"} packageManager from ${result.packageManager.from} to ${result.packageManager.to}: older pnpm ignores the overrides that keep Effect's packages on one version.`,
       )
     for (const note of result.notes) yield* io.warn(note)
-    if (input.dryRun) return yield* io.outro(pc.dim("dry run: nothing written"))
+    if (input.dryRun) return yield* io.outro(pc.dim("Dry run: nothing written."))
 
     yield* complete
     const width = Math.max(0, ...result.envVars.map((x) => x.name.length))
@@ -1390,7 +1514,9 @@ export const addHandler = (input: {
     // outside the box, so a narrow terminal does not break the links
     const docs = result.added.flatMap((a) => (a.docs === undefined ? [] : [a.docs]))
     if (docs.length > 0) yield* io.info(`Docs:\n${docs.join("\n")}`)
-    yield* io.outro(`${pc.green("Done.")} ${pc.dim("Review the changes with")} git diff`)
+    yield* io.outro(
+      `${pc.green("Done")} in ${elapsed(start)}. ${pc.dim("Review the changes with")} git diff`,
+    )
   }).pipe(
     // under --json a stopped add still prints its one document (Ctrl-C, SIGTERM, a timeout)
     Effect.onInterrupt(() =>
@@ -1406,6 +1532,8 @@ export const addHandler = (input: {
     ),
     Effect.catch((e) =>
       Effect.gen(function* () {
+        // Ctrl-C or Escape in the picker
+        if (e._tag === "Cancelled") return yield* cancelled
         const args = yield* Invocation
         yield* report(input.json, addFailure(e as never, args, dir))
       }),

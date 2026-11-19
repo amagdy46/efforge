@@ -9,7 +9,7 @@
     },
     "efforgeVersion": {
       "type": "string",
-      "description": "The efforge version that created the project. `add` leaves it unchanged."
+      "description": "The efforge version that created the project, or last upgraded it (`upgrade` sets it; `add` leaves it unchanged). An older efforge refuses to upgrade the project."
     },
     "stack": {
       "type": "object",

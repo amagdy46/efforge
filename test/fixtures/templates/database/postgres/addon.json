@@ -8,6 +8,7 @@
   "envVars": [
     {
       "name": "DATABASE_URL",
+      "secret": true,
       "example": "postgres://localhost/app",
       "description": "Postgres connection string"
     }

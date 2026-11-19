@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import { CONTRACT, type ErrorCode, errorCodes } from "./contract.ts"
 import { EfforgeManifest } from "./manifest.ts"
-import { StackConfig } from "./stack.ts"
+import { Ai, Auth, Database, Extra, Infra, Orm, Runtime, StackConfig } from "./stack.ts"
 
 // The `--json` documents (docs/json.md) as schemas. Tests decode real output with them, and
 // `node scripts/schemas.ts` writes them to `schemas/` as JSON Schema, shipped in the package.
@@ -33,6 +33,9 @@ const EnvVar = Schema.Struct({
   }),
   set: Schema.Boolean.annotate({
     description: "efforge already wrote a working local value; false means fill it in.",
+  }),
+  secret: Schema.Boolean.annotate({
+    description: "The value is a secret: the deployed one is never printed or committed.",
   }),
 })
 
@@ -126,7 +129,404 @@ export const ListOutput = Schema.Struct({
       installed: Schema.optionalKey(Schema.Boolean),
     }),
   ),
+  presets: Schema.Array(
+    Schema.Struct({
+      id: Schema.String.annotate({ description: "What to pass to `create --preset`." }),
+      title: Schema.String,
+      description: Schema.String,
+      stack: Schema.Struct({
+        runtime: Runtime,
+        database: Database,
+        orm: Orm,
+        auth: Auth,
+        infra: Infra,
+        ai: Ai,
+        extras: Schema.Array(Extra),
+      }).annotate({
+        description:
+          "What the preset chooses in this version. A stack flag given with --preset overrides its slot.",
+      }),
+    }),
+  ).annotate({
+    description:
+      "Named stacks for `create --preset`. Their contents can change between versions; `create` records the stack it made, flag by flag, never the preset.",
+  }),
 }).annotate({ title: "efforge list --json" })
+
+const When = Schema.Record(Schema.String, Strings).annotate({
+  description:
+    "Only on stacks where every listed slot has one of the listed values (extras: any of them). Absent: on every stack. Inside a project, `info` lists only what that project gets, without it.",
+})
+
+export const InfoOutput = Schema.Struct({
+  ...Envelope,
+  ok: Schema.Literal(true),
+  id: Schema.String.annotate({ description: "The add-on's full id, what `add` takes." }),
+  slot: Schema.String,
+  option: Schema.String,
+  title: Schema.String,
+  description: Schema.String,
+  purpose: Schema.NullOr(Schema.String).annotate({
+    description: "What it is for, in a paragraph.",
+  }),
+  docs: Schema.Struct({
+    page: Schema.String.annotate({
+      description: "Its page in efforge's repo: docs/addons/<slot>-<option>.md.",
+    }),
+    url: Schema.NullOr(Schema.String),
+  }),
+  service: Schema.NullOr(
+    Schema.Struct({ name: Schema.String, file: Schema.String, errors: Strings }),
+  ).annotate({
+    description: "The Effect service it adds, the file that declares it, its tagged errors.",
+  }),
+  layer: Schema.NullOr(Schema.String).annotate({
+    description: "What it adds to AppLayer in apps/web/src/server/layers.ts.",
+  }),
+  files: Schema.Array(
+    Schema.Struct({ path: Schema.String, when: Schema.optionalKey(When) }),
+  ).annotate({
+    description:
+      "The files it writes. A path can appear once per stack it is written differently on.",
+  }),
+  edits: Schema.Array(
+    Schema.Struct({ file: Schema.String, transforms: Strings, when: Schema.optionalKey(When) }),
+  ).annotate({
+    description: "The files it edits in place (the seams), with the transforms that edit each.",
+  }),
+  dependencies: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      version: Schema.String,
+      package: Schema.String.annotate({ description: "The workspace package, `.` for the root." }),
+      dev: Schema.Boolean,
+    }),
+  ),
+  scripts: Schema.Array(
+    Schema.Struct({ package: Schema.String, name: Schema.String, command: Schema.String }),
+  ),
+  env: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      description: Schema.String,
+      example: Schema.String,
+      secret: Schema.Boolean.annotate({
+        description: "The value is a secret: the deployed one is never printed or committed.",
+      }),
+      set: Schema.Boolean.annotate({
+        description:
+          "efforge writes a working local value when it adds it; false means fill it in.",
+      }),
+      when: Schema.optionalKey(When),
+    }),
+  ),
+  requires: Schema.Array(
+    Schema.Struct({ slot: Schema.String, options: Strings, reason: Schema.String }),
+  ).annotate({
+    description: "What a project needs before it can have this add-on: one of `options` for each.",
+  }),
+  conflicts: Strings.annotate({ description: "Add-ons a project can't have with it." }),
+  card: Schema.NullOr(
+    Schema.Struct({ module: Schema.String, export: Schema.String, when: Schema.optionalKey(When) }),
+  ).annotate({ description: "Its dashboard card module (on /app), or null." }),
+  agents: Schema.Array(
+    Schema.Struct({ heading: Schema.String, when: Schema.optionalKey(When) }),
+  ).annotate({
+    description: "The AGENTS.md sections it adds, by heading.",
+  }),
+  project: Schema.optionalKey(
+    Schema.Struct({
+      directory: Schema.String,
+      installed: Schema.Boolean,
+      add: Schema.NullOr(Schema.String).annotate({
+        description:
+          "The command that adds it to this project, or null (it has it, or can't add it alone).",
+      }),
+      alternatives: Strings.annotate({
+        description: "When it can't be added alone: each command that adds it with what it needs.",
+      }),
+      reason: Schema.optionalKey(Schema.String),
+    }),
+  ).annotate({
+    description: "Only in an efforge project (--cwd, default: the current directory).",
+  }),
+}).annotate({ title: "efforge info --json" })
+
+const Layered = Schema.NullOr(Strings)
+
+export const GraphOutput = Schema.Struct({
+  ...Envelope,
+  ok: Schema.Literal(true),
+  directory: Schema.String,
+  file: Schema.String.annotate({ description: "The file the graph is read from." }),
+  layers: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      expression: Schema.String.annotate({
+        description: "The argument of Layer.mergeAll as written.",
+      }),
+      addon: Schema.NullOr(Schema.String).annotate({
+        description:
+          "The add-on that adds it (`base` for the logger), or null for a layer you added.",
+      }),
+      provides: Layered.annotate({
+        description: "The services it provides; null when unknown (your own layer).",
+      }),
+      needs: Layered.annotate({
+        description:
+          "What it needs: layers provided to it in layers.ts, bindings and settings; null when unknown.",
+      }),
+      color: Schema.String.annotate({
+        description: "Its tempering colour, by its place in the list.",
+      }),
+    }),
+  ),
+  nodes: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      kind: Schema.Literals(["app", "layer", "need"]),
+      label: Schema.String,
+    }),
+  ),
+  edges: Schema.Array(
+    Schema.Struct({
+      from: Schema.String,
+      to: Schema.String,
+      kind: Schema.Literals(["merges", "needs"]).annotate({
+        description: "merges: a layer into AppLayer; needs: what a layer needs, into the layer.",
+      }),
+    }),
+  ),
+  mermaid: Schema.String.annotate({
+    description: "The graph as a Mermaid flowchart, what `graph` prints.",
+  }),
+  written: Schema.NullOr(Schema.String).annotate({
+    description: "With --write: the file the graph was written to (README.md); else null.",
+  }),
+}).annotate({ title: "efforge graph --json" })
+const PinStatus = Schema.Literals(["same", "behind", "yours", "unmanaged"]).annotate({
+  description:
+    "behind: an efforge release pinned this version and this one pins another (upgrade moves it); yours: no release pinned it (never moved).",
+})
+
+const NeedsAction = Schema.Array(
+  Schema.Struct({
+    id: Schema.Literals([
+      "effect-overrides",
+      "package-manager",
+      "split-set",
+      "missing-seam",
+      "install",
+    ]),
+    message: Schema.String,
+    fix: Schema.NullOr(Schema.String).annotate({
+      description:
+        "A command after which this is fixed, or null (then `message` and `lines` say what to change).",
+    }),
+    lines: Schema.optionalKey(Schema.String),
+  }),
+).annotate({ description: "What breaks the project now. Not empty: exit code 2." })
+
+const Kept = Schema.Array(
+  Schema.Struct({
+    path: Schema.String,
+    status: Schema.Literals(["review", "held", "dropped"]).annotate({
+      description:
+        "review: you changed it and so did efforge's template; held: efforge's, held back to keep the project consistent; dropped: efforge no longer generates it, and you changed it.",
+    }),
+    reason: Schema.String,
+    lines: Schema.optionalKey(
+      Schema.String.annotate({ description: "The exact lines that would let efforge apply it." }),
+    ),
+  }),
+).annotate({ description: "Files upgrade won't change for you, each with why." })
+
+const Steps = Schema.Array(
+  Schema.Struct({
+    id: Schema.String,
+    description: Schema.String,
+    command: Schema.optionalKey(Schema.String),
+    cwd: Schema.optionalKey(Schema.String),
+    file: Schema.optionalKey(Schema.String),
+    lines: Schema.optionalKey(Schema.String),
+    files: Schema.optionalKey(Strings),
+    covers: Schema.optionalKey(
+      Strings.annotate({ description: "The `upgrade` step: what it applies, by kind." }),
+    ),
+  }),
+).annotate({ description: "What to do, in order, ending with the project's gate." })
+
+export const UpgradeCheckOutput = Schema.Struct({
+  ...Envelope,
+  ok: Schema.Literal(true),
+  check: Schema.Literal(true).annotate({
+    description: "`--check`: a report; nothing was changed.",
+  }),
+  directory: Schema.String,
+  stack: StackConfig,
+  efforgeVersion: Schema.Struct({
+    project: Schema.String.annotate({
+      description: "The efforge version that made the project, or last upgraded it.",
+    }),
+    cli: Schema.String.annotate({ description: "This CLI's version, the one compared against." }),
+    status: Schema.Literals(["same", "behind", "ahead"]),
+  }),
+  status: Schema.Literals(["needs-action", "behind", "current"]).annotate({
+    description:
+      "needs-action: something breaks the project (exit code 2); behind: nothing breaks, and upgrade has something to apply (exit code 3 with --strict, else 0); current: nothing to apply.",
+  }),
+  needsAction: NeedsAction,
+  pins: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      project: Schema.String,
+      efforge: Schema.NullOr(Schema.String).annotate({
+        description: "This efforge's pin, or null when it doesn't manage the package.",
+      }),
+      status: PinStatus,
+      where: Schema.String.annotate({
+        description: "`catalog`, `packageManager`, or the package.json that pins it exactly.",
+      }),
+      set: Schema.optionalKey(
+        Schema.String.annotate({ description: "The set it moves with (see `sets`)." }),
+      ),
+      held: Schema.optionalKey(
+        Schema.Boolean.annotate({
+          description:
+            "Behind, but kept: a pin of its set is yours, and moving this one would split the set.",
+        }),
+      ),
+    }),
+  ),
+  sets: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      why: Schema.String,
+      packages: Strings,
+      split: Schema.Boolean.annotate({
+        description: "efforge's pins in the set aren't ones a release pinned together: half moved.",
+      }),
+    }),
+  ).annotate({ description: "Sets of pins that move together, when one of them differs." }),
+  guards: Schema.Array(
+    Schema.Struct({
+      id: Schema.Literals(["effect-overrides", "package-manager"]),
+      ok: Schema.Boolean,
+      message: Schema.String,
+      missing: Schema.optionalKey(Strings),
+    }),
+  ),
+  files: Schema.Array(
+    Schema.Struct({
+      path: Schema.String,
+      status: Schema.Literals([
+        "current",
+        "refresh",
+        "review",
+        "yours",
+        "deleted",
+        "dropped",
+        "new",
+      ]),
+      inPlace: Schema.optionalKey(
+        Schema.Boolean.annotate({
+          description:
+            "A file efforge edits in place (layers.ts, AGENTS.md), judged by the record of what releases wrote.",
+        }),
+      ),
+      held: Schema.optionalKey(
+        Schema.Struct({ reason: Schema.String, lines: Schema.optionalKey(Schema.String) }).annotate(
+          {
+            description:
+              "efforge would apply this file and holds it back to keep the project consistent.",
+          },
+        ),
+      ),
+      why: Schema.optionalKey(
+        Schema.String.annotate({ description: "What efforge's change is for." }),
+      ),
+      diff: Schema.optionalKey(
+        Schema.String.annotate({
+          description: "With --diff: a git diff, yours -> efforge's today.",
+        }),
+      ),
+    }),
+  ),
+  seams: Schema.Array(
+    Schema.Struct({ file: Schema.String, missing: Strings, diff: Schema.String }),
+  ).annotate({ description: "Files upgrade edits in place, and what it adds to each." }),
+  scripts: Schema.Array(
+    Schema.Struct({
+      file: Schema.String,
+      name: Schema.String,
+      yours: Schema.String,
+      efforge: Schema.String,
+      status: Schema.Literals(["behind", "yours"]),
+    }),
+  ),
+  kept: Kept,
+  steps: Steps,
+  warnings: Strings,
+}).annotate({ title: "efforge upgrade --check --json" })
+
+export const UpgradeApplyOutput = Schema.Struct({
+  ...Envelope,
+  ok: Schema.Literal(true),
+  check: Schema.Literal(false).annotate({
+    description: "`upgrade`: it applied (or, with --dry-run, would apply).",
+  }),
+  dryRun: Schema.Boolean,
+  directory: Schema.String,
+  stack: StackConfig,
+  efforgeVersion: Schema.Struct({
+    from: Schema.String,
+    to: Schema.String.annotate({ description: "What efforge.jsonc records now." }),
+  }),
+  status: Schema.Literals(["needs-action", "current"]).annotate({
+    description:
+      "After applying: needs-action when something efforge can't fix still breaks the project (exit code 2).",
+  }),
+  created: Strings,
+  changed: Strings,
+  removed: Strings,
+  installed: Schema.Boolean.annotate({ description: "pnpm install ran." }),
+  kept: Kept,
+  needsAction: NeedsAction,
+  nextSteps: Schema.Array(Schema.Struct({ command: Schema.String, cwd: Schema.String })),
+  warnings: Strings,
+  diff: Schema.optionalKey(
+    Schema.String.annotate({ description: "With --diff: what it changed, as a git diff." }),
+  ),
+}).annotate({ title: "efforge upgrade --json" })
+
+export const UpgradeOutput = Schema.Union([UpgradeCheckOutput, UpgradeApplyOutput]).annotate({
+  title: "efforge upgrade --json",
+})
+
+export const DoctorOutput = Schema.Struct({
+  ...Envelope,
+  ok: Schema.Literal(true),
+  directory: Schema.String,
+  stack: Schema.optionalKey(StackConfig),
+  status: Schema.Literals(["ok", "warn", "fail"]).annotate({
+    description: "The worst check: fail (exit code 2), then warn (or unverified), then ok.",
+  }),
+  checks: Schema.Array(
+    Schema.Struct({
+      id: Schema.String.annotate({ description: "Stable: node, pnpm, manifest, install, ..." }),
+      status: Schema.Literals(["ok", "warn", "fail", "skipped", "unverified"]).annotate({
+        description:
+          "unverified: the check couldn't read what it looks for in the shape it knows; `details.lookedFor` says what.",
+      }),
+      message: Schema.String,
+      fix: Schema.NullOr(Schema.String).annotate({
+        description:
+          "A command after which this check passes and no other check is worse, or null (then `message` and `details` say what to change).",
+      }),
+      details: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+    }),
+  ),
+}).annotate({ title: "efforge doctor --json" })
 
 export const ErrorOutput = Schema.Struct({
   ...Envelope,
@@ -151,6 +551,10 @@ export const published = {
   "create.schema.json": CreateOutput,
   "add.schema.json": AddOutput,
   "list.schema.json": ListOutput,
+  "info.schema.json": InfoOutput,
+  "graph.schema.json": GraphOutput,
+  "upgrade.schema.json": UpgradeOutput,
+  "doctor.schema.json": DoctorOutput,
   "error.schema.json": ErrorOutput,
 } as const
 

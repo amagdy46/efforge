@@ -32,7 +32,7 @@ export const errorCodes = {
   InvalidFlagValue:
     "A flag got a value it can't take, or none. `fix` is null; `allowed` lists the values when there is a list.",
   UnexpectedArgument:
-    "More words than the command takes. For `list`, `fix` drops them; for `create`, null (a name is one word).",
+    "More words than the command takes. For `list` and `graph`, `fix` drops them; for `create`, null (a name is one word).",
   UnknownCommand:
     "The first word is a typo of a command (`lst`), a command in other case (`Add`), or a word efforge keeps for commands (`update`), not a project name. `fix` is the command it names, or null.",
   InsideProject:
@@ -40,7 +40,7 @@ export const errorCodes = {
   NeedsInput:
     "A prompt was needed and there is no terminal. Only without --json, which never prompts. `fix` adds --yes.",
   UnknownValue:
-    "A stack flag got a value that isn't one of its options. `fix` uses the option it is a clear typo of, or is null.",
+    "A stack flag, or `--preset`, got a value that isn't one of its options. `fix` uses the option it is a clear typo of, or is null.",
   IncompatibleStack:
     "The choices conflict (auth without a database), or `add` needs another add-on with it. No fix: `alternatives` lists the ways out, each a complete command.",
   InvalidProjectName:
@@ -54,8 +54,9 @@ export const errorCodes = {
     "--json only: the run was stopped (Ctrl-C, SIGTERM, a timeout). Exit code 130. `fix` finishes the setup when files were written.",
   WriteFailed: "efforge couldn't write the project files (permissions, disk). No fix.",
   NotAnEfforgeProject:
-    "`add` or `list --cwd` was pointed at a directory without a valid efforge.jsonc (`list` in a directory without one succeeds with `project: false`). `fix` points --cwd at the nearby project when there is one; else null.",
-  NoAddonIds: "`add` was called with no add-on ids. `available` lists them; `fix` lists them.",
+    "`add`, `upgrade`, `doctor`, `info`, `graph` or `list --cwd` was pointed at a directory without a valid efforge.jsonc (`list` in a directory without one succeeds with `project: false`). `fix` points --cwd at the nearby project when there is one; else null.",
+  NoAddonIds:
+    "`add` was called with no add-on ids and no terminal to pick them in (or with --json), or `info` with no id. `available` lists them; `fix` lists them.",
   UnknownAddon:
     "An add-on id that doesn't exist or is ambiguous. `fix` uses the one id it is a clear typo or fragment of; else null with `suggestions`.",
   SlotAlreadySet:
@@ -66,7 +67,15 @@ export const errorCodes = {
   TransformAnchorMissing:
     "`add` couldn't find where to edit a file you changed. Nothing was written. Apply `snippet` by hand, then re-run.",
   CommandFailed:
-    "`add` wrote its files, then a command it runs (pnpm install) failed. `fix` runs it again.",
+    "`add` or `upgrade` wrote its files, then a command it runs (pnpm install) failed. `fix` runs it again.",
+  LayersUnreadable:
+    "`graph` couldn't read the layers: apps/web/src/server/layers.ts is missing or has no `export const AppLayer = Layer.mergeAll(...)`. No fix.",
+  ReadmeUnwritable:
+    "`graph --write` found no efforge:readme markers in README.md, broken ones, or no README. Nothing was written. No fix: `problems` says what to repair.",
+  ProjectNewerThanCli:
+    "`upgrade` was run by an efforge older than the one that made or last upgraded the project, which would undo the newer one's changes. Nothing was written. No fix; `command` is the same command with create-efforge@latest.",
+  UncommittedChanges:
+    "`upgrade` found changes in the project that aren't committed, so git diff couldn't show what it did. Nothing was written. No fix: commit or stash first; `command` is the same command with --allow-dirty.",
   InternalError: "A bug in efforge or a broken install. No fix; report it.",
 } as const
 

@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from "node:fs"
 import { dirname, join, relative, resolve } from "node:path"
 import { BIN, inDir, isTypo, quote, typoOf } from "./contract.ts"
 import { COMMIT, FORMAT, INSTALL } from "./exec.ts"
+import { presetIds } from "./presets.ts"
 import { nameError } from "./prompts/flow.ts"
 import { slots } from "./slots.ts"
 
@@ -12,7 +13,7 @@ import { slots } from "./slots.ts"
 // caller made (other than a clear typo), or repeat the caller's own command, is refused: the
 // error then carries `fix: null` and its facts.
 
-export const commands = ["create", "add", "list"] as const
+export const commands = ["create", "add", "list", "info", "graph", "upgrade", "doctor"] as const
 export type Verb = (typeof commands)[number]
 
 /**
@@ -89,20 +90,47 @@ export const looksLikeCommand = (word: string): boolean => {
 // --- Flags -------------------------------------------------------------------------------
 
 const stackFlags = slots.map((s) => s.id as string)
+/** Flags whose value is one of a list: the stack flags and `--preset`. */
+const choicesOf = (name: string): ReadonlyArray<string> | undefined =>
+  name === "preset" ? presetIds : slots.find((s) => s.id === name)?.options.map((o) => o.id)
 const globalValues = ["log-level", "completions"]
 const globalBooleans = ["help", "version", "wizard"]
 const known: Record<Verb, { readonly values: string[]; readonly booleans: string[] }> = {
   create: {
-    values: [...stackFlags, ...globalValues],
-    booleans: ["yes", "dry-run", "json", "install", "git", ...globalBooleans],
+    values: ["preset", ...stackFlags, ...globalValues],
+    booleans: ["yes", "dry-run", "verbose", "json", "install", "git", ...globalBooleans],
   },
   add: {
     values: ["cwd", ...globalValues],
     booleans: ["overwrite", "dry-run", "json", "install", ...globalBooleans],
   },
   list: { values: ["cwd", ...globalValues], booleans: ["json", ...globalBooleans] },
+  info: { values: ["cwd", ...globalValues], booleans: ["json", ...globalBooleans] },
+  graph: {
+    values: ["cwd", "format", ...globalValues],
+    booleans: ["json", "write", ...globalBooleans],
+  },
+  upgrade: {
+    values: ["cwd", "file", ...globalValues],
+    booleans: [
+      "check",
+      "dry-run",
+      "diff",
+      "verbose",
+      "strict",
+      "allow-dirty",
+      "install",
+      "json",
+      ...globalBooleans,
+    ],
+  },
+  doctor: { values: ["cwd", ...globalValues], booleans: ["online", "json", ...globalBooleans] },
 }
-const allValueFlags = new Set([...stackFlags, "cwd", ...globalValues])
+
+/** The commands that take `--flag`, in `commands` order. */
+export const commandsTaking = (flag: string): Verb[] =>
+  commands.filter((v) => known[v].values.includes(flag) || known[v].booleans.includes(flag))
+const allValueFlags = new Set(["preset", ...stackFlags, "cwd", "format", "file", ...globalValues])
 const allBooleans = new Set(Object.values(known).flatMap((k) => k.booleans))
 const shortFlags: Record<string, string> = { y: "yes", h: "help", v: "version" }
 const truthy = new Set(["true", "yes", "on", "1", "y"])
@@ -167,9 +195,12 @@ const takesValue = (name: string) =>
 export const intentOf = (args: ReadonlyArray<string>): Intent => {
   const words: string[] = []
   const flags: Flag[] = []
+  /** Words before `--`: only one of those can be the command. */
+  let beforeDashes = Number.POSITIVE_INFINITY
   for (let i = 0; i < args.length; i++) {
     const t = args[i] as string
     if (t === "--") {
+      beforeDashes = words.length
       words.push(...args.slice(i + 1))
       break
     }
@@ -206,6 +237,13 @@ export const intentOf = (args: ReadonlyArray<string>): Intent => {
     else flags.push({ name, value: true, raw: [t] })
   }
   const [first, ...rest] = words
+  // after `--` a word is an argument, never the command: `-- add` would be a project named add
+  if (
+    first !== undefined &&
+    beforeDashes === 0 &&
+    (commandOf(first) !== undefined || looksLikeCommand(first))
+  )
+    return { verb: undefined, word: undefined, operands: words, flags }
   const verb = first === undefined ? undefined : commandOf(first)
   if (first !== undefined && verb !== undefined) return { verb, word: first, operands: rest, flags }
   // the bare root form: a create, unless its word is one people guess as a command
@@ -306,13 +344,17 @@ const wellFormed = (c: Intent): boolean => {
       if (typeof value !== "boolean") return false
     } else if (typeof value !== "string") return false
     else if (name === "log-level" && !logLevels.has(value)) return false
-    else if (stackFlags.includes(name)) {
-      const options = slots.find((s) => s.id === name)?.options.map((o) => o.id) ?? []
+    else if (name === "format" && value !== "mermaid" && value !== "text") return false
+    else if (stackFlags.includes(name) || name === "preset") {
+      const options = choicesOf(name) ?? []
       const values = name === "extras" ? value.split(",").filter((x) => x !== "") : [value]
       if (values.some((x) => !options.includes(x))) return false
     }
   }
-  if (c.verb === "list" && c.operands.length > 0) return false
+  // info takes one id; create and add take words; the rest take none
+  if (c.verb === "info" && c.operands.length > 1) return false
+  if (c.verb !== "create" && c.verb !== "add" && c.verb !== "info" && c.operands.length > 0)
+    return false
   if (c.verb === "create") {
     if (c.operands.length > 1) return false
     if (c.word === undefined) {
@@ -350,8 +392,12 @@ export const addonSuggestions = (id: string): string[] => {
 const sameChoice = (slot: string, o: unknown, c: unknown): boolean => {
   if (o === c) return true
   if (typeof o !== "string" || typeof c !== "string") return false
-  const options = slots.find((s) => s.id === slot)?.options.map((x) => x.id) ?? []
-  const meant = (x: string) => (options.includes(x) ? x : (typoOf(x, options) ?? x))
+  const options = choicesOf(slot) ?? []
+  // the same value in other case (`D1`, `SaaS`) is that value, as add-on ids are
+  const meant = (x: string) =>
+    options.includes(x)
+      ? x
+      : (options.find((v) => v === x.toLowerCase()) ?? typoOf(x, options) ?? x)
   if (slot !== "extras") return meant(o) === c
   const list = (s: string) => s.split(",").filter((x) => x !== "")
   return [...new Set(list(o).map(meant))].join(",") === list(c).join(",")
@@ -363,7 +409,7 @@ export interface May {
   readonly cwd?: boolean
   /** `--overwrite` may be added (`OverlayConflict`: the caller sees what it discards). */
   readonly overwrite?: boolean
-  /** `add` may become `list` with the same `--json` and `--cwd` (`NoAddonIds`, read-only). */
+  /** `add` or `info` may become `list` with the same `--json` and `--cwd` (`NoAddonIds`, read-only). */
   readonly list?: boolean
   /** The same command again, after something else changed (`PnpmMissing`). */
   readonly again?: boolean
@@ -372,7 +418,7 @@ export interface May {
 /** Whether `c` keeps everything `o` asked for. */
 const keeps = (o: Intent, c: Intent, may: May): boolean => {
   if (o.verb === undefined || c.verb === undefined) return false
-  const toList = may.list === true && o.verb === "add" && c.verb === "list"
+  const toList = may.list === true && (o.verb === "add" || o.verb === "info") && c.verb === "list"
   if (c.verb !== o.verb && !toList) return false
   if ((o.word === undefined) !== (c.word === undefined)) return false
   const vo = view(o)
@@ -385,7 +431,7 @@ const keeps = (o: Intent, c: Intent, may: May): boolean => {
   const names = toList ? ["json", "log-level"] : [...new Set([...vo.set.keys(), ...vc.set.keys()])]
   for (const name of names) {
     if (name === "cwd") continue
-    if (stackFlags.includes(name)) {
+    if (stackFlags.includes(name) || name === "preset") {
       if (!sameChoice(name, vo.set.get(name), vc.set.get(name))) return false
     } else if (name === "yes") {
       if (switchOf(vo, "yes") === true && switchOf(vc, "yes") !== true) return false
@@ -398,8 +444,9 @@ const keeps = (o: Intent, c: Intent, may: May): boolean => {
     const to = resolve(String(vc.set.get("cwd") ?? "."))
     if (from !== to && !(may.cwd === true && existsSync(join(to, "efforge.jsonc")))) return false
   }
-  if (c.verb === "list") return c.operands.length === 0
-  if (c.verb === "add") {
+  if (c.verb === "list" || c.verb === "graph" || c.verb === "upgrade" || c.verb === "doctor")
+    return c.operands.length === 0
+  if (c.verb === "add" || c.verb === "info") {
     if (o.operands.length !== c.operands.length) return false
     return o.operands.every((id, k) => {
       const to = c.operands[k] as string
@@ -476,11 +523,11 @@ export const finish = (
   steps: ReadonlyArray<string>,
 ): string | null => {
   const o = intentOf(args)
-  if (o.verb !== "create" && o.verb !== "add") return null
+  if (o.verb !== "create" && o.verb !== "add" && o.verb !== "upgrade") return null
   const v = view(o)
   if (switchOf(v, "dry-run") !== false) return null
   const install = switchOf(v, "install") !== false
-  const git = o.verb === "add" || switchOf(v, "git") !== false
+  const git = o.verb !== "create" || switchOf(v, "git") !== false
   const kept = steps.filter(
     (s) =>
       !s.includes("create-efforge") &&

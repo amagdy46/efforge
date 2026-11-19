@@ -1,19 +1,31 @@
-import { Console, Effect, Stdio } from "effect"
-import { type CliError, Command, Completions } from "effect/cli"
+import { Console, Effect, Option, Stdio } from "effect"
+import { type CliError, CliOutput, Command, Completions } from "effect/cli"
 import { BIN, type ErrorCode, type Failure, Invocation, printSuccess, report } from "./contract.ts"
 import { addCommand } from "./commands/add.ts"
-import { createCommand, createConfig, createHandler } from "./commands/create.ts"
+import { createCommand, createConfig, createHandler, presetFailure } from "./commands/create.ts"
+import { doctorCommand } from "./commands/doctor.ts"
+import { graphCommand } from "./commands/graph.ts"
+import { infoCommand } from "./commands/info.ts"
 import { listCommand } from "./commands/list.ts"
+import { upgradeCommand } from "./commands/upgrade.ts"
 import { commands, fix, intentOf, meantFlag, projectAbove, spelledOut } from "./fix.ts"
 import { slots } from "./slots.ts"
 import { efforgeVersion } from "./versions.ts"
 
-/** Root behaves as `create`; `efforge create` is an explicit alias, `add` and `list` are separate. */
+/** Root behaves as `create`; `efforge create` is an explicit alias; the other commands are separate. */
 export const root = Command.make("create-efforge", createConfig, createHandler).pipe(
   Command.withDescription(
     "Scaffold an Effect + TanStack Start app on Cloudflare with database, auth and services already wired together",
   ),
-  Command.withSubcommands([createCommand, addCommand, listCommand]),
+  Command.withSubcommands([
+    createCommand,
+    addCommand,
+    listCommand,
+    infoCommand,
+    graphCommand,
+    upgradeCommand,
+    doctorCommand,
+  ]),
   Command.withExamples([
     {
       command: "npm create efforge my-app",
@@ -32,6 +44,13 @@ export const root = Command.make("create-efforge", createConfig, createHandler).
       command: "npx create-efforge add email storage",
       description: "Add add-ons to an existing project",
     },
+    { command: "npx create-efforge info email", description: "What one add-on adds and needs" },
+    { command: "npx create-efforge graph", description: "The project's layer graph, as Mermaid" },
+    {
+      command: "npx create-efforge upgrade --check",
+      description: "See how a project differs from this efforge, and what to do",
+    },
+    { command: "npx create-efforge doctor", description: "See what is wrong with a checkout" },
   ]),
 )
 
@@ -49,6 +68,10 @@ const probe = Command.make("create-efforge", createConfig).pipe(
     Command.withHandler(createCommand, () => Effect.void),
     Command.withHandler(addCommand, () => Effect.void),
     Command.withHandler(listCommand, () => Effect.void),
+    Command.withHandler(infoCommand, () => Effect.void),
+    Command.withHandler(graphCommand, () => Effect.void),
+    Command.withHandler(upgradeCommand, () => Effect.void),
+    Command.withHandler(doctorCommand, () => Effect.void),
   ]),
 )
 
@@ -120,9 +143,13 @@ const parseFix = (args: ReadonlyArray<string>, e: CliError.NonShowHelpErrors): s
       })
     }
     case "UnexpectedArgument":
-      // `list foo`: list takes no arguments, so dropping them runs the same list. `create my
-      // app`: a project name is one word, and which one is the caller's choice
-      return fix(args, (i) => (i.verb === "list" ? { ...i, operands: [] } : undefined))
+      // `list foo`: list (like graph, upgrade and doctor) takes no arguments, so dropping them runs
+      // the same command. `create my app`: a project name is one word, and which one is the caller's
+      return fix(args, (i) =>
+        i.verb === "list" || i.verb === "graph" || i.verb === "upgrade" || i.verb === "doctor"
+          ? { ...i, operands: [] }
+          : undefined,
+      )
     default:
       // a value a flag can't take, or none: which value is the caller's choice (`allowed`)
       return null
@@ -170,8 +197,30 @@ const reportParseError = (args: ReadonlyArray<string>, error: CliError.ShowHelp)
 // (`reservedWords`, src/fix.ts) or a typo of one, and it doesn't run inside a project, where `add`
 // and `list` are meant. `create <name>` always creates.
 
-/** Flags only `add` or `list` take: with them, the root form was never meant as a create. */
-const notCreateFlags = new Set(["cwd", "overwrite"])
+/** Each command's flags, from the definitions (what completions are made from). */
+const flagsByCommand = (): ReadonlyArray<{ name: string; flags: ReadonlyArray<string> }> =>
+  (
+    Completions.fromCommand(root) as unknown as {
+      subcommands: ReadonlyArray<{ name: string; flags: ReadonlyArray<{ name: string }> }>
+    }
+  ).subcommands.map((c) => ({ name: c.name, flags: c.flags.map((f) => f.name) }))
+
+/** The commands that take `--flag`, as "add, list and graph". */
+const owners = (flag: string): string => {
+  const names = flagsByCommand()
+    .filter((c) => c.flags.includes(flag))
+    .map((c) => c.name)
+  return names.length <= 1
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`
+}
+
+/** Flags only other commands take: with one, the root form was never meant as a create. */
+const notCreateFlags = (): ReadonlySet<string> => {
+  const all = flagsByCommand()
+  const create = new Set(all.find((c) => c.name === "create")?.flags ?? [])
+  return new Set(all.flatMap((c) => c.flags).filter((f) => !create.has(f)))
+}
 
 /** Why the arguments aren't a create or a command, as the contract reports it; or undefined. */
 export const notACreate = (args: ReadonlyArray<string>): Failure | undefined => {
@@ -191,17 +240,21 @@ export const notACreate = (args: ReadonlyArray<string>): Failure | undefined => 
   const [typed] = i.operands
   if (typed !== undefined && i.verb === undefined) {
     const lower = typed.toLowerCase()
-    const hint =
-      lower === "help"
+    const dashed = (commands as ReadonlyArray<string>).includes(lower)
+    const hint = dashed
+      ? ` To run ${lower}, put it before --.`
+      : lower === "help"
         ? ` For help, run ${BIN} --help.`
         : lower === "version"
           ? ` For the version, run ${BIN} --version.`
           : lower === "ls"
             ? ` To see the add-ons, run ${BIN} list.`
-            : ""
+            : lower === "update"
+              ? ` To bring a project up to date with this efforge, run ${BIN} upgrade (--check to see what it would do).`
+              : ""
     return {
       code: "UnknownCommand",
-      message: `${typed} isn't a command, and efforge doesn't take it as a project name.${hint} ${list} To name a project ${typed}, run ${BIN} create ${typed}.`,
+      message: `${dashed ? `${typed} after -- is an argument, not the command,` : `${typed} isn't a command,`} and efforge doesn't take it as a project name.${hint} ${list} To name a project ${typed}, run ${BIN} create ${typed}.`,
       fix: null,
       details: { command: typed, commands },
     }
@@ -213,11 +266,12 @@ export const notACreate = (args: ReadonlyArray<string>): Failure | undefined => 
       fix: null,
       details: { command: typed, arguments: i.operands.slice(1), commands },
     }
-  const other = i.flags.find((f) => notCreateFlags.has(f.name))
+  const notCreate = notCreateFlags()
+  const other = i.flags.find((f) => notCreate.has(f.name))
   if (other !== undefined && typed !== undefined)
     return {
       code: "UnknownCommand",
-      message: `--${other.name} belongs to add and list, so ${typed} isn't a project name here, and it isn't a command. ${list}`,
+      message: `--${other.name} belongs to ${owners(other.name)}, so ${typed} isn't a project name here, and it isn't a command. ${list}`,
       fix: null,
       details: { command: typed, flag: `--${other.name}`, commands },
     }
@@ -261,7 +315,49 @@ export const completionScript = (shell: "bash" | "zsh" | "fish" | "powershell"):
   }
 }
 
-const runRoot = Command.runWith(root, { version: efforgeVersion })
+// --- Help ----------------------------------------------------------------------------
+// Effect's help lists the global flags with every value in the flag's column, which pushes every
+// description to column 70 and the lines past 150, and it starts EXAMPLES without a blank line.
+
+const globalFlagDocs: Readonly<Record<string, { type: string; description: string }>> = {
+  completions: {
+    type: "<shell>",
+    description: "Print a shell completion script: bash, zsh, fish or powershell",
+  },
+  "log-level": {
+    type: "<level>",
+    description: "Minimum log level: all, trace, debug, info, warn, error, fatal or none",
+  },
+}
+
+/** Effect's help formatter, with short global flags and a blank line before EXAMPLES. */
+export const helpFormatter = (base: CliOutput.Formatter): CliOutput.Formatter => ({
+  formatCliError: (e) => base.formatCliError(e),
+  formatError: (e) => base.formatError(e),
+  formatErrors: (es) => base.formatErrors(es),
+  formatVersion: (name, version) => base.formatVersion(name, version),
+  formatHelpDoc: (doc) =>
+    base
+      .formatHelpDoc({
+        ...doc,
+        ...(doc.globalFlags === undefined
+          ? {}
+          : {
+              globalFlags: doc.globalFlags.map((f) => {
+                const short = globalFlagDocs[f.name]
+                return short === undefined
+                  ? f
+                  : { ...f, type: short.type, description: Option.some(short.description) }
+              }),
+            }),
+      })
+      .replace(/([^\n])\n((?:\S*\[1m)?EXAMPLES)/, "$1\n\n$2"),
+})
+
+const runRoot = (args: ReadonlyArray<string>) =>
+  Command.runWith(root, { version: efforgeVersion })(args).pipe(
+    Effect.provide(CliOutput.layer(helpFormatter(CliOutput.defaultFormatter()))),
+  )
 const runProbe = Command.runWith(probe, { version: efforgeVersion, renderErrors: false })
 
 /** Runs the CLI with explicit arguments (the entry point reads them from Stdio; tests pass them). */
@@ -275,7 +371,7 @@ export const runWith = (args: ReadonlyArray<string>) =>
       return yield* printSuccess({})
     // before parsing: a mistyped `add` rarely parses as a create, and its parse error's fix
     // would turn it into one
-    const command = notACreate(args)
+    const command = notACreate(args) ?? presetFailure(args)
     if (command !== undefined) return yield* report(wantsJson(args), command)
     // the wizard prompts, so it can't be dry-parsed; it reports its own errors
     if (!args.some((a) => a === "--wizard" || a.startsWith("--wizard="))) {

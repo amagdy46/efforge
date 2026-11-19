@@ -3,6 +3,7 @@ import { Command, Flag } from "effect/cli"
 import pc from "picocolors"
 import { loadAddons } from "../addon.ts"
 import { introLine } from "../intro.ts"
+import { presets } from "../presets.ts"
 import { slots } from "../slots.ts"
 import { relative } from "node:path"
 import { BIN, Invocation, printSuccess, quote, report } from "../contract.ts"
@@ -92,6 +93,12 @@ export const listCommand = Command.make(
           ...(stack === undefined ? {} : { directory: dir, stack }),
           ...(nearby === undefined ? {} : { nearby }),
           addons,
+          presets: presets.map((p) => ({
+            id: p.id,
+            title: p.title,
+            description: p.description,
+            stack: p.stack,
+          })),
         })
       const width = Math.max(...addons.map((a) => a.id.length))
       // cut descriptions to the terminal; piped output keeps them whole, a very narrow one drops them
@@ -112,6 +119,15 @@ export const listCommand = Command.make(
         lines.push(
           `${mark} ${a.installed === true ? pc.dim(a.id.padEnd(width)) : pc.cyan(a.id.padEnd(width))}  ${pc.dim(room === undefined ? a.description : short(a.description, room))}`,
         )
+      }
+      // presets are for `create`, so a project's list leaves them out
+      if (!project) {
+        const pw = Math.max(...presets.map((p) => p.id.length))
+        lines.push("", pc.bold("Presets"), pc.dim(`  for ${BIN} create <name> --preset=<id>`))
+        for (const p of presets)
+          lines.push(
+            `  ${pc.cyan(p.id.padEnd(Math.max(pw, width)))}  ${pc.dim(room === undefined ? p.description : short(p.description, room))}`,
+          )
       }
       // in a pipe, stdout carries only the list (docs/json.md, "In a pipe")
       if (process.stdout.isTTY) lines.unshift(introLine("list"))

@@ -51,6 +51,7 @@
   "envVars": [
     {
       "name": "STORAGE_SIGNING_SECRET",
+      "secret": true,
       "example": "change-me-to-a-long-random-string",
       "dev": "dev-only-storage-signing-secret-replace-me",
       "description": "HMAC secret for signed download URLs (production: a Worker secret, `wrangler secret put STORAGE_SIGNING_SECRET` or the deploy env with Alchemy)"

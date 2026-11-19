@@ -22,7 +22,7 @@ efforge is young, and the CLI's options may still change.
     "@effect/vitest": 4.0.5
   ```
 - With `infra=alchemy`, local settings live in `.env` (`alchemy dev` reads it) instead of `.dev.vars`; efforge writes them there at `create` and at every `add`. On D1, `pnpm dev` and `pnpm run deploy` apply the migrations; `pnpm db:migrate` needs a `wrangler.jsonc` and says so.
-- CI generates, installs and runs the full gate (typecheck, check, test, build) for a matrix of 15 stacks, not every combination.
+- CI generates, installs and runs the full gate (typecheck, check, test, build) for a matrix of 17 stacks (the three presets among them), not every combination.
 - With `--auth=none`, the `effect-ai-byok` demo server function is not gated, so anyone who can reach the app can spend the configured API key. Add auth or remove the demo before deploying.
 - With `--auth=none`, the storage and email cards' server functions are not gated either: anyone who can reach the app can upload to and delete from the bucket's `uploads/` folder, and, with `MAIL_TRANSPORT=cloudflare`, send a test email from your domain to any address. The cards say so. Add auth or remove the demos before deploying.
 - With `--auth=none` the realtime room has no access check: anyone who can reach the app can join a room, read what is sent and send to it. The realtime card says so. With auth, the upgrade needs a session, but a socket that is already open stays open after its user signs out, until it closes.

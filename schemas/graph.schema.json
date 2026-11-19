@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/create-efforge/schemas/graph.schema.json",
+  "type": "object",
+  "properties": {
+    "efforge": {
+      "type": "string",
+      "description": "The CLI version that printed this."
+    },
+    "contract": {
+      "type": "number",
+      "enum": [
+        1
+      ],
+      "description": "The version of this contract. It changes only when a field is renamed, removed or changes meaning."
+    },
+    "ok": {
+      "type": "boolean",
+      "enum": [
+        true
+      ]
+    },
+    "directory": {
+      "type": "string"
+    },
+    "file": {
+      "type": "string",
+      "description": "The file the graph is read from."
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "expression": {
+            "type": "string",
+            "description": "The argument of Layer.mergeAll as written."
+          },
+          "addon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The add-on that adds it (`base` for the logger), or null for a layer you added."
+          },
+          "provides": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The services it provides; null when unknown (your own layer)."
+          },
+          "needs": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What it needs: layers provided to it in layers.ts, bindings and settings; null when unknown."
+          },
+          "color": {
+            "type": "string",
+            "description": "Its tempering colour, by its place in the list."
+          }
+        },
+        "required": [
+          "name",
+          "expression",
+          "addon",
+          "provides",
+          "needs",
+          "color"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "app",
+              "layer",
+              "need"
+            ]
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "merges",
+              "needs"
+            ],
+            "description": "merges: a layer into AppLayer; needs: what a layer needs, into the layer."
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "kind"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "mermaid": {
+      "type": "string",
+      "description": "The graph as a Mermaid flowchart, what `graph` prints."
+    },
+    "written": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "With --write: the file the graph was written to (README.md); else null."
+    }
+  },
+  "required": [
+    "efforge",
+    "contract",
+    "ok",
+    "directory",
+    "file",
+    "layers",
+    "nodes",
+    "edges",
+    "mermaid",
+    "written"
+  ],
+  "additionalProperties": true,
+  "title": "efforge graph --json"
+}
