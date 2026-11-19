@@ -20,7 +20,7 @@ import { alternative, finish, fix, intentOf, meantName, withFlag } from "../fix.
 import { generate, matches } from "../generate.ts"
 import { askStack, CUSTOM, DEFAULT_NAME, type StackFlags } from "../prompts/flow.ts"
 import { type Preset, presetIds, presets } from "../presets.ts"
-import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
+import { cancelled, PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
 import { projectDirName } from "../projectName.ts"
 import { envGroups, localEnvFile } from "../env.ts"
 import { planSteps, renderSteps, type Step } from "../readme.ts"
@@ -937,13 +937,7 @@ export const createHandler = (input: Parameters<typeof toCreateOptions>[0]) => {
   return create(opts).pipe(
     Effect.catch((e) =>
       Effect.gen(function* () {
-        if (e._tag === "Cancelled") {
-          const io = yield* PromptIO
-          yield* Effect.sync(() => {
-            process.exitCode = 130
-          })
-          return yield* io.outro("Cancelled. Nothing written.")
-        }
+        if (e._tag === "Cancelled") return yield* cancelled
         const args = yield* Invocation
         yield* report(input.json, createFailure(e as never, args, opts.flags))
       }),

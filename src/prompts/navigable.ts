@@ -17,6 +17,18 @@ export class NeedsInput extends Schema.TaggedError<NeedsInput>()("NeedsInput", {
 
 export type PromptError = Cancelled | NeedsInput
 
+/**
+ * What every command does when a person cancels a prompt (Ctrl-C or Escape): it says nothing was
+ * written and exits 130, like any Ctrl-C. Every prompt comes before the first write.
+ */
+export const cancelled: Effect.Effect<void, never, PromptIO> = Effect.gen(function* () {
+  const io = yield* PromptIO
+  yield* Effect.sync(() => {
+    process.exitCode = 130
+  })
+  yield* io.outro("Cancelled. Nothing written.")
+})
+
 export interface Choice {
   readonly value: string
   readonly label: string
@@ -314,15 +326,25 @@ export interface Scripted {
   readonly output: string[]
 }
 
-/** Answers are consumed in order; running out of answers is a test bug and dies. */
-export const scriptedPromptIO = (answers: ReadonlyArray<Answer>): Scripted => {
+/**
+ * Answers are consumed in order; running out of answers is a test bug and dies. Or a function
+ * answers each prompt as it is shown.
+ */
+export const scriptedPromptIO = (
+  answers: ReadonlyArray<Answer> | ((shown: Shown) => Answer),
+): Scripted => {
   const shown: Shown[] = []
   const output: string[] = []
   let next = 0
   const take = (s: Shown): Effect.Effect<Answer, PromptError> => {
     shown.push(s)
-    if (next >= answers.length) return Effect.die(`scripted PromptIO: no answer left for "${s.id}"`)
-    const a = answers[next++] as Answer
+    let a: Answer
+    if (typeof answers === "function") a = answers(s)
+    else {
+      if (next >= answers.length)
+        return Effect.die(`scripted PromptIO: no answer left for "${s.id}"`)
+      a = answers[next++] as Answer
+    }
     return a === CANCEL ? Effect.fail(new Cancelled()) : Effect.succeed(a)
   }
   const io: PromptIOShape = {

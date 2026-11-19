@@ -70,6 +70,7 @@ import {
 } from "../transforms/index.ts"
 import {
   canPrompt,
+  cancelled,
   type Choice,
   GoBack,
   PromptIO,
@@ -1523,6 +1524,8 @@ export const addHandler = (input: {
     ),
     Effect.catch((e) =>
       Effect.gen(function* () {
+        // Ctrl-C or Escape in the picker
+        if (e._tag === "Cancelled") return yield* cancelled
         const args = yield* Invocation
         yield* report(input.json, addFailure(e as never, args, dir))
       }),
