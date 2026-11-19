@@ -80,7 +80,7 @@ export function CapabilityCard({
     <section
       id={id}
       aria-labelledby={`${id}-title`}
-      className="scroll-mt-6 overflow-hidden rounded-xl border bg-card text-card-foreground shadow-xs"
+      className="@container scroll-mt-6 overflow-hidden rounded-xl border bg-card text-card-foreground shadow-xs"
     >
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-5 py-4">
         <span
@@ -108,7 +108,10 @@ export function CapabilityCard({
         )}
         <p className="basis-full text-sm text-muted-foreground">{summary}</p>
       </header>
-      <div className="grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      {/* demo beside code once the card has room for an 80-character line beside a usable demo;
+          the code column is never narrower than that line (80ch of the code font, the line
+          numbers and padding), else the two stack */}
+      <div className="grid @min-[58rem]:grid-cols-[minmax(0,2fr)_minmax(auto,3fr)]">
         <div className="flex min-w-0 flex-col gap-4 p-5">
           <h3 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
             Try it
@@ -116,7 +119,7 @@ export function CapabilityCard({
           <Demo />
           <Access access={access} />
         </div>
-        <div className="max-h-[26rem] min-w-0 border-t bg-code lg:max-h-none lg:border-t-0 lg:border-l">
+        <div className="max-h-[26rem] min-w-0 border-t bg-code font-mono text-[0.78rem] @min-[58rem]:max-h-none @min-[58rem]:min-w-[calc(80ch+3.75rem+1px)] @min-[58rem]:border-t-0 @min-[58rem]:border-l">
           <CodeBlock files={code} />
         </div>
       </div>

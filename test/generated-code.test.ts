@@ -277,7 +277,7 @@ it("clientGuard: a settings file or a whole server file in the browser build fai
   expect(secretValues([settings])).toEqual([["BETTER_AUTH_SECRET", "dev-only-secret-0123456789"]])
 })
 
-/** The code panel fits this many characters at 1440 px wide (docs/capability-cards.md). */
+/** The code panel holds this many characters without scrolling (docs/capability-cards.md). */
 const REGION_WIDTH = 80
 
 const stacksWithCards = (["none", "better-auth", "better-auth-orgs"] as const)
