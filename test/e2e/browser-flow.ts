@@ -112,6 +112,18 @@ const useServiceCards = async (page: Page) => {
   await browser.getByText("Not configured yet").waitFor({ timeout: 100_000 })
 }
 
+/** The export a `/_serverFn/<id>` URL calls: the id is base64url JSON naming it. */
+const serverFnName = (url: string): string => {
+  try {
+    const id = url.split("/_serverFn/")[1]?.split("?")[0] ?? ""
+    return String(
+      (JSON.parse(Buffer.from(id, "base64url").toString()) as { export?: unknown }).export,
+    )
+  } catch {
+    return ""
+  }
+}
+
 /** The first user's calls the second one replays (set by cardsRequireSession). */
 let annWatch: string | undefined
 let annUpload: string | undefined
@@ -317,8 +329,8 @@ const cardsRequireSession = async (page: Page) => {
   await realtime.getByText(/broadcast it to/).waitFor()
   await useServiceCards(page)
 
-  annWatch = calls.find((c) => c.url().includes("watchWorkflow"))?.url()
-  annUpload = calls.find((c) => c.url().includes("listFiles"))?.url()
+  annWatch = calls.find((c) => serverFnName(c.url()).startsWith("watchWorkflow"))?.url()
+  annUpload = calls.find((c) => serverFnName(c.url()).startsWith("listFiles"))?.url()
   const seen = new Map(calls.map((c) => [`${c.method()} ${c.url()}`, c]))
   const names = new Set<string>()
   for (const call of seen.values()) {
