@@ -124,7 +124,7 @@ try {
   check(run("--help", bin, ["--help"], consumer).includes("create-efforge"), "--help prints usage")
   check(
     run("dry run", bin, ["dry", "--yes", "--dry-run"], consumer).includes(
-      "dry run: nothing written",
+      "Dry run: nothing written",
     ),
     "a --dry-run create works",
   )
@@ -138,6 +138,14 @@ try {
     readFileSync(join(project, "packages/core/src/index.ts"), "utf8").includes("./mailer"),
     "add email exported the mailer",
   )
+  check(
+    run("graph", bin, ["graph", "--format=text"], project).includes("MailerLive"),
+    "graph shows the layer add email wired",
+  )
+  check(
+    run("info", bin, ["info", "email", "--json"], project).includes('"installed": true'),
+    "info sees the add-on in the project",
+  )
 
   // 3. the README's entry points, straight from the tarball
   const entry = join(work, "entry")
@@ -148,11 +156,11 @@ try {
       "npx",
       ["--yes", "--package", tarball, "create-efforge", "x", "--yes", "--dry-run"],
       entry,
-    ).includes("dry run"),
+    ).includes("Dry run"),
     "npx --package <tarball> create-efforge --dry-run works",
   )
   check(
-    run("pnpm dlx", "pnpm", ["dlx", tarball, "x", "--yes", "--dry-run"], entry).includes("dry run"),
+    run("pnpm dlx", "pnpm", ["dlx", tarball, "x", "--yes", "--dry-run"], entry).includes("Dry run"),
     "pnpm dlx <tarball> --dry-run works",
   )
 
