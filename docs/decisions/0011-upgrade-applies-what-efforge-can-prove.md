@@ -49,7 +49,7 @@ So:
   declaration only when the record shows it is efforge's own older one. A file efforge doesn't write
   keeps what it imported: if efforge's new version of a file drops a name an owner's file uses, or
   changes its type (asked of the project's own TypeScript when `node_modules` is there; any change
-  of the text counts when it isn't), that file is held back. A held file holds back what needs it,
+  of the text counts when it isn't), that file is held back. A held file holds back what needs it, and, since it stays as it is, keeps what it imports,
   to a fixed point, and each one is reported with the reason and, where efforge can name them, the
   lines that would let it apply.
 - **Two answers.** `needs-action` (a guard missing, efforge's pins of a set at two releases'
