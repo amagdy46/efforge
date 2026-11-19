@@ -283,7 +283,7 @@ it("a project from before cards gets a guarded card's add-on without the card, a
   expect(result.written).not.toContain(REGISTRY_FILE)
   expect(result.notes).toHaveLength(1)
   expect(result.notes[0]).toMatch(
-    /^No dashboard card for Realtime: .*registry\.ts.*nothing to do\.$/,
+    /^No dashboard card for Realtime: .*registry\.ts.*\(apps\/web\/src\/server\/realtime-demo\.ts\) are not\. Nothing else is needed: .*\.$/,
   )
 })
 

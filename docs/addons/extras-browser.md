@@ -144,7 +144,7 @@ None.
 - The container refuses private and local addresses (`apps/browser/src/url-policy.ts`, answered as `UrlRefused`). Keep that policy: the container fetches whatever it is sent, so without it it is a request-forgery proxy into your network.
 - Keep the Dockerfile's Playwright image tag and the `playwright` version in `apps/browser/package.json` in step, and update `apps/browser/package-lock.json` with `npm install --package-lock-only` after a dependency change.
 - Test code that opens pages with `BrowserInMemory` from `packages/core/test/browser-in-memory.ts` (see `browser.test.ts`); it needs no container.
-- The dashboard card's server function is `visitPage` in `apps/web/src/server/browser-demo.ts`.
+- The dashboard card's server function is `visitPage` in `apps/web/src/server/browser-demo.ts` (on a project with the dashboard).
 - Locally the container needs Docker. A page that never loads in local dev usually means the container cannot reach the internet: a host firewall that drops traffic from Docker's bridge network to the host blocks it.
 
 Only with `infra=none`:
@@ -159,7 +159,7 @@ Only with `auth=none`:
 
 #### Browser without auth
 
-- This project has no auth, so `visitPage` in `apps/web/src/server/browser-demo.ts` is open: anyone who can reach the app can make the container load public pages. Add auth (`efforge add auth/better-auth`, which guards it) or remove the demo before deploying.
+- This project has no auth, so `visitPage` in `apps/web/src/server/browser-demo.ts` (on a project with the dashboard) is open: anyone who can reach the app can make the container load public pages. Add auth (`efforge add auth/better-auth`, which guards it) or remove the demo before deploying.
 
 ## Limits
 

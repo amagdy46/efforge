@@ -417,9 +417,13 @@ export const addAddons = (
     const hasRegistry = (yield* read(REGISTRY_FILE)) !== undefined
     const notes: string[] = []
     const cardsSkipped: string[] = []
+    const demosSkipped: string[] = []
     const cardFiles = (m: AddonManifest) => {
       const files = (m.card?.files ?? []).filter((f) => switchedOn(m.id, f.when))
-      if (files.length > 0 && !hasRegistry) cardsSkipped.push(m.title)
+      if (files.length > 0 && !hasRegistry) {
+        cardsSkipped.push(m.title)
+        demosSkipped.push(...files.slice(1).map((f) => f.target))
+      }
       return hasRegistry ? files : []
     }
 
@@ -481,7 +485,7 @@ export const addAddons = (
     }
     if (cardsSkipped.length > 0)
       notes.push(
-        `No dashboard card for ${cardsSkipped.join(", ")}: this project has no ${REGISTRY_FILE} (made before efforge 0.3, or its dashboard was removed). The add-on works without it; there is nothing to do.`,
+        `No dashboard card for ${cardsSkipped.join(", ")}: this project has no ${REGISTRY_FILE} (made before efforge 0.3, or its dashboard was removed). Each add-on's service, layer and tests are written; its card${demosSkipped.length > 0 ? ` and the card's server functions (${demosSkipped.join(", ")})` : ""} are not. Nothing else is needed: call the service from your own server functions.`,
       )
     if (conflicts.length > 0)
       return yield* new OverlayConflict({

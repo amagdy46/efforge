@@ -388,7 +388,7 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
     },
     {
       "name": "STORAGE_SIGNING_SECRET",
-      "description": "HMAC secret for signed download URLs (wrangler secret put STORAGE_SIGNING_SECRET)",
+      "description": "HMAC secret for signed download URLs (production: a Worker secret, `wrangler secret put STORAGE_SIGNING_SECRET` or the deploy env with Alchemy)",
       "file": ".dev.vars",
       "set": true
     }

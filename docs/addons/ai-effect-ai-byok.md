@@ -174,7 +174,7 @@ Only with `auth=none`:
 ### AI (Effect AI, bring your own key)
 
 - Use the `Llm` service from `@repo/core` (`generateText(prompt)`, or `streamText(prompt)` for the answer as it is written; `ask` in `packages/core/src/llm.ts` is the program the dashboard card runs); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.
-- `apps/web/src/server/ai.ts` (`generateText`) and the dashboard card's `apps/web/src/server/ai-demo.ts` (`askModel`) are demo server functions; they are NOT gated because this project has no auth: anyone who can reach the app can call them and spend the configured API key. Add auth (`efforge add auth/better-auth`) or remove the demo before deploying. Gate any server function you add that spends model tokens the same way.
+- `apps/web/src/server/ai.ts` (`generateText`) and the dashboard card's `apps/web/src/server/ai-demo.ts` (on a project with the dashboard) (`askModel`) are demo server functions; they are NOT gated because this project has no auth: anyone who can reach the app can call them and spend the configured API key. Add auth (`efforge add auth/better-auth`) or remove the demo before deploying. Gate any server function you add that spends model tokens the same way.
 - Test code that calls a model with `LlmFixed(answer)` (a fixed answer, streamed a word at a time) or `LlmUnconfigured` from `packages/core/test/llm-fixed.ts`; see `llm.test.ts`. Tests never call a provider.
 - Never log, return or store the API key in the clear. Never commit a key: `LLM_API_KEY` goes in the settings file `pnpm dev` reads, and in a Worker secret in production.
 
@@ -183,7 +183,7 @@ Only with `auth=better-auth`:
 ### AI (Effect AI, bring your own key)
 
 - Use the `Llm` service from `@repo/core` (`generateText(prompt)`, or `streamText(prompt)` for the answer as it is written; `ask` in `packages/core/src/llm.ts` is the program the dashboard card runs); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.
-- `apps/web/src/server/ai.ts` (`generateText`) and the dashboard card's `apps/web/src/server/ai-demo.ts` (`askModel`) are demo server functions gated by `requireSession`. Gate any server function you add that spends model tokens the same way.
+- `apps/web/src/server/ai.ts` (`generateText`) and the dashboard card's `apps/web/src/server/ai-demo.ts` (on a project with the dashboard) (`askModel`) are demo server functions gated by `requireSession`. Gate any server function you add that spends model tokens the same way.
 - Test code that calls a model with `LlmFixed(answer)` (a fixed answer, streamed a word at a time) or `LlmUnconfigured` from `packages/core/test/llm-fixed.ts`; see `llm.test.ts`. Tests never call a provider.
 - Never log, return or store the API key in the clear. Never commit a key: `LLM_API_KEY` goes in the settings file `pnpm dev` reads, and in a Worker secret in production.
 
@@ -194,7 +194,7 @@ Only with `auth=better-auth-orgs`:
 - Use the `Llm` service from `@repo/core` (`generateText(prompt)`, or `streamText(prompt)` for the answer as it is written; `ask` in `packages/core/src/llm.ts` is the program the dashboard card runs); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.
 - Each organization saves its own key at `/app/settings/ai`, stored in the `llm_credential` table (`packages/db`), encrypted with AES-GCM (WebCrypto) using `LLM_ENCRYPTION_KEY` (32 random bytes, base64: `openssl rand -base64 32`; the app refuses to start without a valid one). Rotating that key makes saved keys unreadable, so organizations must enter theirs again.
 - The key never goes back to the browser (only its last four characters, to owners and admins). Only owners and admins can set, clear or test it; keep that check on the server.
-- `apps/web/src/server/ai.ts` (`generateText`) and the dashboard card's `apps/web/src/server/ai-demo.ts` (`askModel`) are demo server functions behind `requireSession`. Gate any server function you add that spends model tokens the same way.
+- `apps/web/src/server/ai.ts` (`generateText`) and the dashboard card's `apps/web/src/server/ai-demo.ts` (on a project with the dashboard) (`askModel`) are demo server functions behind `requireSession`. Gate any server function you add that spends model tokens the same way.
 - Test code that calls a model with `LlmFixed(answer)` (a fixed answer, streamed a word at a time) or `LlmUnconfigured` from `packages/core/test/llm-fixed.ts`; see `llm.test.ts`. Tests never call a provider.
 - Never log, return or store the API key in the clear.
 

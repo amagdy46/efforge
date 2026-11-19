@@ -133,7 +133,7 @@ None.
 ### Email
 
 - Send mail through the `Mailer` service from `@repo/core` (`send({ to, subject, text, html? })`); do not use the `EMAIL` binding directly. Always send a `text` body. `sendTestEmail` in `packages/core/src/mailer.ts` is a program that uses it.
-- `MailerLive` in `apps/web/src/server/mailer.ts` picks the transport from `MAIL_TRANSPORT`: `console` (the local value) prints the message to the dev server log, anything else sends through Cloudflare Email Service with the `EMAIL` `send_email` binding. `MAIL_FROM` must be an address on a domain enabled for sending: `wrangler email sending enable <domain>`. The dashboard card's server functions are in `apps/web/src/server/email-demo.ts`.
+- `MailerLive` in `apps/web/src/server/mailer.ts` picks the transport from `MAIL_TRANSPORT`: `console` (the local value) prints the message to the dev server log, anything else sends through Cloudflare Email Service with the `EMAIL` `send_email` binding. `MAIL_FROM` must be an address on a domain enabled for sending: `wrangler email sending enable <domain>`. The dashboard card's server functions are in `apps/web/src/server/email-demo.ts` (on a project with the dashboard).
 - Test with `MailerInMemory` from `packages/core/test/mailer-in-memory.ts`, which records messages in `SentMail` instead of sending them, as `mailer.test.ts` does.
 - Transactional mail only (invitations, receipts, password resets); use a dedicated platform for marketing or bulk sends.
 
@@ -141,7 +141,7 @@ Only with `auth=none`:
 
 #### Email without auth
 
-- This project has no auth, so the test email server function in `apps/web/src/server/email-demo.ts` is open: with `MAIL_TRANSPORT=cloudflare`, anyone who can reach the app can send mail from your domain. Add auth (`efforge add auth/better-auth`, which guards it) or remove the demo before deploying.
+- This project has no auth, so the test email server function in `apps/web/src/server/email-demo.ts` (on a project with the dashboard) is open: with `MAIL_TRANSPORT=cloudflare`, anyone who can reach the app can send mail from your domain. Add auth (`efforge add auth/better-auth`, which guards it) or remove the demo before deploying.
 
 Only with `auth=better-auth-orgs`:
 

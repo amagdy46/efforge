@@ -118,7 +118,7 @@ None.
 
 ## Environment variables
 
-- `STORAGE_SIGNING_SECRET`, for example `change-me-to-a-long-random-string`: HMAC secret for signed download URLs (wrangler secret put STORAGE_SIGNING_SECRET). Locally `dev-only-storage-signing-secret-replace-me`.
+- `STORAGE_SIGNING_SECRET`, for example `change-me-to-a-long-random-string`: HMAC secret for signed download URLs (production: a Worker secret, `wrangler secret put STORAGE_SIGNING_SECRET` or the deploy env with Alchemy). Locally `dev-only-storage-signing-secret-replace-me`.
 
 ## Package scripts
 
@@ -129,7 +129,7 @@ None.
 ### Storage
 
 - Use the `Storage` service from `@repo/core` (put, get, list, delete, signedUrl, verify); do not touch the R2 binding directly. Programs that use it (`upload`, `listUploads`, `deleteUpload`) live next to it in `packages/core/src/storage.ts`.
-- The layer is `StorageLive` in `apps/web/src/server/storage.ts`, on the `STORAGE` R2 binding; downloads are served by the Worker route in `storage-route.ts`. The dashboard card's server functions are in `apps/web/src/server/storage-demo.ts`.
+- The layer is `StorageLive` in `apps/web/src/server/storage.ts`, on the `STORAGE` R2 binding; downloads are served by the Worker route in `storage-route.ts`. The dashboard card's server functions are in `apps/web/src/server/storage-demo.ts` (on a project with the dashboard).
 - Signed URLs are HMAC-signed with the `STORAGE_SIGNING_SECRET` secret (at least 32 characters; without it every page says "Not configured yet" and names it). Never log or return it.
 - Storage keys are opaque: generate them on the server, never from raw user input. Files are served as attachments with `nosniff`, inline only for raster images.
 - Test with `StorageInMemory` from `packages/core/test/storage-in-memory.ts` (`layer(StorageInMemory)` from `@effect/vitest`), as `storage.test.ts` does; do not mock R2.
@@ -138,7 +138,7 @@ Only with `auth=none`:
 
 #### Storage without auth
 
-- This project has no auth, so the upload and delete server functions in `apps/web/src/server/storage-demo.ts` are open: anyone who can reach the app can store files in the bucket. Add auth (`efforge add auth/better-auth`, which guards them) or remove the demo before deploying.
+- This project has no auth, so the upload and delete server functions in `apps/web/src/server/storage-demo.ts` (on a project with the dashboard) are open: anyone who can reach the app can store files in the bucket. Add auth (`efforge add auth/better-auth`, which guards them) or remove the demo before deploying.
 
 ## Limits
 
