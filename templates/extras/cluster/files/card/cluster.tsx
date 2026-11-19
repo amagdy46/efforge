@@ -253,8 +253,9 @@ function ClusterDemo() {
       <p className="rounded-md border bg-background p-3 text-xs text-muted-foreground">
         <span className="font-medium text-foreground">Experimental.</span>{" "}
         <code className="font-mono">@effect/platform-cloudflare</code> may change in a patch
-        release, so efforge pins it exactly. A durable sleep wakes about a minute late today, so
-        this workflow waits on an approval instead. AGENTS.md, Cluster, lists every limit.
+        release, so efforge pins it exactly. A durable sleep that is a run's first wait wakes about
+        a minute late in this version, so this workflow waits on an approval instead. AGENTS.md,
+        Cluster, lists every limit.
       </p>
       <CounterRow />
       <ReviewRow />

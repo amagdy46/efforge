@@ -73,8 +73,8 @@ it("the intro is plain without a colour terminal and coloured with one", () => {
   expect(introLine("", "256", "1.2.3")).toBe("\x1b[1;38;5;255;48;5;25m ef \x1b[0m efforge 1.2.3")
 })
 
-it("each of the nine layer colours reaches 3:1 on its theme's surfaces and stands apart from its neighbours", () => {
-  expect(layerColors).toHaveLength(9)
+it("each of the ten layer colours reaches 3:1 on its theme's surfaces and stands apart from its neighbours", () => {
+  expect(layerColors).toHaveLength(10)
   for (const theme of ["light", "dark"] as const) {
     for (const c of layerColors)
       expect(onSurfaces(c[theme], theme), `${c.name} ${theme}`).toBeGreaterThanOrEqual(3)

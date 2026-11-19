@@ -253,6 +253,10 @@ const layout = (input: ReadmeInput): string => {
     )
   if (has("extras/browser"))
     lines.push("`apps/browser`: the Playwright server that runs in a Cloudflare Container.")
+  if (has("extras/cluster"))
+    lines.push(
+      "`apps/web/src/cluster/objects.ts`: the Durable Object classes Effect Cluster runs on (experimental; `AGENTS.md`, Cluster).",
+    )
   lines.push(
     stack.infra === "alchemy"
       ? "`infra/alchemy.run.ts`: the Worker and every resource it binds (there is no `wrangler.jsonc`); `.github/workflows/deploy.yml` deploys it."
@@ -408,6 +412,9 @@ const beforeDeploy = (input: ReadmeInput): string => {
   return "Before you deploy: this project has no auth, so the dashboard's demos answer anyone who can reach the app, and the ones that write or spend say so on their card. Add auth (`npx -y create-efforge add auth/better-auth`) or remove those demos first."
 }
 
+const CLUSTER_DEPLOY =
+  " The cluster add-on is experimental and efforge has not deployed it: `AGENTS.md`, Cluster, lists what only shows on Cloudflare."
+
 const deployWrangler = (input: ReadmeInput): string => {
   const { stack } = input
   const ids = addonIdsFor(stack)
@@ -439,7 +446,7 @@ const deployWrangler = (input: ReadmeInput): string => {
     .filter((id) => ids.includes(id))
     .flatMap((id) => resources[id]?.wrangler ?? [])
   steps.push(
-    `Deploy: \`pnpm run deploy\` (builds \`apps/web\`, then \`wrangler deploy\`).${notes.length > 0 ? ` The first deploy ${and(notes)}.` : ""}${ids.includes("extras/browser") ? " Docker must be running: the deploy builds the `apps/browser` image and pushes it (Containers need the Workers Paid plan)." : ""}`,
+    `Deploy: \`pnpm run deploy\` (builds \`apps/web\`, then \`wrangler deploy\`).${notes.length > 0 ? ` The first deploy ${and(notes)}.` : ""}${ids.includes("extras/browser") ? " Docker must be running: the deploy builds the `apps/browser` image and pushes it (Containers need the Workers Paid plan)." : ""}${ids.includes("extras/cluster") ? CLUSTER_DEPLOY : ""}`,
   )
   return [
     `\`wrangler.jsonc\` declares the Worker and its bindings. These steps follow wrangler ${versions.wrangler}'s own help; efforge's tests do not deploy to a Cloudflare account. \`pnpm run deploy --dry-run\` builds the app and checks the config without uploading (it does not check that the ids are real).`,
@@ -471,7 +478,7 @@ const deployAlchemy = (input: ReadmeInput): string => {
       "Enable Email Sending for your domain, `pnpm exec wrangler email sending enable example.com` (sign in first with `pnpm exec wrangler login`), and send from an address on it (`MAIL_FROM`).",
     )
   steps.push(
-    `Deploy the \`prod\` stage: \`pnpm run deploy --stage prod --env-file .env.production\`. It prints the Worker's URL.${ids.includes("extras/browser") ? " Docker must be running to build the browser image (Containers need the Workers Paid plan)." : ""} Any other \`--stage\` name is a separate copy of everything; \`pnpm run destroy --stage <name> --env-file .env.production\` removes one.`,
+    `Deploy the \`prod\` stage: \`pnpm run deploy --stage prod --env-file .env.production\`. It prints the Worker's URL.${ids.includes("extras/browser") ? " Docker must be running to build the browser image (Containers need the Workers Paid plan)." : ""}${ids.includes("extras/cluster") ? CLUSTER_DEPLOY : ""} Any other \`--stage\` name is a separate copy of everything; \`pnpm run destroy --stage <name> --env-file .env.production\` removes one.`,
     "In CI, `.github/workflows/deploy.yml` deploys `main` to `prod` and each pull request to its own stage; `infra/README.md` lists the repository secrets it needs. CI keeps Alchemy's state in a store on Cloudflare, while a deploy from your machine keeps it in `.alchemy/`: the two don't know about each other, and CI fails on resources a local `prod` deploy created. Deploy each stage from one place: once CI deploys `prod`, deploy from your machine only under another `--stage` name.",
   )
   return [

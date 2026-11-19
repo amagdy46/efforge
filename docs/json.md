@@ -1349,6 +1349,12 @@ npx -y create-efforge doctor --json --cwd my-app
       "fix": null
     },
     {
+      "id": "durable-objects",
+      "status": "ok",
+      "message": "This stack has no Durable Objects.",
+      "fix": null
+    },
+    {
       "id": "migrations",
       "status": "warn",
       "message": "2 of 2 migrations aren't applied to the local D1 database (0001_init.sql, 0002_auth.sql), so pnpm dev runs against missing tables.",
