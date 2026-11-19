@@ -52,7 +52,16 @@ A signal in the first fraction of a second, before efforge has started, can end 
 
 ## Not part of the contract
 
-`--help`, `--completions` and `--wizard` print text for people, with or without `--json`. `--version --json` prints the envelope alone (`{ efforge, contract, ok: true }`), which is the cheapest way to check which CLI and contract you have.
+The flags every command gets from the CLI library behave the same with or without a terminal, and none of them prompts:
+
+| Flag | What it does |
+|---|---|
+| `--help`, `-h` | Prints the help for the command as text on stdout and exits `0`, with or without `--json`. |
+| `--version`, `-v` | Prints `create-efforge v<version>` and exits `0`. With `--json` it prints the envelope alone (`{ efforge, contract, ok: true }`), which is the cheapest way to check which CLI and contract you have. |
+| `--completions <shell>` | Prints a completion script for `bash`, `zsh`, `fish` or `powershell` as text and exits `0`, with or without `--json`. |
+| `--log-level <level>` | Accepted by every command and changes nothing efforge prints: efforge logs nothing. Any other value is an `InvalidFlagValue` error. |
+
+The library's `--wizard` is not one of efforge's flags (efforge's own prompts do its job): it is an `UnknownFlag` error with `fix: null`.
 
 ## `create`
 

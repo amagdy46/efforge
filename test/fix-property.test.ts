@@ -497,7 +497,7 @@ const wantsJson = (args: ReadonlyArray<string>) => {
 const builtIn = (args: ReadonlyArray<string>) => {
   const end = args.indexOf("--")
   return (end < 0 ? args : args.slice(0, end)).some((a) =>
-    /^(?:--help|-h|--version|-v|--wizard)(?:=|$)/.test(a),
+    /^(?:--help|-h|--version|-v)(?:=|$)/.test(a),
   )
 }
 

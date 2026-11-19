@@ -94,7 +94,7 @@ const stackFlags = slots.map((s) => s.id as string)
 const choicesOf = (name: string): ReadonlyArray<string> | undefined =>
   name === "preset" ? presetIds : slots.find((s) => s.id === name)?.options.map((o) => o.id)
 const globalValues = ["log-level", "completions"]
-const globalBooleans = ["help", "version", "wizard"]
+const globalBooleans = ["help", "version"]
 const known: Record<Verb, { readonly values: string[]; readonly booleans: string[] }> = {
   create: {
     values: ["preset", ...stackFlags, ...globalValues],
@@ -468,7 +468,6 @@ export const commandLine = (args: ReadonlyArray<string>): string => {
     i.verb === "create" &&
     switchOf(v, "yes") !== true &&
     switchOf(v, "json") !== true &&
-    switchOf(v, "wizard") !== true &&
     switchOf(v, "help") !== true
   // before `--`, where it is still a flag
   const end = args.indexOf("--")

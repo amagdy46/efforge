@@ -40,7 +40,7 @@ A preset's contents can change between versions, so nothing records its name: th
 
 `--dry-run` prints a line per add-on, how many files it writes and in which top-level directories (`base 64 apps/web 45, (root) 13, ...`, then `auth/better-auth +20 ...`); `--verbose` lists every file under its add-on, and `--json` always has the full list. `create` has no `--cwd`: it creates the project under the directory you run it in, and every path it prints is relative to that; run it from there (`cd ~/projects && npx create-efforge my-app`).
 
-Also available: `--help` (with examples), `--version`, `--completions bash|zsh|fish` (prints a completion script that covers both `create-efforge` and `efforge`) and `--log-level debug`.
+Also available: `--help` (with examples), `--version`, `--completions bash|zsh|fish|powershell` (prints a completion script that covers both `create-efforge` and `efforge`) and `--log-level`, which efforge accepts and which changes nothing, since efforge logs nothing. None of them prompts. efforge has no `--wizard`: the prompts above do that job.
 
 The summary before writing, and the `command` field of `efforge.jsonc`, give a non-interactive command that recreates the stack, for example:
 

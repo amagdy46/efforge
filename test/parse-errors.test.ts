@@ -1,8 +1,10 @@
-import { readdirSync, readFileSync } from "node:fs"
+import { spawnSync } from "node:child_process"
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { stripVTControlCharacters } from "node:util"
 import { NodeServices } from "@effect/platform-node"
-import { afterEach, beforeEach, expect, it, vi } from "@effect/vitest"
+import { afterAll, afterEach, beforeEach, expect, it, vi } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { runWith } from "../src/cli.ts"
 import { TemplatesDir } from "../src/commands/create.ts"
@@ -119,4 +121,64 @@ it("no user-facing text names a hard-coded version like v0.1", () => {
     )
   files.push(...walk("src"), ...walk("templates").filter((f) => !f.endsWith("package-lock")))
   for (const f of files) expect(readFileSync(join(root, f), "utf8"), f).not.toMatch(/\bv0\.\d+\b/)
+})
+
+// The library's built-in flags, run as an agent runs them: no terminal (stdin closed) and CI=1.
+// None may prompt or hang; --wizard (which prompted and exited 0) isn't one of efforge's flags.
+const bin = new URL("../src/bin.ts", import.meta.url).pathname
+const empty = mkdtempSync(join(tmpdir(), "efforge-builtins-"))
+afterAll(() => rmSync(empty, { recursive: true, force: true }))
+const run = (args: string[]) => {
+  const r = spawnSync(process.execPath, [bin, ...args], {
+    cwd: empty,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, CI: "1" },
+    encoding: "utf8",
+    timeout: 20_000,
+  })
+  return { code: r.status, out: r.stdout, err: stripVTControlCharacters(r.stderr) }
+}
+
+it.each([
+  [["--wizard"]],
+  [["add", "--wizard"]],
+  [["--wizard", "--json"]],
+  [["list", "--wizard", "--json"]],
+])("without a terminal, %j is an unknown flag, not a prompt", (args) => {
+  const r = run(args)
+  expect(r.code).toBe(1)
+  expect(r.out + r.err).not.toContain("Wizard")
+  if (args.includes("--json")) {
+    const doc = JSON.parse(r.out)
+    expect(doc.error).toMatchObject({ code: "UnknownFlag", flag: "--wizard", fix: null })
+    expect(r.err).toBe("")
+  } else expect(r.err).toContain("Unknown flag --wizard.")
+})
+
+it.each([
+  [["--help"], "USAGE"],
+  [["--help", "--json"], "USAGE"],
+  [["-h"], "USAGE"],
+  [["--version"], "create-efforge v"],
+  [["--completions", "bash"], "complete -F"],
+  [["--completions", "zsh", "--json"], "#compdef"],
+])("without a terminal, %j prints text and exits 0", (args, text) => {
+  const r = run(args)
+  expect(r.code).toBe(0)
+  expect(r.out).toContain(text)
+  expect(r.out).not.toContain("--wizard")
+})
+
+it.each([[["--version", "--json"]], [["-v", "--json"]]])("%j prints the envelope alone", (args) => {
+  const r = run(args)
+  expect(r.code).toBe(0)
+  expect(Object.keys(JSON.parse(r.out))).toEqual(["efforge", "contract", "ok"])
+})
+
+it("--log-level is accepted and changes nothing efforge prints", () => {
+  const a = run(["list", "--json"])
+  const b = run(["list", "--json", "--log-level=all"])
+  expect(b.code).toBe(0)
+  expect(b.err).toBe("")
+  expect(JSON.parse(b.out)).toEqual(JSON.parse(a.out))
 })

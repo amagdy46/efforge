@@ -1,5 +1,5 @@
 import { Console, Effect, Option, Stdio } from "effect"
-import { type CliError, CliOutput, Command, Completions } from "effect/cli"
+import { CliConfig, type CliError, CliOutput, Command, Completions, GlobalFlag } from "effect/cli"
 import { BIN, type ErrorCode, type Failure, Invocation, printSuccess, report } from "./contract.ts"
 import { addCommand } from "./commands/add.ts"
 import { createCommand, createConfig, createHandler, presetFailure } from "./commands/create.ts"
@@ -354,11 +354,28 @@ export const helpFormatter = (base: CliOutput.Formatter): CliOutput.Formatter =>
       .replace(/([^\n])\n((?:\S*\[1m)?EXAMPLES)/, "$1\n\n$2"),
 })
 
+// --- Built-in flags -----------------------------------------------------------------
+// Effect's runner adds --help, --version, --wizard, --completions and --log-level. The wizard
+// prompts even without a terminal and exits 0 when the prompt fails, and efforge's own prompts
+// already do its job, so efforge leaves it out: `--wizard` is an unknown flag like any other.
+
+export const builtIns = [
+  GlobalFlag.Help,
+  GlobalFlag.Version,
+  GlobalFlag.Completions,
+  GlobalFlag.LogLevel,
+] as const
+const cliConfig = CliConfig.layer({ builtIns })
+
 const runRoot = (args: ReadonlyArray<string>) =>
   Command.runWith(root, { version: efforgeVersion })(args).pipe(
     Effect.provide(CliOutput.layer(helpFormatter(CliOutput.defaultFormatter()))),
+    Effect.provide(cliConfig),
   )
-const runProbe = Command.runWith(probe, { version: efforgeVersion, renderErrors: false })
+const runProbe = (args: ReadonlyArray<string>) =>
+  Command.runWith(probe, { version: efforgeVersion, renderErrors: false })(args).pipe(
+    Effect.provide(cliConfig),
+  )
 
 /** Runs the CLI with explicit arguments (the entry point reads them from Stdio; tests pass them). */
 export const runWith = (args: ReadonlyArray<string>) =>
@@ -367,23 +384,24 @@ export const runWith = (args: ReadonlyArray<string>) =>
     if (shell === "bash" || shell === "zsh" || shell === "fish" || shell === "powershell")
       return yield* Console.log(completionScript(shell))
     // `--version --json`: the envelope alone says which CLI and contract this is
-    if (wantsJson(args) && args.includes("--version") && intentOf(args).operands.length === 0)
+    if (
+      wantsJson(args) &&
+      (args.includes("--version") || args.includes("-v")) &&
+      intentOf(args).operands.length === 0
+    )
       return yield* printSuccess({})
     // before parsing: a mistyped `add` rarely parses as a create, and its parse error's fix
     // would turn it into one
     const command = notACreate(args) ?? presetFailure(args)
     if (command !== undefined) return yield* report(wantsJson(args), command)
-    // the wizard prompts, so it can't be dry-parsed; it reports its own errors
-    if (!args.some((a) => a === "--wizard" || a.startsWith("--wizard="))) {
-      const invalid = yield* runProbe(args).pipe(
-        Effect.provideService(Console.Console, silent),
-        Effect.as(undefined),
-        Effect.catch((e) =>
-          Effect.succeed(e._tag === "ShowHelp" && e.errors.length > 0 ? e : undefined),
-        ),
-      )
-      if (invalid !== undefined) return yield* reportParseError(args, invalid)
-    }
+    const invalid = yield* runProbe(args).pipe(
+      Effect.provideService(Console.Console, silent),
+      Effect.as(undefined),
+      Effect.catch((e) =>
+        Effect.succeed(e._tag === "ShowHelp" && e.errors.length > 0 ? e : undefined),
+      ),
+    )
+    if (invalid !== undefined) return yield* reportParseError(args, invalid)
     return yield* runRoot(args)
   }).pipe(Effect.provideService(Invocation, args))
 
