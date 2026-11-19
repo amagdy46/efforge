@@ -21,6 +21,7 @@ import type { TransformCall } from "./transforms/index.ts"
 import { Node, SyntaxKind } from "ts-morph"
 import { parseTs } from "./transforms/util.ts"
 import { missingOverrides, pinnedPnpm, planUpgrade, readWorkspace } from "./upgrade.ts"
+import { ignoredBy, ignoredMessage } from "./ignored.ts"
 import {
   effectOverrides,
   efforgeVersion,
@@ -65,6 +66,8 @@ export interface Probe {
   readonly appliedD1: (files: ReadonlyArray<string>) => string[] | undefined
   /** Files with uncommitted changes under `dir`, or undefined when it isn't in a git checkout. */
   readonly dirty: (dir: string) => string[] | undefined
+  /** The git ignore rule that hides the project in `dir`, or undefined (src/ignored.ts). */
+  readonly ignoredBy: (dir: string) => string | undefined
 }
 
 const spawnText = (cmd: string, args: string[], cwd: string, timeout: number) => {
@@ -139,6 +142,7 @@ export const liveProbe: Probe = {
       .map((l) => l.slice(3).trim())
       .filter((l) => l !== "")
   },
+  ignoredBy,
 }
 
 export const DoctorProbe = Context.Reference<Probe>("efforge/DoctorProbe", {
@@ -310,6 +314,23 @@ const pnpmCheck: Check = {
 }
 
 // --- The project file ---------------------------------------------------------------------------
+
+const ignoredCheck: Check = {
+  id: "ignored",
+  title: "Not ignored by git",
+  run: (ctx) =>
+    Effect.sync(() => {
+      const rule = ctx.probe.ignoredBy(ctx.dir)
+      return rule === undefined
+        ? ok("git doesn't ignore the project's files.")
+        : {
+            status: "fail" as const,
+            message: ignoredMessage("The project", rule),
+            fix: ctx.here("git init"),
+            details: { rule },
+          }
+    }),
+}
 
 const manifestCheck: Check = {
   id: "manifest",
@@ -1144,6 +1165,7 @@ export const checks: ReadonlyArray<Check> = [
   nodeCheck,
   pnpmCheck,
   manifestCheck,
+  ignoredCheck,
   installCheck,
   effectCheck,
   guardCheck,

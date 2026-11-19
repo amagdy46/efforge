@@ -166,7 +166,7 @@ It changes nothing and uses no network unless you pass `--online` (to run `pnpm 
 
 ## Troubleshooting
 
-**`pnpm check` says "Expected at least one target file".** The formatter reads `.gitignore` files in parent directories, even outside a git repository. If a parent directory ignores everything (for example a dotfiles `~/.gitignore` containing `*`), a project created with `--no-git` sees no files. Run `git init` in the project; the default flow already does this.
+**`pnpm check` says "Expected at least one target file", or the app renders without styles.** The formatter and Tailwind both skip files a `.gitignore` ignores, and a project that isn't its own git repository is under the ignore rules of the repository around it. If that one ignores everything (a dotfiles repository in `~` with `*` in its `.gitignore`), a project created with `--no-git` has no files to check and no classes to style. `create` says so when it happens (a warning under `--json`), and `doctor`'s `ignored` check names the rule. Run `git init` in the project: a repository of its own has its own ignore rules. The default flow already does this.
 
 **The app returns 500 at startup.** A layer is missing configuration. Run `npx create-efforge doctor`: its `env` check names each variable `.dev.vars` (`.env` with Alchemy) lacks. `.env.example` lists what each add-on needs, and a value marked "Fill in" is a secret only you have.
 

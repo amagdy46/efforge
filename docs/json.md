@@ -135,6 +135,8 @@ npx -y create-efforge create my-app --json --database=d1 --auth=better-auth
 }
 ```
 
+When the project has no repository of its own (`--no-git`, or `git init` failed) and git ignores it (a `.gitignore` above it with `*`), `warnings` says so, with the rule and `git init` to run in the project: without it `pnpm check` sees no files and Tailwind styles nothing.
+
 With `--dry-run`, nothing is written: `files` is what would be, and `nextSteps` is the command without `--dry-run`, run where you are.
 
 <!-- example: create-dry-run -->
@@ -1174,6 +1176,7 @@ Each of `checks` has a stable `id`, a `status` (`ok`, `warn`, `fail`, `skipped`,
 | `node` | Node against `engines` (efforge's own range when the project has none). |
 | `pnpm` | pnpm on PATH, and `packageManager` new enough to honour the Effect overrides. |
 | `manifest` | efforge.jsonc against its schema. |
+| `ignored` | Whether git ignores the project's files: a project that isn't its own repository, under a `.gitignore` that ignores everything (a dotfiles repository in `~` with `*`), has no files for `pnpm check` and no styles from Tailwind. `fix` is `git init` in the project; `details.rule` names the rule and its file. |
 | `install` | `node_modules` installed by pnpm and matching the package.json files, `pnpm-workspace.yaml` and `pnpm-lock.yaml`. |
 | `effect` | One Effect: every package released with `effect` resolved to the catalog's version, from the installed lockfile. |
 | `effect-guard` | The overrides that keep it so. |
@@ -1233,6 +1236,12 @@ npx -y create-efforge doctor --json --cwd my-app
       "id": "manifest",
       "status": "ok",
       "message": "efforge.jsonc is valid: made with efforge 0.2.1.",
+      "fix": null
+    },
+    {
+      "id": "ignored",
+      "status": "ok",
+      "message": "git doesn't ignore the project's files.",
       "fix": null
     },
     {

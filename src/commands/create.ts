@@ -8,6 +8,7 @@ import pc from "picocolors"
 import { addonIdsFor, type LoadedAddon, loadAddons } from "../addon.ts"
 import {
   BIN,
+  inDir,
   type Failure,
   internal,
   Invocation,
@@ -15,6 +16,7 @@ import {
   report,
   typoOf,
 } from "../contract.ts"
+import { ignoredBy, ignoredMessage } from "../ignored.ts"
 import { COMMIT, exec, FORMAT, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
 import { alternative, finish, fix, intentOf, meantName, withFlag } from "../fix.ts"
 import { generate, matches } from "../generate.ts"
@@ -523,6 +525,17 @@ export const create = (opts: CreateOptions) =>
       ),
     )
 
+    // without a repository of its own, a parent's ignore rules can hide the whole project
+    if (gitState === "skipped") {
+      const rule = ignoredBy(dir)
+      if (rule !== undefined)
+        yield* io.warn(
+          ignoredMessage(inPlace ? "This directory" : `./${dirName}`, rule).replace(
+            "Run git init in the project",
+            `Run ${inDir(inPlace ? "" : dirName, ["git init"])}`,
+          ),
+        )
+    }
     if (opts.json)
       return yield* printSuccess({
         dryRun: false,
