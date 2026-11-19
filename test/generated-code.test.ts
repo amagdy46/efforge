@@ -315,7 +315,8 @@ it("the layer graph leaves no layer alone on a row, for one to twelve layers at 
         `${count} in ${columns}`,
       ).toBe(count)
       expect(Math.max(...rows), `${count} in ${columns}`).toBeLessThanOrEqual(columns)
-      if (count > 1) expect(Math.min(...rows), `${count} in ${columns}: ${rows}`).toBeGreaterThan(1)
+      if (count > 1)
+        expect(Math.min(...rows), `${count} in ${columns}: ${rows.join(" ")}`).toBeGreaterThan(1)
     }
   // nine layers, the stack with everything, at the README's width
   expect(rowSizes(9, 4)).toEqual([3, 3, 3])
