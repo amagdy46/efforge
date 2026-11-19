@@ -43,7 +43,7 @@ npx -y create-efforge@latest create my-app --json --preset=ai
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/amagdy46/efforge/main/.github/assets/dashboard-dark.png">
-  <img src="https://raw.githubusercontent.com/amagdy46/efforge/main/.github/assets/dashboard-light.png" width="830" alt="The database card of a new project's dashboard. Left, a working demo: a New note field, an Add note button and the stored notes. Right, the code behind it: createNote in packages/core/src/notes.ts, which fails with InvalidNote on a bad title and stores the note through the Notes service. Below, the files to read next: service, layer, test and the AGENTS.md section.">
+  <img src="https://raw.githubusercontent.com/amagdy46/efforge/main/.github/assets/dashboard-light.png" width="830" alt="The database card of a new project's dashboard. Left, a working demo: a New note field, an Add note button and the stored notes. Right, the code behind it: createNote in packages/core/src/notes.ts, which fails with InvalidNote on a bad title and stores the note through the Notes service. Under the demo, who can call it: any signed-in user, and sign-up is open until you close it. Below, the files to read next: service, layer, test and the AGENTS.md section.">
 </picture>
 
 You get a TypeScript monorepo: a [TanStack Start](https://tanstack.com/start) app on Cloudflare Workers, its server side written in Effect. Its dashboard has a card per capability, a working demo beside the code behind it. Above is the database card.
@@ -53,7 +53,7 @@ It needs Node 24.11+ or 26+ and pnpm.
 ## See it run
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/amagdy46/efforge/main/.github/assets/demo.gif" width="760" alt="Terminal recording: npm create efforge my-app picks the AI preset at the first question, then writes, installs and commits the project in under ten seconds. In the new project, efforge add email adds the Mailer service, and git diff shows the two lines it added to apps/web/src/server/layers.ts: the MailerLive import and MailerLive in AppLayer.">
+  <img src="https://raw.githubusercontent.com/amagdy46/efforge/main/.github/assets/demo.gif" width="760" alt="Terminal recording: npm create efforge my-app picks the AI preset at the first question, then writes, installs and commits the project in under ten seconds. In the new project, npx -y create-efforge add email adds the Mailer service and its dashboard card, and git diff shows the two lines it added to apps/web/src/server/layers.ts: the MailerLive import and MailerLive in AppLayer.">
 </p>
 
 Then start the app from the demo (the AI preset uses D1):
@@ -79,7 +79,7 @@ Interfaces and their tagged errors (errors with a name the compiler knows, such 
 
 ## Add, see, test, upgrade
 
-**Add.** `efforge add` wires a capability into a project you already have. It edits your code as code (AST transforms, not text), records a hash of each file it wrote, and refuses to overwrite one you changed. `add email` writes the `Mailer` service and its layer, and adds the layer to the app:
+**Add.** `efforge add` wires a capability into a project you already have. It parses each file it edits and changes the syntax tree, so your formatting and the code around the change stay as they were. It records a hash of each file it wrote, and refuses to overwrite one you changed. `add email` writes the `Mailer` service, its layer, a test and a dashboard card, and adds the layer to the app:
 
 ```sh
 npx -y create-efforge add email
@@ -98,7 +98,7 @@ npx -y create-efforge add email
 
 **See.** Besides the dashboard, `npx -y create-efforge graph` prints the layers `AppLayer` merges, with what each provides and needs, as Mermaid for a README or a pull request.
 
-**Test.** Code asks for a service, never a layer, so a test swaps the layer. From `packages/core/test/notes.test.ts` in every project with a database:
+**Test.** Code asks for a service, never a layer, so a test swaps the layer. Each capability comes with a test layer and a test that uses it. From `packages/core/test/notes.test.ts`, in every project with a database:
 
 <!-- sample: packages/core/test/notes.test.ts -->
 ```ts
@@ -189,6 +189,8 @@ apps/browser      Playwright container image             (extras=browser)
 efforge.jsonc     your stack, and a hash of each file efforge wrote
 AGENTS.md         layout and rules for coding agents
 ```
+
+With auth, every server function and every route under `/api/` refuses a caller without a session. The exceptions are sign-in, the session check and the landing page's stack, listed in `apps/web/src/server/public-*.json`. Sign-up is open until you close it: anyone can register and then use every card, the ones that spend your AI key included. `disableSignUp: true` in `apps/web/src/server/auth.ts` closes it.
 
 The project's README has the first deploy for its stack, and [Deploy](https://github.com/amagdy46/efforge/blob/main/docs/deploy.md) explains it. There is no telemetry.
 

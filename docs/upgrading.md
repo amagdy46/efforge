@@ -55,7 +55,7 @@ Every command exits `1` on an error. A job that runs `upgrade --check` fails onl
 
 efforge 0.2.0 made projects without the Effect guard. When Effect 4.1 came out, a new install could put two Effect versions in one build, and `pnpm build` failed with `failed to resolve import "effect/..."`. Here is one such project brought forward: made with 0.2.0 (`--database=d1 --orm=effect-sql`, the default Better Auth with organizations), with one change of its owner's, the dashboard's heading renamed, committed. The output below is from the efforge of this writing; its counts change with each release.
 
-`doctor` finds the problem:
+`doctor` finds the problem (exit code `2`):
 
 ```text
 ✗ pnpm          packageManager pins pnpm 12.4.2, which ignores the overrides that keep Effect's packages on one version (they work from pnpm 12.17.0). upgrade raises it with the overrides.
@@ -63,20 +63,20 @@ efforge 0.2.0 made projects without the Effect guard. When Effect 4.1 came out, 
 ✗ effect        effect is 4.0.5, but @effect/platform-node-shared 4.1.4, @effect/sql-sqlite-do 4.1.4 resolved to another version: two Effects in one build, which fails (Effect's packages only work at one shared version). pnpm-workspace.yaml lacks the overrides that prevent it; upgrade writes them and installs.
                 Try: npx -y create-efforge upgrade
 ...
-4 failed, 2 warnings, 6 ok, 1 skipped.
+4 failed, 2 warnings, 7 ok, 1 skipped.
 ```
 
 `upgrade --check` says what `upgrade` would do (exit code `2`):
 
 ```text
-Made with efforge 0.2.0; this is 0.2.1. Needs action: 2 things that break the project. Behind: 25 pins, 20 files to refresh, 30 new files, 1 file to give what the new ones need, 3 scripts, 2 to remove.
+Made with efforge 0.2.0; this is 0.2.1. Needs action: 2 things that break the project. Behind: 25 pins, 20 files to refresh, 32 new files, 3 files to give what the new ones need, 3 scripts, 2 to remove.
 
 Needs action
   ✗ pnpm-workspace.yaml has no overrides holding Effect's packages at effect 4.0.5. A library that asks for a newer one then installs it next to the older effect and the build breaks, as 0.2.0 projects did when Effect 4.1 shipped. (upgrade fixes it)
   ✗ packageManager pins pnpm 12.4.2, which accepts the Effect overrides and silently ignores them (they work from pnpm 12.17.0). (upgrade fixes it)
 ```
 
-`upgrade` applies it. It refreshed 20 files, added 30 (the dashboard's cards among them), removed two efforge no longer generates, and kept the dashboard the owner changed, with the two server files it imports:
+`upgrade` applies it (exit code `0`). It added 32 files and refreshed the rest of efforge's, removed two efforge no longer generates, and gave the root `package.json` the `deploy` script and `wrangler`, so [the first deploy](deploy.md) works as it does for a new project. It kept the dashboard the owner changed, with the server files it imports:
 
 ```text
 Kept as they are
@@ -87,10 +87,12 @@ Kept as they are
            Held with it, because they need it: apps/web/src/capabilities/runtime.tsx.
   held     apps/web/src/server/notes.ts
            Kept as it is: apps/web/src/routes/app/index.tsx imports `listNotes` with the type it has now from it, and efforge's new version changes it.
-           Held with it, because they need it: apps/web/src/capabilities/database.tsx, apps/web/src/capabilities/registry.ts, apps/web/src/routes/index.tsx, +1 more.
+           Held with it, because they need it: apps/web/src/capabilities/auth.tsx, apps/web/src/capabilities/database.tsx, apps/web/src/capabilities/registry.ts, +6 more.
+  held     apps/web/src/server/runtime.ts
+           Kept as it is: apps/web/src/server/greeting.ts imports `runtime` with the type it has now from it, and efforge's new version changes it.
 ```
 
-After it, `pnpm typecheck && pnpm check && pnpm test && pnpm build` passed, `doctor` reported no failure, and `upgrade --check` said "Up to date: nothing to apply". To take the new dashboard, the owner merges `apps/web/src/routes/app/index.tsx` with efforge's version by hand, then runs `upgrade` again for the held files.
+A held server file still gets `requireSession` on its server functions, which the project's lint asks for. After the upgrade, `pnpm typecheck && pnpm check && pnpm test && pnpm build` passed, `pnpm run deploy --dry-run` built the Worker with its `DB` binding, `doctor` reported no failure, and `upgrade --check` said "Up to date: nothing to apply". To take the new dashboard, the owner merges `apps/web/src/routes/app/index.tsx` with efforge's version by hand, then runs `upgrade` again for the held files.
 
 ## Without the new CLI
 

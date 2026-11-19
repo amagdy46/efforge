@@ -55,9 +55,9 @@ it.each(ids)("every Add it command on %s's page runs", { timeout: 120_000 }, asy
   const before = process.cwd()
   process.chdir(work)
   try {
-    const create = (creates[0] as string).split(" ")
-    const made = await cli([...create, "--dry-run"])
-    expect(made.code, `${create.join(" ")}\n${made.out}`).toBe(0)
+    const pageCreate = (creates[0] as string).split(" ")
+    const dry = await cli([...pageCreate, "--dry-run"])
+    expect(dry.code, `${pageCreate.join(" ")}\n${dry.out}`).toBe(0)
     for (const [i, c] of commands.entries()) {
       const dir = join(work, `p${i}`)
       // toCommand: `npx -y create-efforge create <name> --yes ...`
