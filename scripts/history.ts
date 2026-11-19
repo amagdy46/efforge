@@ -7,7 +7,7 @@
 //
 // It renders every stack the release allows (each database, ORM, auth, infra and AI choice, with
 // no extras and with all of them) in memory, takes the union, and writes the entry into
-// src/history.data.ts. The test in test/history.test.ts fails while this efforge's version is
+// src/history.data.ts. A test in test/upgrade.test.ts fails while this efforge's version is
 // missing.
 
 import { readFileSync, writeFileSync } from "node:fs"

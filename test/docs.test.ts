@@ -208,11 +208,11 @@ const source = (path: string): string | undefined =>
       : undefined
     : project.get(path)
 
-it("every code sample in docs/ is a contiguous excerpt of the file it names", () => {
+it("every code sample in docs/ and README.md is a contiguous excerpt of the file it names", () => {
   // A sample is a fenced block right after `<!-- sample: <path> -->`.
   const problems: string[] = []
   let count = 0
-  for (const file of markdown("docs")) {
+  for (const file of [...markdown("docs"), "README.md"]) {
     for (const m of read(file).matchAll(/<!-- sample: (\S+) -->\n+```\w*\n([\s\S]*?)```/g)) {
       count++
       const [, path = "", body = ""] = m

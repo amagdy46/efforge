@@ -103,20 +103,18 @@ const shoot = async (baseURL: string) => {
     await page.waitForURL(/\/app$/)
     await hydrated(page)
     const card = page.locator(CARD)
-    // the stylesheet is in place once the card has its rounded border
+    // the stylesheet is in place once the card has its rounded border (page code is a string:
+    // this file is type-checked without the DOM's types)
     await page.waitForFunction(
-      (selector) => {
-        const el = document.querySelector(selector)
-        return el !== null && getComputedStyle(el).borderTopLeftRadius !== "0px"
-      },
-      CARD,
+      `getComputedStyle(document.querySelector(${JSON.stringify(CARD)})).borderTopLeftRadius !== "0px"`,
+      undefined,
       { timeout: 60_000 },
     )
     await card.getByLabel("New note").fill("Read the code beside each demo")
     await card.getByRole("button", { name: "Add note" }).click()
     await card.getByText("Read the code beside each demo").waitFor()
     // no caret, focus ring or hover state in the picture
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+    await page.evaluate("document.activeElement?.blur()")
     await page.mouse.move(0, 0)
     for (const scheme of ["light", "dark"] as const) {
       // the app follows the system theme until someone picks one
@@ -145,11 +143,15 @@ try {
   run("pnpm", ["db:migrate"], app)
   const port = await freePort()
   // its own process group (pnpm -> vite -> workerd), so stopping it stops all of it
-  dev = spawn("pnpm", ["--filter", "web", "exec", "vite", "dev", "--port", `${port}`, "--strictPort"], {
-    cwd: app,
-    detached: true,
-    stdio: "ignore",
-  })
+  dev = spawn(
+    "pnpm",
+    ["--filter", "web", "exec", "vite", "dev", "--port", `${port}`, "--strictPort"],
+    {
+      cwd: app,
+      detached: true,
+      stdio: "ignore",
+    },
+  )
   const baseURL = `http://localhost:${port}`
   await waitFor(`${baseURL}/sign-in`)
   mkdirSync(out, { recursive: true })

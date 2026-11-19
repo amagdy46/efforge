@@ -40,7 +40,7 @@ A preset's contents can change between versions, so nothing records its name: th
 
 `--dry-run` prints a line per add-on, how many files it writes and in which top-level directories (`base 64 apps/web 45, (root) 13, ...`, then `auth/better-auth +20 ...`); `--verbose` lists every file under its add-on, and `--json` always has the full list. `create` has no `--cwd`: it creates the project under the directory you run it in, and every path it prints is relative to that; run it from there (`cd ~/projects && npx create-efforge my-app`).
 
-Also available: `--help` (with examples), `--version`, `--completions bash|zsh|fish` (prints a completion script that covers both `create-efforge` and `efforge`) and `--log-level debug`.
+Also available, on every command: `--help` (with examples), `--version`, `--completions bash|zsh|fish|powershell` (prints a completion script that covers both `create-efforge` and `efforge`), `--log-level debug`, and `--wizard`, which the CLI library adds: it builds a command by asking for each flag, and needs a terminal.
 
 The summary before writing, and the `command` field of `efforge.jsonc`, give a non-interactive command that recreates the stack, for example:
 
@@ -114,6 +114,8 @@ npx create-efforge graph --json           # nodes and edges
 npx create-efforge graph --write          # into README.md, kept current by add
 ```
 
+Run inside a generated project, or pass `--cwd <dir>`.
+
 Prints the project's layer graph: the layers `AppLayer` merges in `apps/web/src/server/layers.ts`, read from the file as it is, with what each provides and needs. The facts are the dashboard's: a card's `layer` (`provides`, `needs`), what `layers.ts` provides to a layer with `Layer.provide`, and, for a layer without a card, the service, bindings and settings its add-on declares. A layer you added yourself shows with provides and needs unknown. The Mermaid uses the tempering colours, one per layer in order, and renders on GitHub in light and dark. In a pipe, stdout carries only the graph (`graph > layers.mmd`).
 
 `--write` puts the graph in `README.md` between `<!-- efforge:readme:graph -->` markers, after the capabilities section, under a "Layer graph" heading, following the same rules as the other README regions. From then on `add` redraws it. A README without `efforge:readme` markers, or with broken ones, is never touched: `graph --write` says why and writes nothing (`ReadmeUnwritable`).
@@ -147,7 +149,7 @@ What it never does: put back a file you deleted, a section you removed from `AGE
 - **Behind**: nothing breaks, and `upgrade` has something to apply. Exit code `0`, or `3` with `--strict`.
 - **Up to date**: nothing to apply. Files you changed that differ from efforge's templates are listed, and never count.
 
-`--verbose` lists every pin and file; `--diff` adds each file against efforge's version (`--file <path>` for one). Exit code `1` is an error.
+`--verbose` lists every pin and file; `--diff` adds each file against efforge's version (`--file <path>` for one). `--json` prints the report, or what was applied, as one document ([json.md](json.md)). Exit code `1` is an error.
 
 A CI job can gate on `upgrade --check`: it fails only when something breaks the project, not when efforge ships a newer template. Add `--strict` to fail when `upgrade` has something to apply. A scheduled job in generated projects was considered and left out for now ([ADR 0009](decisions/0009-upgrade-check-and-doctor.md)); the design of the apply is [ADR 0011](decisions/0011-upgrade-applies-what-efforge-can-prove.md).
 
@@ -157,6 +159,8 @@ A CI job can gate on `upgrade --check`: it fails only when something breaks the 
 npx create-efforge doctor           # one line per check, the fix under each problem
 npx create-efforge doctor --json    # {status, checks: [{id, status, message, fix, details?}]}
 ```
+
+Run inside a generated project, or pass `--cwd <dir>`.
 
 Checks the checkout as it is now: Node and pnpm against `engines` and `packageManager`; that `node_modules` was installed by pnpm and matches the package.json files and `pnpm-lock.yaml`; that exactly one Effect version is installed (the one-line explanation of the 0.2.0 build failure); `pnpm peers check`, with the known upstream Alchemy `unenv` issue and optional peers reported as known; every env var the add-ons declare and the code reads, against `.dev.vars` (or `.env` with Alchemy) and `.env.example`, never printing a value; the bindings the stack needs in `wrangler.jsonc` or `infra/alchemy.run.ts`; D1 migrations not applied locally; whether the local Postgres answers (it starts nothing); `efforge.jsonc` against its schema; a layer in `layers.ts` for each add-on, read as code; and `upgrade --check`'s answer (a failure for needs action, a warning for behind).
 

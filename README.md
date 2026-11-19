@@ -8,8 +8,8 @@
 <!-- /generated -->
 
 <p align="center">
-  Start a Cloudflare app where every server capability is an <a href="https://effect.website">Effect</a> service.<br>
-  Pick a database, auth, AI and extras now; add more later with one command.
+  The maintained way to start a full-stack <a href="https://effect.website">Effect</a> app on Cloudflare.<br>
+  Every capability is a layer you can add, see, test and upgrade.
 </p>
 
 <p align="center">
@@ -18,56 +18,142 @@
   <a href="https://github.com/amagdy46/efforge/blob/main/LICENSE"><img src="https://img.shields.io/github/license/amagdy46/efforge" alt="MIT license"></a>
 </p>
 
+<table>
+<tr>
+<th>You, at the prompts</th>
+<th>A coding agent, no prompts</th>
+</tr>
+<tr>
+<td>
+
 ```sh
 npm create efforge my-app
 ```
 
+</td>
+<td>
+
+```sh
+npx -y create-efforge@latest create my-app --json --preset=ai
+```
+
+</td>
+</tr>
+</table>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/amagdy46/efforge/main/.github/assets/dashboard-dark.png">
+  <img src="https://raw.githubusercontent.com/amagdy46/efforge/main/.github/assets/dashboard-light.png" width="830" alt="The database card of a new project's dashboard. Left, a working demo: a New note field, an Add note button and the notes stored so far. Right, the code behind it, packages/core/src/notes.ts: createNote, an Effect.gen that trims the title, fails with InvalidNote if it is empty or too long, then stores it through the Notes service. Below, the service, the layer, the test and the AGENTS.md section to read next.">
+</picture>
+
+You get a TypeScript monorepo: a [TanStack Start](https://tanstack.com/start) app on Cloudflare Workers, with the server side written in Effect. It opens on a dashboard with one card per capability: a working demo next to the Effect code behind it, read from your files as they are now. Above is the database card.
+
+It needs Node 24.11+ or 26+ and pnpm. `pnpm create efforge my-app` and `bun create efforge my-app` work too.
+
+## See it run
+
 <p align="center">
-  <img src="https://raw.githubusercontent.com/amagdy46/efforge/main/.github/assets/demo.gif" width="760" alt="Terminal recording: npm create efforge my-app picks Cloudflare D1, Effect SQL, Better Auth with organizations and Storage, installs and commits in a few seconds, then efforge add email adds a Mailer service and lists the new env vars">
+  <img src="https://raw.githubusercontent.com/amagdy46/efforge/main/.github/assets/demo.gif" width="760" alt="Terminal recording: npm create efforge my-app, the AI preset picked at the first question (D1, Effect SQL, Better Auth, AI with your own key, realtime), the project written, installed and committed in under ten seconds; then efforge add email in the new project, and git diff showing the two lines it added to apps/web/src/server/layers.ts: an import of MailerLive and MailerLive in AppLayer.">
 </p>
 
-`pnpm create efforge my-app` and `bun create efforge my-app` work too. The generated project uses pnpm, and needs Node 24.11+ or 26+.
+Then start it:
 
-## Why efforge
+```sh
+cd my-app
+pnpm db:migrate   # create the tables in the local D1
+pnpm dev          # http://localhost:5173
+```
 
-You get a TypeScript monorepo: a [TanStack Start](https://tanstack.com/start) app on Cloudflare Workers, with the server side written in Effect.
+`create` prints these steps for the stack you picked (with Postgres, `docker compose up -d --wait` comes first), and so does the project's own README.
 
-- **Every capability is a service.** Database, auth, mail, storage and AI are Effect services with tagged errors in `packages/core`, implemented as layers and composed in one file, `apps/web/src/server/layers.ts`. Swap a layer to test or to change a provider.
-- **Cloudflare bindings stay at the edge of your code.** Only `apps/web/src/server/cloudflare.ts` reads the Worker environment. Everything else gets bindings through layers, so it runs under `@effect/vitest`.
-- **`efforge add` edits code, not docs.** Adding email later wires the layer, the exports, the binding and the secrets with AST transforms, and refuses to overwrite a file you've changed.
-- **Ready for coding agents.** The generated `AGENTS.md` describes the layout and its rules, and `pnpm check` runs format, lint (with Effect diagnostics) and types.
+## The idea
 
-CI generates 17 stacks on every change, installs them and runs typecheck, lint, tests and a build on each. There is no telemetry.
+In Effect, a **service** is a named interface your code asks for, and a **layer** is the code that implements it. efforge builds every server capability that way:
 
-Use something else if you want Next.js, a runtime other than Cloudflare, or plain async code without Effect: [create-effect-app](https://github.com/Effect-TS/examples) for an Effect project without the web stack, or `npm create cloudflare` for TanStack Start on Workers without Effect.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/amagdy46/efforge/main/docs/assets/layers-dark.svg">
+  <img src="https://raw.githubusercontent.com/amagdy46/efforge/main/docs/assets/layers-light.svg" width="520" alt="Diagram: the Notes interface; NotesLive implements it and is listed in AppLayer; in a test, NotesInMemory implements it instead and layer(NotesInMemory) provides it. The list below gives the same facts.">
+</picture>
+
+1. The interface, `Notes`, lives in `packages/core`, with its tagged errors (errors with a name the compiler knows, such as `InvalidNote`).
+2. A layer, `NotesLive`, implements it with database queries.
+3. One file, `apps/web/src/server/layers.ts`, puts the app's layers together in `AppLayer`.
+4. A test gives the same code `NotesInMemory` instead, so it needs no database.
+
+Only `apps/web/src/server/cloudflare.ts` reads the Worker's environment; everything else gets Cloudflare's resources through layers, so it runs in plain Node under `@effect/vitest`. [Why your app is shaped like this](https://github.com/amagdy46/efforge/blob/main/docs/architecture.md) walks through it.
+
+## Add, see, test, upgrade
+
+**Add.** `efforge add` wires a capability into a project you already have. It edits your code as code (AST transforms, not text), records a hash of each file it wrote, and refuses to overwrite one you changed. `add email` writes the `Mailer` service and its layer, then puts the layer in the app:
+
+```sh
+npx create-efforge add email
+```
+
+<!-- diff: apps/web/src/server/layers.ts after add email -->
+```diff
++import { MailerLive } from "./mailer"
+ ...
+ export const AppLayer = Layer.mergeAll(
+ ...
++  MailerLive,
+   /* efforge:layers */
+ )
+```
+
+`--dry-run` shows what would change; `info email` says what an add-on writes, edits and needs first.
+
+**See.** The dashboard at `/app` shows each capability working, next to its code. `npx create-efforge graph` prints what `AppLayer` merges, what each layer provides and what it needs, as Mermaid for a README or a pull request.
+
+**Test.** Code asks for a service, never a layer, so a test swaps the layer. From `packages/core/test/notes.test.ts` in every project with a database:
+
+<!-- sample: packages/core/test/notes.test.ts -->
+```ts
+layer(NotesInMemory)("createNote", (it) => {
+  it.effect("stores the trimmed title", () =>
+    Effect.gen(function* () {
+      const note = yield* createNote("  Buy milk ")
+      expect(note.title).toBe("Buy milk")
+      const notes = yield* Notes
+      expect(yield* notes.list).toContainEqual(note)
+    }),
+  )
+```
+
+`pnpm check` runs the formatter, lint with Effect's diagnostics, and types. [Swap a layer to test](https://github.com/amagdy46/efforge/blob/main/docs/testing.md) has the rest.
+
+**Upgrade.** A project keeps up with efforge after it is made. `doctor` says what is wrong with a checkout, one line each, with the command that fixes it. `upgrade` moves the project to the newest pins and templates. It changes only what it can prove is still efforge's, and lists the files of yours it kept.
+
+```sh
+npx -y create-efforge@latest doctor
+npx -y create-efforge@latest upgrade --check
+npx -y create-efforge@latest upgrade
+```
+
+[Keep a project current](https://github.com/amagdy46/efforge/blob/main/docs/upgrading.md) shows a project made by efforge 0.2.0 brought forward.
 
 ## Pick your stack
 
-The first question is a preset or each part. A preset is the whole stack in one choice: `saas` (Postgres, Drizzle, Better Auth with organizations, email and storage), `ai` (D1, Effect SQL, Better Auth, AI with your own key, realtime) or `minimal` (no database, no auth). `npx create-efforge list` shows them. Or answer each part (and go back). Each one is also a flag, so `npm create efforge my-app -- --yes --database=d1 --orm=effect-sql` asks nothing, and `npm create efforge my-app -- --preset=saas --database=d1` takes the preset with D1 instead.
+The first question offers a preset, a whole stack in one choice, or each part in turn. Every answer is also a flag.
 
-| Slot | Options | Default |
+| Preset | Stack |
+|---|---|
+| `saas` | Postgres, Drizzle, Better Auth with organizations, email and storage |
+| `ai` | D1, Effect SQL, Better Auth, AI with your own key, and realtime |
+| `minimal` | No database and no auth: the app, its layers and the dashboard |
+
+`npm create efforge my-app -- --preset=saas --database=d1` takes a preset with one part changed (a flag beside a preset always wins). Or set the parts:
+
+| Part | Flag values | Default |
 |---|---|---|
-| `database` | `postgres` (via Hyperdrive), `d1`, `none` | `postgres` |
-| `orm` | `drizzle`, `effect-sql`, `none` | `drizzle` |
-| `auth` | `better-auth-orgs`, `better-auth`, `none` | `better-auth-orgs` |
-| `infra` | `none` (`wrangler.jsonc`), `alchemy` | `none` |
-| `ai` | `none`, `effect-ai-byok` | `none` |
-| `extras` | `workflows`, `realtime`, `browser`, `storage`, `email` | none |
+| Database | `--database=postgres` (via Hyperdrive), `d1`, `none` | `postgres` |
+| ORM | `--orm=drizzle`, `effect-sql`, `none` | `drizzle` |
+| Auth | `--auth=better-auth-orgs`, `better-auth`, `none` | `better-auth-orgs` |
+| Infrastructure | `--infra=none` (`wrangler.jsonc`), `alchemy` | `none` |
+| AI | `--ai=none`, `effect-ai-byok` | `none` |
+| Extras | `--extras=workflows,realtime,browser,storage,email` | none |
 
-`orm` is set exactly when `database` is, and `auth` needs a database. When it finishes, efforge prints the next steps for your stack (start Postgres, run migrations, `pnpm dev`) and a command that recreates the same stack, flag by flag (a preset can change between versions).
-
-## Add more later
-
-```sh
-npx create-efforge list                     # every add-on, ✓ for the ones you have
-npx create-efforge add                      # pick from the ones you can add
-npx create-efforge add email                # wire one in
-npx create-efforge add ai/effect-ai-byok extras/storage --dry-run   # see what would change
-npx create-efforge info email               # what one add-on writes, edits and needs
-npx create-efforge graph                    # your layer graph, as Mermaid
-```
-
-`add` reads the stack from `efforge.jsonc`, checks the new choice is compatible, writes the add-on's files and edits the files that compose the app. It computes everything first and writes nothing if any step fails. Files you've edited since they were generated are left alone unless you pass `--overwrite`, and it shows you the diff. When it's done it lists the new env vars to fill in. Run it with a clean git tree and review the result with `git diff`.
+An ORM goes with a database, and auth needs one. Postgres needs Docker on your machine; D1 doesn't. `--yes` takes the defaults for anything you didn't set. At the end, efforge prints a command that makes the same stack again, flag by flag. [The CLI reference](https://github.com/amagdy46/efforge/blob/main/docs/cli.md) has every flag.
 
 ## For coding agents
 
@@ -79,32 +165,52 @@ npx -y create-efforge@latest list --json --cwd my-app
 npx -y create-efforge@latest info email --json --cwd my-app
 npx -y create-efforge@latest add email --json --cwd my-app
 npx -y create-efforge@latest graph --json --cwd my-app
+npx -y create-efforge@latest doctor --json --cwd my-app
 ```
 
-Then, in `my-app`: `pnpm typecheck && pnpm check && pnpm test && pnpm build`. The skill ([skills/efforge/SKILL.md](https://github.com/amagdy46/efforge/blob/main/skills/efforge/SKILL.md)) says what each error means; [docs/json.md](https://github.com/amagdy46/efforge/blob/main/docs/json.md) is the full contract, and [llms.txt](https://github.com/amagdy46/efforge/blob/main/llms.txt) lists the docs.
+A typo, for example `add emial --json --cwd my-app`, prints (shortened):
+
+<!-- json: npx -y create-efforge@latest add emial --json --cwd my-app -->
+```json
+{
+  "contract": 1,
+  "ok": false,
+  "error": {
+    "code": "UnknownAddon",
+    "fix": "npx -y create-efforge add extras/email --json --cwd my-app",
+    "suggestions": ["extras/email"]
+  }
+}
+```
+
+Then, in `my-app`: `pnpm typecheck && pnpm check && pnpm test && pnpm build`. The skill ([skills/efforge/SKILL.md](https://github.com/amagdy46/efforge/blob/main/skills/efforge/SKILL.md)) says what each error means; [docs/json.md](https://github.com/amagdy46/efforge/blob/main/docs/json.md) is the full contract, and [llms.txt](https://github.com/amagdy46/efforge/blob/main/llms.txt) lists the docs. The generated `AGENTS.md` gives an agent the project's layout and rules.
 
 ## What you get
 
 ```
-apps/web          TanStack Start app: Worker entry, routes, shadcn/ui, Tailwind v4
-packages/core     service interfaces, tagged errors, schemas
+apps/web          TanStack Start app: Worker entry, routes, dashboard cards, shadcn/ui, Tailwind v4
+packages/core     service interfaces, tagged errors, schemas, and their tests
 packages/db       schema, migrations, database layer     (with a database)
 infra/            alchemy.run.ts                         (infra=alchemy)
 apps/browser      Playwright container image             (extras=browser)
-efforge.jsonc     your stack choices, read by efforge add
+efforge.jsonc     your stack, and a hash of each file efforge wrote
 AGENTS.md         layout and rules for coding agents
 ```
 
-The workspace pins exact versions in a pnpm `catalog:`, runs `dev`, `build`, `typecheck` and `test` through Turborepo, and lints and formats with [Vite+](https://viteplus.dev) (Oxlint, Oxfmt).
+The workspace pins exact versions in a pnpm `catalog:`, holds every Effect package at one version, runs tasks through Turborepo, and lints and formats with [Vite+](https://viteplus.dev) (Oxlint, Oxfmt). The project's README has the first deploy for its stack, with wrangler or Alchemy; [Deploy](https://github.com/amagdy46/efforge/blob/main/docs/deploy.md) explains the steps. There is no telemetry.
 
 ## Status
 
-Early: Cloudflare is the only runtime, add-ons can be added but not removed yet, and the CLI's options may still change. Drizzle is pinned to a release candidate and Alchemy support uses a beta. With `--auth=none`, the AI demo endpoint isn't gated; add auth or remove it before deploying. Details and known gaps: [docs/limits.md](https://github.com/amagdy46/efforge/blob/main/docs/limits.md).
+Early. Cloudflare is the only runtime. Add-ons can be added, not removed, and a database can't be swapped once chosen. The CLI's text output may change; the `--json` contract is versioned. Drizzle is pinned to a release candidate and Alchemy support uses a beta. CI generates a matrix of stacks on every change and runs each one's full gate; efforge's tests do not deploy to a Cloudflare account. Details and known gaps: [Status and limits](https://github.com/amagdy46/efforge/blob/main/docs/limits.md).
+
+Use something else if you want Next.js, a runtime other than Cloudflare, or plain async code without Effect: `npm create cloudflare` for TanStack Start on Workers without Effect, [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack) for many other stacks, or [Alchemy's examples](https://github.com/alchemy-run/alchemy) for Effect on Cloudflare without an app around it.
 
 ## Docs
 
-- [CLI reference](https://github.com/amagdy46/efforge/blob/main/docs/cli.md): every flag, CI and scripting, `add` in detail
-- [`--json` contract](https://github.com/amagdy46/efforge/blob/main/docs/json.md): the output scripts and agents read, every error code
-- [Contributing](https://github.com/amagdy46/efforge/blob/main/CONTRIBUTING.md) and the [changelog](https://github.com/amagdy46/efforge/blob/main/CHANGELOG.md)
+- [Why your app is shaped like this](https://github.com/amagdy46/efforge/blob/main/docs/architecture.md) and [Swap a layer to test](https://github.com/amagdy46/efforge/blob/main/docs/testing.md)
+- [Add-ons](https://github.com/amagdy46/efforge/blob/main/docs/addons/README.md): one page each, with what it writes and edits
+- [Deploy](https://github.com/amagdy46/efforge/blob/main/docs/deploy.md) and [Keep a project current](https://github.com/amagdy46/efforge/blob/main/docs/upgrading.md)
+- [CLI reference](https://github.com/amagdy46/efforge/blob/main/docs/cli.md) and the [`--json` contract](https://github.com/amagdy46/efforge/blob/main/docs/json.md)
+- [All docs](https://github.com/amagdy46/efforge/blob/main/docs/README.md), [contributing](https://github.com/amagdy46/efforge/blob/main/CONTRIBUTING.md) and the [changelog](https://github.com/amagdy46/efforge/blob/main/CHANGELOG.md)
 
-Prompts by [Clack](https://github.com/bombshell-dev/clack). MIT licensed.
+efforge is not affiliated with Effect or the Effect team. Prompts by [Clack](https://github.com/bombshell-dev/clack). MIT licensed.

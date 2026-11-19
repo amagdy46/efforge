@@ -1,13 +1,16 @@
 {
   "name": "create-efforge",
   "version": "0.2.1",
-  "description": "Start an Effect app with database, auth, and Cloudflare services already wired together",
+  "description": "The maintained way to start a full-stack Effect app on Cloudflare: TanStack Start on Workers, where every capability is a layer you can add, see, test and upgrade",
   "keywords": [
+    "alchemy",
     "cloudflare",
     "cloudflare-workers",
     "create",
     "effect",
+    "effect-ts",
     "scaffold",
+    "scaffolder",
     "tanstack-start",
     "template",
     "typescript"
