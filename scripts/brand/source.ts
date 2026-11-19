@@ -58,7 +58,7 @@ export const surfaces = {
 
 /**
  * The layer colours, one per layer of `AppLayer`, always in this order: the tempering sequence,
- * then five more, so a project with every add-on (nine layers) repeats none. The dashboard's layer
+ * then six more, so a project with every add-on (ten layers) repeats none. The dashboard's layer
  * graph and cards use `light` and `dark` (each at least 3:1 on both surfaces of its theme, and
  * apart from its neighbours: checked in docs/brand.md and test/brand.test.ts); `efforge graph`
  * draws its Mermaid nodes from `light`. A named colour keeps its brand value in `palette`; these
@@ -74,6 +74,7 @@ export const layerColors = [
   { name: "Plum", light: "#8A4F6E", dark: "#C58AA8" },
   { name: "Slate", light: "#6B7078", dark: "#A3A7AE" },
   { name: "Teal", light: "#3D7F73", dark: "#7FBFB2" },
+  { name: "Moss", light: "#5E7A2C", dark: "#A4C46A" },
 ] as const
 
 /**

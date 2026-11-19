@@ -7,7 +7,7 @@ import { useStack } from "@/lib/use-stack"
 import { cn } from "@/lib/utils"
 
 /**
- * The tempering colours, in order: one per layer, nine so that a project with every add-on (nine
+ * The tempering colours, in order: one per layer, ten so that a project with every add-on (ten
  * layers) repeats none. A card takes the colour of its layer in the layer graph.
  */
 export const temperClasses = [
@@ -20,6 +20,7 @@ export const temperClasses = [
   "bg-temper-7",
   "bg-temper-8",
   "bg-temper-9",
+  "bg-temper-10",
 ] as const
 
 /** The footer on wide screens: one row for its entries (files, the test, the rules), up to five. */

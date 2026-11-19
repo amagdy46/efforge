@@ -49,6 +49,7 @@
   --temper-7: #8a4f6e;
   --temper-8: #6b7078;
   --temper-9: #3d7f73;
+  --temper-10: #5e7a2c;
 }
 
 .dark {
@@ -89,6 +90,7 @@
   --temper-7: #c58aa8;
   --temper-8: #a3a7ae;
   --temper-9: #7fbfb2;
+  --temper-10: #a4c46a;
 }
 
 @theme inline {
@@ -131,6 +133,7 @@
   --color-temper-7: var(--temper-7);
   --color-temper-8: var(--temper-8);
   --color-temper-9: var(--temper-9);
+  --color-temper-10: var(--temper-10);
 }
 
 @layer base {

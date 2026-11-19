@@ -20,6 +20,7 @@ export const temperNodes = [
   { name: "Plum", fill: "#d0bbc3", stroke: "#8A4F6E", ink: "#1C1D20" },
   { name: "Slate", fill: "#c5c6c7", stroke: "#6B7078", ink: "#1C1D20" },
   { name: "Teal", fill: "#b5ccc5", stroke: "#3D7F73", ink: "#1C1D20" },
+  { name: "Moss", fill: "#c1caac", stroke: "#5E7A2C", ink: "#1C1D20" },
 ] as const
 
 /** Diagram colours that are not a layer's: the composition (Iron) and what a layer needs (Steel). */
