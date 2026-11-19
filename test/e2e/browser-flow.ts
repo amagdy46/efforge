@@ -1,5 +1,9 @@
 import { request as httpRequest } from "node:http"
 import { chromium, type Page, type Request } from "playwright"
+import { PUBLIC_SERVER_FNS } from "../../src/cards.ts"
+
+/** Server functions signed-out visitors must reach (the route guard, the landing page). */
+const PUBLIC = new Set(Object.values(PUBLIC_SERVER_FNS).flat())
 
 const password = "correct-horse-battery"
 
@@ -78,7 +82,10 @@ const cardsRequireSession = async (page: Page) => {
     const name = JSON.parse(
       Buffer.from(call.url().split("/_serverFn/")[1]?.split("?")[0] ?? "", "base64url").toString(),
     ).export as string
-    names.add(name.split("_")[0] as string)
+    const fn = name.split("_")[0] as string
+    names.add(fn)
+    // public by design (the realtime card reads getStack): it answers without a session
+    if (PUBLIC.has(fn)) continue
     // the guard's own refusal: its tag and its message, not merely the word somewhere in the body
     if (!body.includes("Unauthorized") || !body.includes("Not signed in"))
       throw new Error(
