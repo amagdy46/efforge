@@ -1,12 +1,18 @@
 // Better Auth on a cold Worker: starts a generated auth project's server from cold, sends the first
-// requests, and counts rounds where any of them got a 5xx or no answer. Two scenarios, the ones
-// the w2a2 re-review measured:
+// requests, and counts rounds where any of them got a 5xx or no answer. The scenarios:
 //
 //   socket-first  a WebSocket upgrade to the realtime room, then two sign-ups at once
 //   concurrent    three sign-ups and a page load at once
+//   route-first   a storage download with a forged signature (403), then two sign-ups at once
+//
+// socket-first and concurrent are the two the w2a2 re-review measured (`both` runs them). Since
+// the room checks the session, a socket now waits for Better Auth itself, so socket-first no
+// longer fails without `waitUntil` in auth-live.ts. route-first still does: a Worker route that
+// builds the runtime without waiting for Better Auth and ends first. It needs storage. `all` runs
+// the three.
 //
 // usage: node scripts/cold-start.ts <project> --server=vite|alchemy|preview [--rounds=20]
-//          [--scenario=socket-first|concurrent|both] [--port=5481]
+//          [--scenario=socket-first|concurrent|route-first|both|all] [--port=5481]
 //
 // `vite` runs `vite dev` in apps/web, `alchemy` runs the project's `pnpm dev` (`alchemy dev`, which
 // uses local providers only and takes no port, so the one it prints is used), and `preview` builds once and serves the build with `vite preview`. The project
@@ -33,7 +39,12 @@ if (project === undefined || !["vite", "alchemy", "preview"].includes(server))
 let port = Number(values.port)
 let base = `http://localhost:${port}`
 const rounds = Number(values.rounds)
-const scenarios = values.scenario === "both" ? ["socket-first", "concurrent"] : [values.scenario]
+const scenarios =
+  values.scenario === "all"
+    ? ["socket-first", "concurrent", "route-first"]
+    : values.scenario === "both"
+      ? ["socket-first", "concurrent"]
+      : [values.scenario]
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -113,6 +124,13 @@ const signUp = async (): Promise<string> => {
   return response.status >= 500 ? `sign-up ${response.status} ${text.slice(0, 160)}` : ""
 }
 
+/** A storage download whose signature is wrong: the Worker builds the runtime and answers 403. */
+const forgedDownload = async (): Promise<string> => {
+  const response = await fetch(`${base}/files/cold?expires=4102444800&signature=${"0".repeat(64)}`)
+  await response.text()
+  return response.status === 403 ? "" : `download ${response.status}, not 403`
+}
+
 const page = async (): Promise<string> => {
   const response = await fetch(`${base}/`)
   const text = await response.text()
@@ -139,6 +157,10 @@ const socket = () =>
 const run = async (scenario: string): Promise<string[]> => {
   const settle = (all: Array<Promise<string>>) =>
     Promise.all(all.map((p) => p.catch((e: unknown) => `no answer: ${String(e)}`)))
+  if (scenario === "route-first") {
+    const first = await forgedDownload()
+    return [first, ...(await settle([signUp(), signUp()]))].filter(Boolean)
+  }
   if (scenario === "socket-first") {
     const first = await socket()
     return [first, ...(await settle([signUp(), signUp()]))].filter(Boolean)
