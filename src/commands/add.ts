@@ -154,7 +154,7 @@ const product = <A>(lists: ReadonlyArray<ReadonlyArray<A>>): A[][] =>
  * between them (D1 or Postgres, Drizzle or Effect SQL) is the caller's, since a slot can't be
  * swapped later.
  */
-const waysOut = (stack: StackConfig, named: ReadonlySet<string>): string[][] => {
+export const waysOut = (stack: StackConfig, named: ReadonlySet<string>): string[][] => {
   const open = slots.filter(
     (s) => !s.multi && s.options.length > 1 && stack[s.id] === "none" && !named.has(s.id),
   )

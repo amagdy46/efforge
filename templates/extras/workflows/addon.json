@@ -25,6 +25,16 @@
   "envVars": [],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "Durable background jobs on Cloudflare Workflows. Start a job and read its status through the `Jobs` service; Cloudflare runs the workflow's steps and keeps their results, so a job survives restarts. `apps/web/src/workflows/Example.ts` is a workflow to copy.",
+    "service": {
+      "name": "Jobs",
+      "file": "packages/core/src/jobs.ts",
+      "errors": [
+        "JobError"
+      ]
+    }
+  },
   "transforms": [
     {
       "name": "addExport",

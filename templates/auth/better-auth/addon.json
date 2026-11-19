@@ -283,6 +283,19 @@
   ],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "Email and password accounts with Better Auth. Server code reads the signed-in user through the `Auth` service: `Auth.currentSession` fails with `Unauthorized` when nobody is signed in. Pages under `/app` send signed-out visitors to `/sign-in`, and `requireSession` guards server functions. Better Auth keeps users and sessions in the database, so it needs one.",
+    "service": {
+      "name": "Auth",
+      "file": "packages/core/src/Auth.ts",
+      "errors": [
+        "Unauthorized"
+      ]
+    },
+    "limits": [
+      "`.dev.vars` sets `BETTER_AUTH_URL=http://localhost:5173`. If Vite picks another port, sign-up fails with `INVALID_ORIGIN`; update the variable or free the port."
+    ]
+  },
   "transforms": [
     {
       "name": "addDevVar",

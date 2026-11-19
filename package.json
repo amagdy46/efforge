@@ -42,7 +42,9 @@
     "smoke:pack": "node scripts/smoke-pack.ts",
     "schemas": "node scripts/schemas.ts",
     "brand": "node scripts/brand/build.ts",
-    "brand:outline": "node scripts/brand/outline.ts"
+    "brand:outline": "node scripts/brand/outline.ts",
+    "docs:addons": "node scripts/docs/addons.ts",
+    "docs:diagram": "node scripts/docs/diagram.ts"
   },
   "devDependencies": {
     "@clack/prompts": "1.9.0",

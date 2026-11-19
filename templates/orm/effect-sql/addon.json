@@ -119,6 +119,14 @@
   "envVars": [],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "Plain SQL through Effect SQL: the `Database` service hands you an `SqlClient`, and queries are tagged templates that return Effects. Migrations are numbered SQL files in `packages/db/migrations`. It comes with a `note` table and a notes demo on `/app`.",
+    "service": {
+      "name": "Database",
+      "file": "packages/core/src/Database.ts",
+      "errors": []
+    }
+  },
   "transforms": [
     {
       "name": "addImport",

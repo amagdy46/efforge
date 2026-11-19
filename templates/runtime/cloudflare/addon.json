@@ -48,5 +48,11 @@
   "envVars": [],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "Every project has it. The app runs as one Cloudflare Worker, and `@cloudflare/vite-plugin` runs that Worker in workerd during `pnpm dev`. It owns two files the rest of the app is built around: `apps/web/src/server.ts`, the Worker entry, and `apps/web/src/server/cloudflare.ts`, the one file that reads the Worker environment.",
+    "limits": [
+      "Cloudflare is the only runtime."
+    ]
+  },
   "transforms": []
 }

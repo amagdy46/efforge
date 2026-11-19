@@ -53,6 +53,24 @@ export const AddonCard = Schema.Struct({
 })
 export type AddonCard = typeof AddonCard.Type
 
+/**
+ * Prose for the add-on's page in docs/addons (`pnpm docs:addons`). Everything else on the page
+ * comes from the rest of the manifest; this holds only what the manifest cannot say.
+ */
+export const AddonGuide = Schema.Struct({
+  /** What the add-on is for, in a short paragraph. */
+  purpose: Schema.String,
+  /** The service it adds: class name, the project file that declares it, its tagged errors. */
+  service: Schema.optionalKey(
+    Schema.Struct({ name: Schema.String, file: Schema.String, errors: Strings }),
+  ),
+  /** Anything to know before swapping the layer, beyond the standard steps. */
+  swap: Schema.optionalKey(Schema.String),
+  /** Known gaps, one sentence each. */
+  limits: Schema.optionalKey(Strings),
+})
+export type AddonGuide = typeof AddonGuide.Type
+
 /** workspace package dir (e.g. `apps/web`) -> package names; versions come from `versions.ts`. */
 const PackagesByDir = Schema.Record(Schema.String, Strings)
 
@@ -79,6 +97,7 @@ export const AddonManifest = Schema.Struct({
   ),
   requires: Strings,
   conflicts: Strings,
+  guide: Schema.optionalKey(AddonGuide),
   transforms: Schema.Array(AddonTransform),
 })
 export type AddonManifest = typeof AddonManifest.Type

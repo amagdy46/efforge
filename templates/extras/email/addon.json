@@ -37,6 +37,18 @@
   ],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "Send invitations, receipts and password resets. Call `send` on the `Mailer` service. In production the layer sends through Cloudflare Email Service; in development (`MAIL_TRANSPORT=console`) it prints each message to the dev server log. With organizations, invitations are emailed too.",
+    "service": {
+      "name": "Mailer",
+      "file": "packages/core/src/mailer.ts",
+      "errors": [
+        "MailerError",
+        "MailerConfigError"
+      ]
+    },
+    "swap": "`MailerLive` already chooses between two implementations by `MAIL_TRANSPORT`. To add a provider, write another layer for `Mailer` in `apps/web/src/server/mailer.ts` and return it from `MailerLive` for a new `MAIL_TRANSPORT` value."
+  },
   "transforms": [
     {
       "name": "addExport",
