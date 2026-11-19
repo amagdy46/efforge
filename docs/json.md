@@ -1239,6 +1239,7 @@ Each of `checks` has a stable `id`, a `status` (`ok`, `warn`, `fail`, `skipped`,
 | `migrations` | D1 migrations not yet applied to the local database. |
 | `postgres` | Whether the local Postgres answers (nothing is started). |
 | `layers` | A layer in `layers.ts` for each add-on that adds one, read as code (a commented-out layer is missing; `AppLayer` built from another const counts). |
+| `gates` | On a stack with auth: `sessionGate` first in `functionMiddleware`, passed to `createStart` (`apps/web/src/start.ts`), and `requireApiSession` first in `workerRoutes` (`apps/web/src/server/routes.ts`). A gate taken out, or something listed before it, fails with `details.problems` (each `file`, `problem` and the `lines` to put back); skipped without auth. |
 | `upgrade` | `upgrade --check`'s answer: `fail` for needs-action, `warn` for behind. |
 
 New checks can appear without a change of contract; treat an unknown `id` like the others.
@@ -1375,6 +1376,12 @@ npx -y create-efforge doctor --json --cwd my-app
       "id": "layers",
       "status": "ok",
       "message": "AppLayer has a layer for each add-on (orm/drizzle, auth/better-auth).",
+      "fix": null
+    },
+    {
+      "id": "gates",
+      "status": "ok",
+      "message": "sessionGate is first in functionMiddleware (apps/web/src/start.ts) and requireApiSession first in workerRoutes (apps/web/src/server/routes.ts).",
       "fix": null
     },
     {

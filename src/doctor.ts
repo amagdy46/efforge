@@ -976,6 +976,96 @@ const layersCheck: Check = {
     }),
 }
 
+const START = "apps/web/src/start.ts"
+const ROUTES = "apps/web/src/server/routes.ts"
+
+/**
+ * The first element of the array literal `name` is declared as in `text`, and whether the
+ * array is there at all; undefined when there is no such declaration with an array literal.
+ */
+const firstOf = (file: string, text: string, name: string) => {
+  const init = parseTs(file, text).getVariableDeclaration(name)?.getInitializer()
+  if (init === undefined || !Node.isArrayLiteralExpression(init)) return undefined
+  const elements = init.getElements().map((e) => e.getText())
+  return { first: elements[0], has: (item: string) => elements.includes(item) }
+}
+
+/** Whether `createStart(...)` in `text` is given `functionMiddleware` (by name or shorthand). */
+const passedToStart = (file: string, text: string) =>
+  parseTs(file, text)
+    .getDescendantsOfKind(SyntaxKind.CallExpression)
+    .filter((c) => c.getExpression().getText() === "createStart")
+    .some((c) =>
+      c
+        .getDescendantsOfKind(SyntaxKind.Identifier)
+        .some((id) => id.getText() === "functionMiddleware"),
+    )
+
+/**
+ * On a stack with auth, the two session gates are what keep every server function and every
+ * route under `/api/` behind a session. A gate taken out, or one with something listed before
+ * it (which then runs for a signed-out caller), still passes typecheck and tests, so this says so.
+ */
+const gatesCheck: Check = {
+  id: "gates",
+  title: "The session gates, first",
+  run: (ctx) =>
+    Effect.sync(() => {
+      const stack = ctx.manifest?.stack
+      if (stack === undefined) return skipped("efforge.jsonc isn't valid, so the stack is unknown.")
+      if (stack.auth === "none")
+        return skipped("This stack has no auth, so it has no session gates.")
+      const problems: Array<{ file: string; problem: string; lines: string }> = []
+      const unread: string[] = []
+      const start = ctx.read(START)
+      const fn = start === undefined ? undefined : firstOf(START, start, "functionMiddleware")
+      if (start === undefined || fn === undefined)
+        unread.push(`${START}: \`const functionMiddleware = [...]\``)
+      else if (fn.first !== "sessionGate" || !passedToStart(START, start))
+        problems.push({
+          file: START,
+          problem:
+            fn.first === "sessionGate"
+              ? "functionMiddleware is not passed to createStart, so sessionGate never runs"
+              : fn.has("sessionGate")
+                ? `${fn.first} runs before sessionGate, so it answers a signed-out caller`
+                : "sessionGate is not in functionMiddleware, so a server function without requireSession answers a signed-out caller",
+          lines:
+            'import { sessionGate } from "./server/require-session"\n\nconst functionMiddleware: Array<AnyFunctionMiddleware> = [sessionGate, ...]\n\ncreateStart(() => ({ functionMiddleware, ... }))',
+        })
+      const routes = ctx.read(ROUTES)
+      const api = routes === undefined ? undefined : firstOf(ROUTES, routes, "workerRoutes")
+      if (routes === undefined || api === undefined)
+        unread.push(`${ROUTES}: \`export const workerRoutes = [...]\``)
+      else if (api.first !== "requireApiSession")
+        problems.push({
+          file: ROUTES,
+          problem: api.has("requireApiSession")
+            ? `${api.first} runs before requireApiSession, so it answers a signed-out request under /api/`
+            : "requireApiSession is not in workerRoutes, so every route under /api/ answers a signed-out request",
+          lines:
+            'import { requireApiSession } from "./api-session"\n\nexport const workerRoutes: ReadonlyArray<WorkerRoute> = [requireApiSession, ...]',
+        })
+      if (problems.length > 0)
+        return {
+          status: "fail" as const,
+          message: `${problems.map((p) => `${p.file}: ${p.problem}`).join(". ")}. Put it back first in the list (details.lines).`,
+          fix: null,
+          details: { problems },
+        }
+      if (unread.length > 0)
+        return {
+          status: "unverified" as const,
+          message: `Couldn't find ${unread.join(" or ")}, so the session gates weren't checked. If code of yours puts sessionGate first before every server function and requireApiSession first before every route, that's fine; efforge can't tell.`,
+          fix: null,
+          details: { lookedFor: unread },
+        }
+      return ok(
+        "sessionGate is first in functionMiddleware (apps/web/src/start.ts) and requireApiSession first in workerRoutes (apps/web/src/server/routes.ts).",
+      )
+    }),
+}
+
 /** Local names imported into `text`. */
 const importedNames = (file: string, text: string): Set<string> =>
   new Set(
@@ -1106,6 +1196,7 @@ export const checks: ReadonlyArray<Check> = [
   migrationsCheck,
   postgresCheck,
   layersCheck,
+  gatesCheck,
   upgradeCheck,
 ]
 
