@@ -108,3 +108,18 @@ it("every committed Drizzle snapshot is the version the pinned drizzle-kit write
     expect(s.version, f).toBe(String(want[s.dialect]))
   }
 })
+
+it("D1 + Drizzle ignores the flat migrations db:migrate derives; Effect SQL commits its own", async () => {
+  // drizzle-kit's packages/db/drizzle/ is the source; `pnpm db:migrate` copies it to migrations/
+  const drizzle = await gen({ database: "d1", orm: "drizzle" })
+  expect(text(drizzle, "packages/db/.gitignore").split("\n")).toContain("/migrations/")
+  expect([...drizzle.keys()].some((f) => f.startsWith("packages/db/migrations/"))).toBe(false)
+  // with Alchemy, `pnpm dev` applies drizzle/ itself and db:migrate writes nothing
+  expect(
+    (await gen({ database: "d1", orm: "drizzle", infra: "alchemy" })).has("packages/db/.gitignore"),
+  ).toBe(false)
+  // on Effect SQL, migrations/ is the hand-written source, generated at create and committed
+  const effectSql = await gen({ database: "d1", orm: "effect-sql" })
+  expect(effectSql.has("packages/db/.gitignore")).toBe(false)
+  expect([...effectSql.keys()].some((f) => f.startsWith("packages/db/migrations/"))).toBe(true)
+})

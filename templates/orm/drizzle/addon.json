@@ -80,6 +80,18 @@
       }
     },
     {
+      "path": "files/d1/db-gitignore",
+      "target": "packages/db/.gitignore",
+      "when": {
+        "database": [
+          "d1"
+        ],
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
       "path": "files/pg/Database.ts",
       "target": "packages/core/src/Database.ts",
       "when": {
@@ -274,7 +286,7 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "orm-d1-flat",
-        "content": "- On D1, `pnpm db:migrate` copies them into `packages/db/migrations/` (the flat layout wrangler applies) before applying them; that directory is generated too."
+        "content": "- On D1, `pnpm db:migrate` copies them into `packages/db/migrations/` (the flat layout wrangler applies) before applying them; that directory is generated too, and gitignored (`packages/db/.gitignore`)."
       },
       "when": {
         "database": [

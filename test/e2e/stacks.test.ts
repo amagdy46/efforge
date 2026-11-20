@@ -248,12 +248,25 @@ const checkErrorLists = (dir: string) => {
   }
 }
 
+/**
+ * On D1 + Drizzle with wrangler, `pnpm db:migrate` (a create next step) writes the flat
+ * `packages/db/migrations/` it derives from `packages/db/drizzle/`: git must ignore every file.
+ */
+const checkMigrationsIgnored = (dir: string) => {
+  sh(dir, "pnpm db:migrate")
+  const written = readdirSync(join(dir, "packages/db/migrations"))
+  if (written.length === 0) throw new Error("pnpm db:migrate wrote no flat migrations")
+  for (const file of written) sh(dir, `git check-ignore -q packages/db/migrations/${file}`)
+}
+
 /** Generates `config` into a tmp dir, installs, then runs the generated project's full gate: typecheck, check, test, build. */
 const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
   Effect.gen(function* () {
     const dir = yield* generateStack(config)
     yield* checkDoctor(dir)
     if (config.orm === "drizzle") yield* Effect.try(() => checkDbGenerate(dir))
+    if (config.database === "d1" && config.orm === "drizzle" && config.infra === "none")
+      yield* Effect.try(() => checkMigrationsIgnored(dir))
     yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
     yield* Effect.try(() => checkErrorLists(dir))
     // a minimal stack's card files may have nothing outside their regions; auth and database ones do

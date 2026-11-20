@@ -57,6 +57,7 @@ Your code asks for `Database`, declared in `packages/core/src/Database.ts`. It h
 | `packages/db/src/layer.ts` | Always |
 | `packages/db/src/schema.ts` | Always |
 | `packages/db/scripts/migrate.ts` | Always |
+| `packages/db/.gitignore` | `database=d1` and `infra=none` |
 | `packages/core/src/Database.ts` | Always |
 | `packages/db/drizzle.config.ts` | Always |
 | `packages/db/drizzle/20261018154416_init/migration.sql` | `database=postgres` |
@@ -154,7 +155,7 @@ Only with `database=d1` and `infra=alchemy`:
 
 Only with `database=d1` and `infra=none`:
 
-- On D1, `pnpm db:migrate` copies them into `packages/db/migrations/` (the flat layout wrangler applies) before applying them; that directory is generated too.
+- On D1, `pnpm db:migrate` copies them into `packages/db/migrations/` (the flat layout wrangler applies) before applying them; that directory is generated too, and gitignored (`packages/db/.gitignore`).
 
 Only with `auth=none`:
 

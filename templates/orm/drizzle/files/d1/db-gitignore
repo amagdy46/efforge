@@ -1,0 +1,2 @@
+# `pnpm db:migrate` copies drizzle/ here in the flat layout wrangler applies: generated, not edited.
+/migrations/
