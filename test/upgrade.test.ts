@@ -879,3 +879,43 @@ it("upgrade bringing the session gates to a project made before them says what a
   // once the gates are there, nothing more to say
   expect((await check(dir)).notes).toEqual([])
 })
+
+it("a declaration a refreshed file needs is not added to a kept file without the imports it uses", async () => {
+  const dir = await project()
+  const greeting = "apps/web/src/server/greeting.ts"
+  const card = "apps/web/src/capabilities/runtime.tsx"
+  // a server file from before the shared error lists, changed by its owner: no GreetErrors, and
+  // no InvalidName import
+  edit(dir, greeting, (t) =>
+    t
+      .replace(
+        'import { greet as greetProgram, InvalidName } from "@repo/core/greeting"',
+        'import { greet as greetProgram } from "@repo/core/greeting"',
+      )
+      .replace(
+        /\/\*\* What `greet` can fail with[^\n]*\nexport const GreetErrors = \[InvalidName\] as const\n\n/,
+        "",
+      )
+      .replace(
+        "runOutcome(greetProgram(data.name), ...GreetErrors)",
+        "runOutcome(greetProgram(data.name))",
+      )
+      .concat("// the owner's\n"),
+  )
+  expect(read(dir, greeting)).not.toContain("GreetErrors")
+  // the card as an older efforge wrote it, so upgrade would refresh it to one that imports GreetErrors
+  olderTemplate(
+    dir,
+    card,
+    read(dir, card)
+      .replace("import { greet, GreetErrors } from", "import { greet } from")
+      .replace("useServerCall(greet, ...GreetErrors)", "useServerCall(greet)"),
+  )
+  const r = await check(dir)
+  const planned = r.changes.get(greeting)
+  // either the file gets the import with the declaration, or the card is held with the lines
+  if (planned?.includes("GreetErrors")) expect(planned).toMatch(/import \{[^}]*InvalidName/)
+  else expect(r.kept.map((k) => k.path)).toContain(card)
+  apply(dir, r)
+  await consistent(dir, r)
+})
