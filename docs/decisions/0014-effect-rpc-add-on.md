@@ -84,5 +84,4 @@ classes, streams and auth with the least code, for about 64 KiB of gzipped clien
 - The add-on has four variants of the server file (no database, a database, auth, organizations) and two of most others. A change to one is a
   change to all; `test/rpc-addon.test.ts` and the e2e rows cover the stacks.
 - `@effect/atom-react` is a new pin, held with `effect` by the `@effect/atom-*` override. The
-  release history records it at the next release (until then the history test lists it as
-  unreleased).
+  release history records it from 0.3.0.

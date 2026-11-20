@@ -551,7 +551,7 @@ describe("graph on a real project", () => {
 // A real project from an efforge release, with and without the owner's own edits in layers.ts and
 // the dashboard, then `upgrade` from this source, then the project's full gate. Whatever upgrade
 // applies must leave the project building, keep the owner's edits byte for byte, and leave both
-// commands with nothing to apply. Needs the release refs (`git fetch --tags origin release-0.2.1`).
+// commands with nothing to apply. Needs the release tags and main's history (`git fetch --tags origin`).
 
 const repo = new URL("../..", import.meta.url).pathname
 const sources = new Map<string, string>()
@@ -566,7 +566,7 @@ const releaseSource = (ref: string): string => {
       0,
   )
   if (found === undefined)
-    throw new Error(`${ref} isn't in this checkout: git fetch --tags origin release-0.2.1`)
+    throw new Error(`${ref} isn't in this checkout: git fetch --tags origin main`)
   mkdirSync(e2eRoot, { recursive: true })
   const dir = mkdtempSync(`${e2eRoot}/efforge-${ref.replace(/\W+/g, "-")}-`)
   sh(repo, `git archive ${found} | tar -x -C ${JSON.stringify(dir)}`)
@@ -838,9 +838,10 @@ const upgradingGuide = (): Effect.Effect<void, unknown> =>
 describe("upgrade an old project", () => {
   const releases: Array<[string, string, string]> = [
     ["0.2.0", "v0.2.0", "--database=d1 --orm=effect-sql"],
+    // 0.2.1 as merged into main (#3); the merge commit has the same tree
     [
       "0.2.1",
-      "release-0.2.1",
+      "3f4fa0ffdb3f0bdd25c7bdef8131031afbc08f64",
       "--database=d1 --orm=effect-sql --auth=better-auth --infra=alchemy --extras=storage,email",
     ],
     // a project made by next before the errors-over-the-wire change: it has the cards, outcome.ts
