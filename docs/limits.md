@@ -27,6 +27,6 @@ efforge is young, and the CLI's options may still change.
 
 ## Never verified
 
-- Nothing efforge's tests run deploys to a real Cloudflare account. CI builds every stack, and on wrangler stacks goes as far as `pnpm run deploy --dry-run`, which builds the Worker and checks its config; Alchemy stacks are built, never planned against an account. A first deploy, the `prod` stage on Alchemy, Hyperdrive in front of a real Postgres, and the R2, email, container and Durable Object bindings in production are the parts the docs describe but no test has run.
+- Nothing efforge's tests run deploys to a real Cloudflare account. CI builds every stack; the furthest any test goes is `pnpm run deploy --dry-run` on upgraded wrangler projects, which builds the Worker and checks its config. Alchemy stacks are built, never planned against an account. A first deploy, the `prod` stage on Alchemy, Hyperdrive in front of a real Postgres, and the R2, email, container and Durable Object bindings in production are the parts the docs describe but no test has run.
 - The browser add-on's container is built and its card refuses local and private addresses, but it has not been run against a public page on the machine that tested this release.
 - `extras/cluster`, beyond what is above: its deploy, and anything that only shows on real Durable Objects.
