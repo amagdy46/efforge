@@ -1,5 +1,5 @@
 import { releases } from "./history.data.ts"
-import { decodeRecord } from "./record.ts"
+import { decodeRecord, shingles } from "./record.ts"
 import { compareVersions, exactVersion } from "./semver.ts"
 
 // What each efforge release generated, so `upgrade` can tell its own older output from an owner's
@@ -76,9 +76,34 @@ const recordOf = (
 export const recordFor = (version: string, file: string): Set<number> | undefined =>
   recordOf(releasesSince(version), file)
 
-/** The fingerprints the project's own release (`ownRelease`) wrote for `file`, if it wrote it. */
-export const ownRecordFor = (version: string, file: string): Set<number> | undefined =>
-  recordOf(ownRelease(version), file)
+/**
+ * The record of the release whose output `disk` is, for a file efforge edits in place (it has no
+ * hash to say): the release that wrote the most of it, the newest on a tie. A file `upgrade` held
+ * back keeps an older release's text after the project's version moved on, so the project's
+ * version can't say which release a file came from; what is missing from it is judged against
+ * this one. Undefined when no release wrote the file.
+ */
+export const sourceRecordFor = (
+  file: string,
+  disk: string,
+  name?: string,
+): Set<number> | undefined => {
+  const runs = shingles(disk, name)
+  let best: Set<number> | undefined
+  let fewest = Number.POSITIVE_INFINITY
+  for (const [, r] of Object.entries(releases).toSorted(([a], [b]) => compareVersions(a, b))) {
+    const text = r.records[file]
+    if (text === undefined) continue
+    const record = decodeRecord(text)
+    let missing = 0
+    for (const x of runs) if (!record.has(x)) missing++
+    if (missing <= fewest) {
+      best = record
+      fewest = missing
+    }
+  }
+  return best
+}
 
 /** True when a release since `version` pinned `name` at `pin`. */
 export const efforgePinned = (version: string, name: string, pin: string): boolean =>

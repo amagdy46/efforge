@@ -919,6 +919,8 @@ export const addAddons = (
               .filter(([file]) => !seams.has(file) && !removed.has(file))
               .toSorted(([a], [b]) => byName(a, b)),
           ),
+          // what upgrade held back before writing it; upgrade clears it
+          ...(manifest.held === undefined ? {} : { held: manifest.held }),
         }),
       )
       written.add("efforge.jsonc")

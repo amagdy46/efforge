@@ -68,11 +68,11 @@ export const decodeRecord = (text: string): Set<number> => {
 /**
  * How `disk` relates to `today` (efforge's render now) given `record` (every fingerprint the
  * releases since the project's own wrote for this file), or undefined when there is no record, and
- * `own` (what the project's own release wrote; `record` when not given):
+ * `own` (what the release this file's text came from wrote; `record` when not given):
  *
  * - `current`: the same tokens in the same runs (formatting aside)
  * - `refresh`: everything on disk that today lacks is efforge's older output, and nothing the
- *   project's own release wrote that today still has is missing: an older efforge's file, unedited
+ *   release it came from wrote that today still has is missing: an older efforge's file, unedited
  * - `yours`: the owner added to it, and it has everything today's has
  * - `review`: the owner changed it and today's differs too (or, without a record, any difference)
  *

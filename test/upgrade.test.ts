@@ -243,6 +243,46 @@ it("the 0.2.0 fixture with a layer of the owner's and an edited dashboard: both 
   await consistent(dir, r)
 })
 
+// held before it was ever written: efforge.jsonc says so, so the next plan, which reads this
+// efforge's version, adds it once nothing holds it instead of taking it for a file you removed
+it("an in-place file held back before it was written is recorded, held again, and added once free", async () => {
+  const dir = temp()
+  cpSync(fixture, dir, { recursive: true })
+  cpSync(`${fixture}-rest`, dir, { recursive: true }) // the whole project, ui components included
+  const registry = "apps/web/src/capabilities/registry.ts"
+  edit(dir, "apps/web/src/routes/app/index.tsx", (t) =>
+    t.replace(">Dashboard<", ">Acme dashboard<"),
+  )
+  const r = await check(dir)
+  expect(statusOf(r, registry)).toBe("new")
+  expect(r.files.find((f) => f.path === registry)?.held).toBeDefined()
+  apply(dir, r)
+  const m = JSON.parse(read(dir, "efforge.jsonc").replace(/^\/\/.*\n/, ""))
+  expect(m.efforgeVersion).toBe(efforgeVersion)
+  expect(m.held).toContain(registry)
+  const again = await check(dir)
+  expect(statusOf(again, registry)).toBe("new")
+  expect(again.files.find((f) => f.path === registry)?.held).toBeDefined()
+  expect(again.changes.has("efforge.jsonc")).toBe(false)
+  // the owner takes efforge's dashboard: nothing holds the registry, and it arrives
+  const today = await run(
+    generate(m.stack, await loaded()).pipe(Effect.provide(NodeServices.layer)),
+  )
+  writeFileSync(
+    join(dir, "apps/web/src/routes/app/index.tsx"),
+    today.get("apps/web/src/routes/app/index.tsx") as string,
+  )
+  const free = await check(dir)
+  expect(statusOf(free, registry)).toBe("new")
+  expect(free.files.find((f) => f.path === registry)?.held).toBeUndefined()
+  apply(dir, free)
+  expect(read(dir, registry)).toBe(today.get(registry))
+  expect(read(dir, "efforge.jsonc")).not.toContain('"held"')
+  // and one you remove after that is yours to keep out
+  rmSync(join(dir, registry))
+  expect(statusOf(await check(dir), registry)).toBe("deleted")
+})
+
 it("a new file that needs a region of a file you changed gets it by transform, with your edit kept", async () => {
   const dir = await project()
   // an older dashboard, as efforge wrote it, and layers.ts without the region but with your layer

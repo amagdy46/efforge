@@ -31,10 +31,10 @@ import {
   efforgeScript,
   efforgeWroteScript,
   enginesNew,
-  ownRecordFor,
   ownRelease,
   recordFor,
   releasesSince,
+  sourceRecordFor,
 } from "./history.ts"
 import { installOwed, workspaceDirs } from "./installed.ts"
 import { type EfforgeManifest, hash } from "./manifest.ts"
@@ -594,8 +594,18 @@ export const planUpgrade = (
       }
       files.push({ path, status: s })
     }
-    // files efforge edits in place, judged by what releases wrote
+    // files efforge edits in place, judged by what releases wrote: every release since the
+    // project's, and the one the file's text came from (older, when upgrade held it back)
     const inPlace = new Set<string>()
+    const efforgeRecord = (path: string, text: string): Set<number> | undefined => {
+      const since = recordFor(made, path)
+      const source = sourceRecordFor(path, text, name)
+      return since === undefined
+        ? source
+        : source === undefined
+          ? since
+          : new Set([...since, ...source])
+    }
     // a workspace package a release generated that the project no longer has (removed, renamed):
     // nothing goes back into it
     const gone = new Set(
@@ -616,7 +626,7 @@ export const planUpgrade = (
       if (!hashed) inPlace.add(path)
       if (text === undefined) {
         // in-place files a release generated and the owner removed stay removed; anything else is new
-        if (!hashed && efforgeGenerated(made, path))
+        if (!hashed && efforgeGenerated(made, path) && !(manifest.held ?? []).includes(path))
           files.push({ path, status: "deleted", inPlace: true })
         else {
           files.push({ path, status: "new", ...(hashed ? {} : { inPlace: true }) })
@@ -634,9 +644,9 @@ export const planUpgrade = (
             : compareWithRecord(
                 text,
                 template,
-                recordFor(made, path),
+                efforgeRecord(path, text),
                 name,
-                ownRecordFor(made, path),
+                sourceRecordFor(path, text, name),
               )
         files.push({ path, status: s })
         if (s === "current") rehash.set(path, todayHashes[path] as string)
@@ -649,7 +659,13 @@ export const planUpgrade = (
       const s =
         lf(text) === template || sameStructure(path, text, template)
           ? "current"
-          : compareWithRecord(text, template, recordFor(made, path), name, ownRecordFor(made, path))
+          : compareWithRecord(
+              text,
+              template,
+              efforgeRecord(path, text),
+              name,
+              sourceRecordFor(path, text, name),
+            )
       files.push({ path, status: s, inPlace: true })
       if (s === "refresh") changes.set(path, eolOf(text, template))
     }
@@ -659,7 +675,7 @@ export const planUpgrade = (
         if (today.has(path) || files.some((f) => f.path === path)) continue
         const text = at(path)
         if (text === undefined) continue
-        const own = onlyEfforgeOwn(text, "", recordFor(made, path), name)
+        const own = onlyEfforgeOwn(text, "", efforgeRecord(path, text), name)
         files.push({ path, status: "dropped", inPlace: true })
         if (own) removes.add(path)
       }
@@ -691,8 +707,8 @@ export const planUpgrade = (
           const after = next.get(f)
           if (before === undefined || after === undefined || after === before) continue
           if (recordFor(made, f) === undefined) continue
-          // only the project's own release: a later one's addition is new here, not removed
-          const rec = ownRecordFor(made, f) ?? new Set<number>()
+          // only the release this file's text came from: a later one's addition is new here
+          const rec = sourceRecordFor(f, before, name) ?? new Set<number>()
           const was = shingles(before, name)
           const added = [...shingles(after, name)].filter((x) => !was.has(x))
           if (added.some((x) => rec.has(x))) continue // a release wrote it: you removed it
@@ -852,7 +868,8 @@ export const planUpgrade = (
       removes,
       inPlace: (p) => inPlace.has(p),
       deleted: (p) => files.some((f) => f.path === p && f.status === "deleted"),
-      efforgeOwn: (p, text) => onlyEfforgeOwn(text, today.get(p) ?? "", recordFor(made, p), name),
+      efforgeOwn: (p, text) =>
+        onlyEfforgeOwn(text, today.get(p) ?? "", efforgeRecord(p, text), name),
       removedDependency: (file, dep) => efforgeDeclared(made, file, dep),
       addDependency: (file, dep) => {
         const want = record(JSON.parse(today.get(file) ?? "{}"))
@@ -910,7 +927,17 @@ export const planUpgrade = (
     const anyChange = changes.size > 0 || removes.size > 0
     const staleHashes = [...rehash].filter(([p, h]) => manifest.files[p] !== h)
     const needsVersion = made !== efforgeVersion && project.status !== "ahead"
-    if (manifestText !== undefined && (anyChange || staleHashes.length > 0 || needsVersion)) {
+    // in-place files held back before they were ever written: recorded, so the next plan, which
+    // reads this efforge's version from efforge.jsonc, doesn't take them for files you removed
+    const heldUnwritten = consistency.holds
+      .map((h) => h.path)
+      .filter((p) => inPlace.has(p) && at(p) === undefined)
+      .toSorted(byName)
+    const heldChanged = JSON.stringify(heldUnwritten) !== JSON.stringify(manifest.held ?? [])
+    if (
+      manifestText !== undefined &&
+      (anyChange || staleHashes.length > 0 || needsVersion || heldChanged)
+    ) {
       let text = manifestText
       const fmt = {
         formattingOptions: {
@@ -929,6 +956,11 @@ export const planUpgrade = (
       )
       if (JSON.stringify(sorted) !== JSON.stringify(manifest.files))
         text = applyEdits(text, modify(text, ["files"], sorted, fmt))
+      if (heldChanged)
+        text = applyEdits(
+          text,
+          modify(text, ["held"], heldUnwritten.length > 0 ? heldUnwritten : undefined, fmt),
+        )
       if (text !== manifestText) changes.set("efforge.jsonc", text)
     }
 

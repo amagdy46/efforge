@@ -30,6 +30,10 @@ export const EfforgeManifest = Schema.Struct({
     description:
       "Template file -> hash of the content efforge wrote. `add` replaces a file only while its hash still matches. Internal: the hash format may change.",
   }),
+  held: Schema.optionalKey(Schema.Array(Schema.String)).annotate({
+    description:
+      "Files efforge edits in place that `upgrade` held back before writing them, because a file of yours needed something else first. The next `upgrade` adds them once nothing holds them, instead of taking them for files you removed. `upgrade` writes and clears it.",
+  }),
 }).annotate({
   title: "efforge.jsonc",
   description: "The stack of an efforge project, read and updated by `efforge add`.",
