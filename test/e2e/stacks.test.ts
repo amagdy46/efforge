@@ -673,41 +673,14 @@ const notPrinted = (block: ReadonlyArray<string>, printed: string): string[] => 
  * held to what this efforge prints for it, counts and versions aside.
  */
 const upgradingGuide = (): Effect.Effect<void, unknown> =>
-  Effect.gen(function* () {
+  Effect.try(() => {
     const blocks = guideBlocks()
-    if ([...blocks.keys()].join(",") !== "doctor,upgrade --check,upgrade")
+    if (
+      [...blocks.keys()].join(",") !==
+      "doctor,upgrade --check,upgrade,upgrade, after taking the dashboard,upgrade, after merging layers.ts"
+    )
       throw new Error(`docs/upgrading.md output blocks: ${[...blocks.keys()].join(", ")}`)
-    mkdirSync(e2eRoot, { recursive: true })
-    const work = mkdtempSync(`${e2eRoot}/upgrading-guide-`)
-    const dir = join(work, "old-db")
-    const fixtures = join(repo, "test/fixtures/v0.2.0")
-    cpSync(join(fixtures, "d1-effect-sql-auth"), dir, { recursive: true })
-    cpSync(join(fixtures, "d1-effect-sql-auth-rest"), dir, { recursive: true })
-    for (const stored of filesUnder(dir).filter((f) => f.endsWith("/gitignore"))) {
-      cpSync(stored, stored.replace(/gitignore$/, ".gitignore"))
-      rmSync(stored)
-    }
-    const dashboard = join(dir, "apps/web/src/routes/app/index.tsx")
-    writeFileSync(
-      dashboard,
-      readFileSync(dashboard, "utf8").replace(">Dashboard</h1>", ">Acme dashboard</h1>"),
-    )
-    yield* Effect.try(() => sh(dir, "pnpm install"))
-    yield* Effect.try(() =>
-      sh(
-        dir,
-        "git init -q && git add -A && git -c user.name=e2e -c user.email=e2e@localhost commit -qm owner",
-      ),
-    )
-    const efforge = (args: string) => {
-      const r = spawnSync(`node ${JSON.stringify(join(repo, "src/bin.ts"))} ${args}`, {
-        cwd: dir,
-        shell: true,
-        encoding: "utf8",
-        env: { ...process.env, NO_COLOR: "1", CI: "1" },
-      })
-      return { out: `${r.stdout}${r.stderr}`, code: r.status }
-    }
+    const { work, efforge } = guideProject(false)
     const problems: string[] = []
     for (const [command, exit] of [
       ["doctor", 2],
@@ -720,6 +693,112 @@ const upgradingGuide = (): Effect.Effect<void, unknown> =>
         problems.push(`${command} no longer prints:\n  ${line}\n--- it printed:\n${out}`)
     }
     if (problems.length > 0) throw new Error(problems.join("\n\n"))
+    rmSync(work, { recursive: true, force: true })
+  })
+
+/**
+ * The guide's project (the 0.2.0 fixture, installed, the owner's dashboard heading committed),
+ * with `layers` also the owner's `BillingLive` in AppLayer. `efforge` runs this checkout's CLI there.
+ */
+const guideProject = (layers: boolean) => {
+  mkdirSync(e2eRoot, { recursive: true })
+  const work = mkdtempSync(`${e2eRoot}/upgrading-guide-`)
+  const dir = join(work, "old-db")
+  const fixtures = join(repo, "test/fixtures/v0.2.0")
+  cpSync(join(fixtures, "d1-effect-sql-auth"), dir, { recursive: true })
+  cpSync(join(fixtures, "d1-effect-sql-auth-rest"), dir, { recursive: true })
+  for (const stored of filesUnder(dir).filter((f) => f.endsWith("/gitignore"))) {
+    cpSync(stored, stored.replace(/gitignore$/, ".gitignore"))
+    rmSync(stored)
+  }
+  const dashboard = join(dir, DASHBOARD)
+  writeFileSync(
+    dashboard,
+    readFileSync(dashboard, "utf8").replace(">Dashboard</h1>", ">Acme dashboard</h1>"),
+  )
+  if (layers) {
+    writeFileSync(
+      join(dir, "apps/web/src/server/billing.ts"),
+      'import { Layer } from "effect"\n\n/** Billing, ours. */\nexport const BillingLive = Layer.empty\n',
+    )
+    const file = join(dir, LAYERS)
+    writeFileSync(
+      file,
+      readFileSync(file, "utf8")
+        .replace(
+          'import { AuthLive } from "./auth-live"',
+          'import { AuthLive } from "./auth-live"\nimport { BillingLive } from "./billing"',
+        )
+        .replace("  AuthLive,\n", "  AuthLive,\n  BillingLive,\n"),
+    )
+  }
+  sh(dir, "pnpm install")
+  sh(dir, "git init -q")
+  commitAll(dir, "owner")
+  const efforge = (args: string) => {
+    const r = spawnSync(`node ${JSON.stringify(join(repo, "src/bin.ts"))} ${args}`, {
+      cwd: dir,
+      shell: true,
+      encoding: "utf8",
+      env: { ...process.env, NO_COLOR: "1", CI: "1" },
+    })
+    return { out: `${r.stdout}${r.stderr}`, code: r.status }
+  }
+  return { work, dir, efforge }
+}
+
+const commitAll = (dir: string, message: string) =>
+  sh(dir, `git add -A && git -c user.name=e2e -c user.email=e2e@localhost commit -qm '${message}'`)
+
+/**
+ * docs/upgrading.md's "When you changed layers.ts too": the guide's project with the owner's layer
+ * in AppLayer, through upgrade, efforge's dashboard taken, upgrade, the card region merged into
+ * layers.ts by hand, upgrade; each quoted block is what that run prints, and the gate passes.
+ */
+const upgradingGuideLayers = (): Effect.Effect<void, unknown> =>
+  Effect.try(() => {
+    const blocks = guideBlocks()
+    const { work, dir, efforge } = guideProject(true)
+    const problems: string[] = []
+    const step = (command: string, exit: number, block?: string) => {
+      const { out, code } = efforge(command)
+      if (code !== exit) problems.push(`${command} exited ${code}, the guide says ${exit}\n${out}`)
+      if (block !== undefined)
+        for (const line of notPrinted(blocks.get(block) ?? [], out))
+          problems.push(`${block} no longer prints:\n  ${line}\n--- it printed:\n${out}`)
+      return out
+    }
+    step("upgrade", 0)
+    commitAll(dir, "upgrade")
+    writeFileSync(
+      join(dir, "dashboard.diff"),
+      step(`upgrade --check --diff --file ${DASHBOARD}`, 0),
+    )
+    sh(dir, "git apply dashboard.diff && rm dashboard.diff")
+    commitAll(dir, "dashboard: take efforge version")
+    step("upgrade", 2, "upgrade, after taking the dashboard")
+    commitAll(dir, "upgrade again")
+    const file = join(dir, LAYERS)
+    writeFileSync(
+      file,
+      readFileSync(file, "utf8")
+        .replace(
+          "/**\n * The app",
+          "// #region card\n/** Telemetry, underneath every layer. */\nexport const TelemetryLive = Layer.mergeAll(Layer.empty /* efforge:telemetry */)\n\n/**\n * The app",
+        )
+        .replace(
+          "  /* efforge:layers */\n)\n",
+          "  /* efforge:layers */\n).pipe(Layer.provideMerge(TelemetryLive))\n// #endregion\n",
+        ),
+    )
+    sh(dir, "pnpm format")
+    commitAll(dir, "layers: the card region")
+    step("upgrade", 0, "upgrade, after merging layers.ts")
+    if (problems.length > 0) throw new Error(problems.join("\n\n"))
+    commitAll(dir, "upgrade a third time")
+    sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build")
+    if (efforge("upgrade --check --strict").code !== 0)
+      throw new Error("upgrade --check --strict after the guide's last step")
     rmSync(work, { recursive: true, force: true })
   })
 
@@ -750,6 +829,11 @@ describe("upgrade an old project", () => {
   it.effect(
     "docs/upgrading.md's 0.2.0 example: each quoted line is what doctor, upgrade --check and upgrade print",
     () => upgradingGuide(),
+    { timeout: 20 * 60 * 1000 },
+  )
+  it.effect(
+    "docs/upgrading.md's edited layers.ts example: each quoted line is what each upgrade prints, then the gate",
+    () => upgradingGuideLayers(),
     { timeout: 20 * 60 * 1000 },
   )
   for (const [version, ref, flags] of releases.slice(0, 2))

@@ -109,6 +109,49 @@ Kept as they are
 
 A held server file still gets `requireSession` on its server functions, which the project's lint asks for. After the upgrade, `pnpm typecheck && pnpm check && pnpm test && pnpm build` passed, `pnpm run deploy --dry-run` built the Worker with its `DB` binding, `doctor` reported no failure, and `upgrade --check` said "Up to date: nothing to apply". To take the new dashboard, the owner merges `apps/web/src/routes/app/index.tsx` with efforge's version by hand, then runs `upgrade` again for the held files. `efforge.jsonc` lists under `held` the one it held back before writing it (`registry.ts`), so that run adds it rather than taking it for a file the owner removed. Taking efforge's dashboard whole and running `upgrade` again added the rest, after which the gate passed and `upgrade --check --strict` exited `0`.
 
+### When you changed `layers.ts` too
+
+The same project, with one more change of its owner's: a layer of their own, `BillingLive`, in `AppLayer`. The first `upgrade` then lists `layers.ts` as `yours` instead of `held`, and the rest goes as above. The owner takes efforge's dashboard whole, commits, and runs `upgrade` again:
+
+```sh
+npx -y create-efforge@latest upgrade --check --diff --file apps/web/src/routes/app/index.tsx | git apply
+git commit -am "dashboard: efforge's"
+npx -y create-efforge@latest upgrade
+```
+
+The cards still do not arrive, and the dashboard now fails the build (exit code `2`). Each card's code panel shows the `// #region card` block of a file, and efforge can't add that block to a `layers.ts` you changed:
+
+<!-- output: upgrade, after taking the dashboard -->
+```text
+  held     apps/web/src/capabilities/runtime.tsx
+           Kept as it is: it needs its `// #region card` block in apps/web/src/server/layers.ts, which you changed, so efforge can't add it for you.
+...
+  yours    apps/web/src/server/layers.ts
+           You changed it, and efforge's template changed too: AppLayer sits in a `// #region card` block, which the dashboard's runtime card shows.
+...
+  ✗ apps/web/src/routes/app/index.tsx imports its `// #region card` block from apps/web/src/server/layers.ts, which apps/web/src/server/layers.ts lacks, so the build fails.
+```
+
+So merge `layers.ts` by hand too. `npx -y create-efforge@latest upgrade --check --diff --file apps/web/src/server/layers.ts` shows efforge's version: keep your lines (`BillingLive`), and take its `// #region card` and `// #endregion` lines around `AppLayer`, with `TelemetryLive` and the `.pipe(Layer.provideMerge(TelemetryLive))` they hold. Commit, and run `upgrade` a third time. The held cards arrive (exit code `0`):
+
+<!-- output: upgrade, after merging layers.ts -->
+```text
+Upgraded to what efforge 0.3.0 generates today:
+  + apps/web/src/capabilities/auth.tsx
+  + apps/web/src/capabilities/database.tsx
+  + apps/web/src/capabilities/registry.ts
+  + apps/web/src/capabilities/runtime.tsx
+...
+  held     apps/web/src/server/auth-live.ts
+           Kept as it is: apps/web/src/server/layers.ts imports `AuthLive` with the type it has now from it, and efforge's new version changes it.
+```
+
+Then the gate passed and `upgrade --check --strict` exited `0`.
+
+### A held file can carry a fix
+
+`--strict` exits `0` with files still held, and `auth-live.ts` and `auth.ts` stay held for good in both runs above, because `layers.ts` imports `AuthLive` as it is now. A held file keeps every fix of efforge's that came after it. Here, the held `auth-live.ts` lacks two of 0.3.0's: Better Auth's start-up handed to `waitUntil` (sign-ups failed on a cold Worker), and the check that `BETTER_AUTH_URL` is an http or https URL. Read each held file's diff with `upgrade --check --diff --file <path>` and decide. In this run nobody had edited either file, so the owner took both whole (each diff piped to `git apply`), committed and ran `upgrade`: only `layers.ts` was left as kept, and the gate passed.
+
 ## Without the new CLI
 
 If you can't run a newer efforge, repair a 0.2.0 project by hand. `efforge add` from 0.2.1 does the same; from 0.3.0 on, `add` writes nothing on a 0.2.x project and asks for `upgrade` first.
