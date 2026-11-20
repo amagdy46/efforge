@@ -206,7 +206,7 @@ npx -y create-efforge create my-app --json --dry-run
 
 ## `add`
 
-`stack` is the project's stack afterwards. `added` has one entry per add-on this run added: its `id`, `title`, `docs` (its page in efforge's docs), `card` (its dashboard card module, when the project has one) and `agents` (the headings of the `AGENTS.md` sections this run added for it). `created` and `changed` are the files this run created and changed, `removed` the generated files it deleted (`wrangler.jsonc` when you add Alchemy), `skipped` the ids the project already had and files already as efforge would write them. `replacedScripts` names package scripts an add-on replaced. `packageManager` is `{from, to}` when `add` raised the root `packageManager` (projects made by efforge 0.2.0, whose pnpm ignored the Effect overrides), else `null`. `notes` are things left to do by hand, one line each (for example, a card left out of a project with no dashboard registry, a server function `add` could not put `requireSession` on, with the fix, or, when auth is added, that every server function now requires a session and how to make one public). `installed` says whether `pnpm install` ran in this run; when it didn't and should, `nextSteps` starts with it. `env` lists only the env vars this run added.
+`stack` is the project's stack afterwards. `added` has one entry per add-on this run added: its `id`, `title`, `docs` (its page in efforge's docs), `card` (its dashboard card module, when the project has one) and `agents` (the headings of the `AGENTS.md` sections this run added for it). `created` and `changed` are the files this run created and changed, `removed` the generated files it deleted (`wrangler.jsonc` when you add Alchemy), `skipped` the ids the project already had and files already as efforge would write them. `replacedScripts` names package scripts an add-on replaced. `packageManager` is `{from, to}` when `add` raised the root `packageManager` (projects made by efforge 0.2.0, whose pnpm ignored the Effect overrides), else `null`. `notes` are things left to do by hand, one line each (for example, a card left out of a project with no dashboard registry, a server function `add` could not put `requireSession` on, with the fix, or, when auth is added, that every server function now requires a session, which of the project's own `pnpm check` now fails on, how to make one public, and what changed for routes under `/api/` and outside it). `installed` says whether `pnpm install` ran in this run; when it didn't and should, `nextSteps` starts with it. `env` lists only the env vars this run added.
 
 <!-- example: add -->
 
@@ -999,7 +999,8 @@ npx -y create-efforge upgrade --check --json --cwd my-app
   "env": [],
   "kept": [],
   "steps": [],
-  "warnings": []
+  "warnings": [],
+  "notes": []
 }
 ```
 
@@ -1144,7 +1145,8 @@ npx -y create-efforge upgrade --check --json --cwd my-app
       "cwd": "/home/me/projects/my-app"
     }
   ],
-  "warnings": []
+  "warnings": [],
+  "notes": []
 }
 ```
 
@@ -1156,6 +1158,7 @@ npx -y create-efforge upgrade --check --json --cwd my-app
 - `created`, `changed`, `removed`: the files, relative to the project. `installed`: whether `pnpm install` ran.
 - `env`: the env vars it added, as in `--check`.
 - `kept`: as above. `nextSteps`: the commands left to run, each with its `cwd`, ending with the project's gate.
+- `notes`: things to know after the upgrade, one line each, as `add` gives them. When it brings the session gates to an auth project made before them, the note `add auth` prints: what they change for server functions and routes, and the server functions `pnpm check` now fails on. `--check` has the same `notes`.
 - With `--diff`, `diff` is what it changed, as one git diff.
 
 The same project as above, upgraded:
@@ -1210,7 +1213,8 @@ npx -y create-efforge upgrade --json --cwd my-app
       "cwd": "/home/me/projects/my-app"
     }
   ],
-  "warnings": []
+  "warnings": [],
+  "notes": []
 }
 ```
 
@@ -1235,6 +1239,7 @@ Each of `checks` has a stable `id`, a `status` (`ok`, `warn`, `fail`, `skipped`,
 | `migrations` | D1 migrations not yet applied to the local database. |
 | `postgres` | Whether the local Postgres answers (nothing is started). |
 | `layers` | A layer in `layers.ts` for each add-on that adds one, read as code (a commented-out layer is missing; `AppLayer` built from another const counts). |
+| `gates` | On a stack with auth: `sessionGate` first in `functionMiddleware`, passed to `createStart` (`apps/web/src/start.ts`), and `requireApiSession` first in `workerRoutes` (`apps/web/src/server/routes.ts`). A gate taken out, or something listed before it, fails with `details.problems` (each `file`, `problem` and the `lines` to put back); skipped without auth. |
 | `upgrade` | `upgrade --check`'s answer: `fail` for needs-action, `warn` for behind. |
 
 New checks can appear without a change of contract; treat an unknown `id` like the others.
@@ -1349,6 +1354,12 @@ npx -y create-efforge doctor --json --cwd my-app
       "fix": null
     },
     {
+      "id": "durable-objects",
+      "status": "ok",
+      "message": "This stack has no Durable Objects.",
+      "fix": null
+    },
+    {
       "id": "migrations",
       "status": "warn",
       "message": "2 of 2 migrations aren't applied to the local D1 database (0001_init.sql, 0002_auth.sql), so pnpm dev runs against missing tables.",
@@ -1371,6 +1382,12 @@ npx -y create-efforge doctor --json --cwd my-app
       "id": "layers",
       "status": "ok",
       "message": "AppLayer has a layer for each add-on (orm/drizzle, auth/better-auth).",
+      "fix": null
+    },
+    {
+      "id": "gates",
+      "status": "ok",
+      "message": "sessionGate is first in functionMiddleware (apps/web/src/start.ts) and requireApiSession first in workerRoutes (apps/web/src/server/routes.ts).",
       "fix": null
     },
     {
@@ -2128,7 +2145,7 @@ npx -y create-efforge add --json --cwd my-app
   "ok": false,
   "error": {
     "code": "NoAddonIds",
-    "message": "Name the add-ons to add: infra/alchemy, ai/effect-ai-byok, extras/workflows, extras/realtime, extras/browser, extras/storage, extras/email, extras/rpc. What each one adds: npx -y create-efforge list --json --cwd my-app",
+    "message": "Name the add-ons to add: infra/alchemy, ai/effect-ai-byok, extras/workflows, extras/realtime, extras/browser, extras/storage, extras/email, extras/rpc, extras/cluster. What each one adds: npx -y create-efforge list --json --cwd my-app",
     "fix": null,
     "available": [
       "infra/alchemy",
@@ -2138,7 +2155,8 @@ npx -y create-efforge add --json --cwd my-app
       "extras/browser",
       "extras/storage",
       "extras/email",
-      "extras/rpc"
+      "extras/rpc",
+      "extras/cluster"
     ]
   }
 }
@@ -2234,6 +2252,36 @@ npx -y create-efforge add auth/none --json --cwd my-app
     "message": "Removing an add-on isn't supported yet (\"auth/none\").",
     "fix": null,
     "id": "auth/none"
+  }
+}
+```
+
+### `UpgradeFirst`
+
+`add` would write a dashboard card that the project's card boundary can't typecheck: `apps/web/src/server/outcome.ts` is from an efforge made before server functions returned an `Exit` (a project made between releases). Nothing was written. An add-on without a card is not held up.
+
+Fields: `file` (the boundary file), `addons` (the add-ons whose cards need the newer boundary), `after` (this `add`, to run once `upgrade` is done). `fix`: `upgrade` in the same project (keeping `--cwd` and `--json`), which brings the boundary up to date; then run `after`.
+
+<!-- example: UpgradeFirst -->
+
+```sh
+npx -y create-efforge add realtime --json --cwd my-app
+```
+
+```json
+{
+  "efforge": "0.2.1",
+  "contract": 1,
+  "ok": false,
+  "error": {
+    "code": "UpgradeFirst",
+    "message": "apps/web/src/server/outcome.ts is from an older efforge: the dashboard card of extras/realtime would not typecheck against it. Nothing was written. Run npx -y create-efforge upgrade --json --cwd my-app first, then this add again.",
+    "fix": "npx -y create-efforge upgrade --json --cwd my-app",
+    "file": "apps/web/src/server/outcome.ts",
+    "addons": [
+      "extras/realtime"
+    ],
+    "after": "npx -y create-efforge add realtime --json --cwd my-app"
   }
 }
 ```

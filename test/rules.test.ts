@@ -102,7 +102,7 @@ it("ProjectName rejects unscoped slash and empty, accepts scoped", () => {
   expect(Option.isSome(dec("@scope/name"))).toBe(true)
 })
 
-it("d1, workflows, realtime and browser require cloudflare", () => {
+it("d1, workflows, realtime, browser and cluster require cloudflare", () => {
   const other = { runtime: "other" } as unknown as Parameters<typeof available>[1]
   expect(ids(available("database", other))).toEqual(["postgres", "none"])
   expect(ids(available("extras", other))).toEqual(["storage", "email", "rpc"])
@@ -115,6 +115,7 @@ it("d1, workflows, realtime and browser require cloudflare", () => {
     "storage",
     "email",
     "rpc",
+    "cluster",
   ])
 })
 

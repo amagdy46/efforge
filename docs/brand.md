@@ -81,8 +81,9 @@ Text needs 4.5:1 (WCAG AA); shapes and large text need 3:1. Where the "On Iron" 
 | 6 | Gold | `#B38323` | 3.11:1 | 67 | `#BF8D2E` | 5.28:1 | 64 |
 | 7 | Plum | `#8A4F6E` | 5.62:1 | 30 | `#C58AA8` | 5.66:1 | 28 |
 | 8 | Slate | `#6B7078` | 4.56:1 | 25 | `#A3A7AE` | 6.50:1 | 24 |
-| 9 | Teal | `#3D7F73` | 4.29:1 | 38 | `#7FBFB2` | 7.47:1 | 42 |
-| 10 | Moss | `#5E7A2C` | 4.48:1 |  | `#A4C46A` | 7.98:1 |  |
+| 9 | Teal | `#3D7F73` | 4.29:1 | 86 | `#7FBFB2` | 7.47:1 | 82 |
+| 10 | Indigo | `#5045B8` | 6.67:1 | 116 | `#8574E6` | 4.21:1 | 112 |
+| 11 | Moss | `#5E7A2A` | 4.48:1 |  | `#A9C774` | 8.30:1 |  |
 
 The dashboard's layer graph and cards, and `efforge graph`, colour layers in this order. Each value reaches 3:1, what a shape needs, on both surfaces of its theme (card `#FCFBF8` and page `#F6F5F1` light, `#222327` and `#1C1D20` dark), and is at least 20 apart (CIE76 ΔE) from its neighbours. The named colours keep their brand values above for brand use; on the dashboard, Straw, Bronze and Temper purple use the variants in this table. Every layer is also named in text, so colour is never the only cue.
 

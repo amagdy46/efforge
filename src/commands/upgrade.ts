@@ -10,6 +10,7 @@ import { exec, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
 import { alternative, finish, withFlag } from "../fix.ts"
 import { GenerateError } from "../generate.ts"
 import { introLine } from "../intro.ts"
+import { wrapProse } from "../wrap.ts"
 import { generateRouteTree } from "../routeTree.ts"
 import { gitDiff, planUpgrade, type UpgradeReport, type UpgradeStep } from "../upgrade.ts"
 import { efforgeVersion, pinSets } from "../versions.ts"
@@ -137,6 +138,7 @@ export const renderUpgrade = (
         : `${pc.green("Up to date:")} nothing to apply${r.kept.length > 0 ? `; ${plural(r.kept.length, "file")} ${r.kept.length === 1 ? "is" : "are"} kept as ${r.kept.length === 1 ? "it is" : "they are"} (below)` : ""}.`
   out.push(`${made} ${head}`)
   for (const w of r.warnings) out.push(pc.yellow(w))
+  for (const n of r.notes) out.push(wrapProse(n, 80))
 
   if (r.needsAction.length > 0) {
     out.push("", pc.bold("Needs action"))
@@ -280,6 +282,7 @@ const checkDocument = (r: UpgradeReport, only: string | undefined) => ({
   kept: r.kept,
   steps: r.steps,
   warnings: r.warnings,
+  notes: r.notes,
 })
 
 const gitDirty = (dir: string) =>
@@ -510,6 +513,7 @@ export const upgradeCommand = Command.make(
           needsAction,
           nextSteps,
           warnings: r.warnings,
+          notes: r.notes,
           ...(input.diff
             ? {
                 diff: diffs.join("\n"),
@@ -567,6 +571,10 @@ export const upgradeCommand = Command.make(
                 ? []
                 : n.lines.split("\n").map((l) => `      ${pc.dim(l)}`)),
             )
+        }
+        if (r.notes.length > 0 && anything) {
+          lines.push("", pc.bold("Notes"))
+          for (const n of r.notes) lines.push(`  ${wrapProse(n, 78).split("\n").join("\n  ")}`)
         }
         if (input.diff) for (const d of diffs) lines.push("", d.trimEnd())
         if (nextSteps.length > 0 && !input.dryRun) {

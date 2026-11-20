@@ -96,11 +96,12 @@ export const slots: ReadonlyArray<SlotDef> = [
       opt("extras", "storage", "Storage"),
       opt("extras", "email", "Email"),
       opt("extras", "rpc", "Effect RPC", "typed calls and streams"),
+      opt("extras", "cluster", "Cluster", "experimental"),
     ],
   },
 ]
 
-const cloudflareOnly = new Set(["d1", "workflows", "realtime", "browser"])
+const cloudflareOnly = new Set(["d1", "workflows", "realtime", "browser", "cluster"])
 
 /** Options of `slot` that are compatible with the choices already made in `partial`. */
 export const available = (

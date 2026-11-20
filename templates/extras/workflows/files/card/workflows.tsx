@@ -1,4 +1,4 @@
-import { JobError, type JobEvent, MissingName, UnknownRun } from "@repo/core/jobs"
+import type { JobEvent } from "@repo/core/jobs"
 import { CircleCheck, CircleDashed, CircleX, LoaderCircle, RotateCw } from "lucide-react"
 import { type SubmitEvent, useCallback, useEffect, useRef, useState } from "react"
 import { FailureNote, Pending } from "@/components/demo"
@@ -7,7 +7,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { Failure } from "@/lib/outcome"
 import { settleCall, useServerCall } from "@/lib/use-server-call"
-import { startWorkflow, watchWorkflow } from "@/server/workflows-demo"
+import {
+  startWorkflow,
+  StartWorkflowErrors,
+  watchWorkflow,
+  WatchWorkflowErrors,
+} from "@/server/workflows-demo"
 import workflow from "../workflows/Example.ts?region=card"
 import program from "../../../../packages/core/src/jobs.ts?region=card"
 import serverFn from "../server/workflows-demo.ts?region=card"
@@ -93,7 +98,10 @@ function useRun() {
     setRun({ id, events: [], status: "queued", done: false, message: undefined, error: undefined })
     setFailure(undefined)
     const next = async (after: number, seen: ReadonlyArray<JobEvent>): Promise<void> => {
-      const outcome = await settleCall(watchWorkflow({ data: { id, after } }), UnknownRun, JobError)
+      const outcome = await settleCall(
+        watchWorkflow({ data: { id, after } }),
+        ...WatchWorkflowErrors,
+      )
       if (generation !== current.current) return
       if (!outcome.ok) {
         setFailure(outcome)
@@ -120,7 +128,7 @@ function useRun() {
 function WorkflowsDemo() {
   const [name, setName] = useState("Ada")
   const [failFirst, setFailFirst] = useState(true)
-  const start = useServerCall(startWorkflow, MissingName, JobError)
+  const start = useServerCall(startWorkflow, ...StartWorkflowErrors)
   const { run, failure, follow, reset } = useRun()
   const running =
     start.state.status === "running" || (run !== undefined && !run.done && failure === undefined)

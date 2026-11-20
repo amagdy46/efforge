@@ -123,9 +123,19 @@ export const origins = (
 }
 
 /** `apps/web/src/x.ts` -> `apps/web`, `README.md` -> `(root)`: the top two levels of a path. */
-const topOf = (file: string): string => {
+export const topOf = (file: string): string => {
   const parts = file.split("/")
   return parts.length === 1 ? "(root)" : parts.slice(0, Math.min(2, parts.length - 1)).join("/")
+}
+
+/** `apps/web 5, (root) 1`: how many of `files` are under each top-level directory, most first. */
+export const whereIn = (files: ReadonlyArray<string>): string => {
+  const tops = new Map<string, number>()
+  for (const f of files) tops.set(topOf(f), (tops.get(topOf(f)) ?? 0) + 1)
+  return [...tops]
+    .toSorted(([a, x], [b, y]) => y - x || (a < b ? -1 : 1))
+    .map(([dir, n]) => `${dir} ${n}`)
+    .join(", ")
 }
 
 /**
@@ -153,14 +163,8 @@ export const filesByOrigin = (
   const count = Math.max(...groups.map((g) => String(g.files.length).length)) + 1
   return [
     ...groups.map((g, i) => {
-      const tops = new Map<string, number>()
-      for (const f of g.files) tops.set(topOf(f), (tops.get(topOf(f)) ?? 0) + 1)
-      const where = [...tops]
-        .toSorted(([a, x], [b, y]) => y - x || (a < b ? -1 : 1))
-        .map(([dir, n]) => `${dir} ${n}`)
-        .join(", ")
       const n = `${i === 0 ? "" : "+"}${g.files.length}`.padStart(count)
-      return `${g.id.padEnd(width)}  ${n}  ${pc.dim(where)}`
+      return `${g.id.padEnd(width)}  ${n}  ${pc.dim(whereIn(g.files))}`
     }),
     "",
     pc.dim("Every file: add --verbose, or --json for the list as data."),

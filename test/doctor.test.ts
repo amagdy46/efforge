@@ -131,9 +131,11 @@ it("every check has a stable, unique id", () => {
     "peers",
     "env",
     "bindings",
+    "durable-objects",
     "migrations",
     "postgres",
     "layers",
+    "gates",
     "upgrade",
   ])
 })
@@ -169,7 +171,7 @@ it("manifest: an invalid efforge.jsonc fails, and the checks that need the stack
   edit(dir, "efforge.jsonc", (t) => t.replace('"database": "d1"', '"database": "mysql"'))
   const r = await doctor(dir)
   expect(get(r, "manifest").status).toBe("fail")
-  for (const id of ["env", "bindings", "migrations", "postgres", "layers", "upgrade"])
+  for (const id of ["env", "bindings", "migrations", "postgres", "layers", "gates", "upgrade"])
     expect(get(r, id).status, id).toBe("skipped")
 })
 
@@ -382,6 +384,33 @@ it("bindings: with Alchemy, a deleted resource fails", async () => {
   expect(r.message).toContain("STORAGE")
 })
 
+it("durable-objects: a class without its migration or its export from the Worker entry fails", async () => {
+  const dir = await project({ extras: ["realtime", "cluster"] })
+  expect(get(await doctor(dir), "durable-objects").status).toBe("ok")
+  // the cluster migration no longer creates ClusterWorkflow (its binding stays)
+  edit(dir, "wrangler.jsonc", (t) =>
+    t.replace(/"ClusterEntity",\s*"ClusterWorkflow",/, '"ClusterEntity",'),
+  )
+  edit(dir, "apps/web/src/server.ts", (t) => t.replace("  ClusterEntity,\n", ""))
+  const r = get(await doctor(dir), "durable-objects")
+  expect(r.status).toBe("fail")
+  expect(r.message).toContain("doesn't export ClusterEntity (extras/cluster)")
+  expect(r.details).toMatchObject({ unexported: ["ClusterEntity"] })
+  expect(r.details?.unmigrated).toContain("ClusterWorkflow")
+})
+
+it("durable-objects: with Alchemy, the export is checked and the migrations are Alchemy's", async () => {
+  const dir = await project({ infra: "alchemy", extras: ["cluster"] })
+  expect(get(await doctor(dir), "durable-objects").message).toContain(
+    "Alchemy writes their migrations",
+  )
+  edit(dir, "apps/web/src/server.ts", (t) => t.replace("  ClusterDurableQueue,\n", ""))
+  expect(get(await doctor(dir), "durable-objects").details).toMatchObject({
+    unexported: ["ClusterDurableQueue"],
+    unmigrated: [],
+  })
+})
+
 // ruling 10: read as code, not text
 it("bindings: with Alchemy, a commented-out binding fails and a renamed variable passes", async () => {
   const dir = await project({ infra: "alchemy", extras: ["storage"] })
@@ -434,6 +463,69 @@ it("postgres: nothing answering warns with docker compose; it never starts anyth
   )
   expect(r).toMatchObject({ status: "warn", fix: "docker compose up -d --wait" })
   expect(asked).toEqual(["localhost:5432"])
+})
+
+it("gates: a project with auth has both, first; without auth there is nothing to check", async () => {
+  expect(get(await doctor(await project()), "gates").status).toBe("ok")
+  expect(get(await doctor(await project({ auth: "none" })), "gates").status).toBe("skipped")
+})
+
+it("gates: sessionGate taken out of start.ts, or not first, or not passed to createStart, fails with the lines", async () => {
+  const dir = await project()
+  const start = "apps/web/src/start.ts"
+  const original = readFileSync(join(dir, start), "utf8")
+  const cases: Array<[string, (t: string) => string, string]> = [
+    [
+      "removed",
+      (t) => t.replace("[sessionGate, nameCall]", "[nameCall]"),
+      "sessionGate is not in functionMiddleware",
+    ],
+    [
+      "not first",
+      (t) => t.replace("[sessionGate, nameCall]", "[nameCall, sessionGate]"),
+      "nameCall runs before sessionGate",
+    ],
+    [
+      "not passed",
+      (t) => t.replace("  functionMiddleware,\n", ""),
+      "functionMiddleware is not passed to createStart",
+    ],
+  ]
+  for (const [name, change, says] of cases) {
+    writeFileSync(join(dir, start), change(original))
+    expect(readFileSync(join(dir, start), "utf8"), name).not.toBe(original)
+    const r = get(await doctor(dir), "gates")
+    expect(r.status, name).toBe("fail")
+    expect(r.message, name).toContain(says)
+    expect(r.fix).toBeNull()
+    expect(JSON.stringify(r.details), name).toContain("[sessionGate, ...]")
+  }
+  writeFileSync(join(dir, start), original)
+  expect(get(await doctor(dir), "gates").status).toBe("ok")
+})
+
+it("gates: requireApiSession taken out of workerRoutes, or not first, fails", async () => {
+  const dir = await project()
+  edit(dir, "apps/web/src/server/routes.ts", (t) =>
+    t.replace(/requireApiSession,\s*authRoute/, "authRoute, requireApiSession"),
+  )
+  const late = get(await doctor(dir), "gates")
+  expect(late.status).toBe("fail")
+  expect(late.message).toContain("authRoute runs before requireApiSession")
+  edit(dir, "apps/web/src/server/routes.ts", (t) => t.replace(", requireApiSession", ""))
+  expect(get(await doctor(dir), "gates").message).toContain(
+    "requireApiSession is not in workerRoutes",
+  )
+})
+
+it("gates: a start.ts of the owner's that efforge can't read is unverified, not ok", async () => {
+  const dir = await project()
+  edit(dir, "apps/web/src/start.ts", (t) =>
+    t
+      .replace("const functionMiddleware", "const middleware")
+      .replace("  functionMiddleware,", "  functionMiddleware: middleware,"),
+  )
+  expect(get(await doctor(dir), "gates")).toMatchObject({ status: "unverified", fix: null })
 })
 
 it("layers: a layer removed from AppLayer fails", async () => {

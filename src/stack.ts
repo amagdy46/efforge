@@ -15,6 +15,7 @@ export const Extra = Schema.Literals([
   "storage",
   "email",
   "rpc",
+  "cluster",
 ])
 
 export const SlotId = Schema.Literals([

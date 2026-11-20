@@ -35,15 +35,17 @@ const parts = (answer: Stream.Stream<string, LlmError>) =>
   )
 
 // #region card
+/** What `askModel` can fail with before it answers; each arrives as itself. */
+export const AskModelErrors = [EmptyPrompt, LlmNotConfigured] as const
+
 /** Asks the model; its answer streams back as it is written. */
 export const askModel = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(AskInput))
   .handler(({ data }) => {
-    const answer = ask(data.prompt).pipe(Effect.map(parts))
-    return runOutcome(
-      answer.pipe(Effect.catchTag("LlmNotConfigured", named)),
-      EmptyPrompt,
-      LlmNotConfigured,
+    const answer = ask(data.prompt).pipe(
+      Effect.map(parts),
+      Effect.catchTag("LlmNotConfigured", named),
     )
+    return runOutcome(answer, ...AskModelErrors)
   })
 // #endregion

@@ -7,15 +7,34 @@ import { runtime } from "./runtime"
 const user = Auth.use((auth) => auth.currentSession)
 const middleware = createMiddleware({ type: "function" })
 
-/** The names on the public list, by file (`public-server-fns.json`). */
-const publicNames: Readonly<Record<string, ReadonlyArray<string> | undefined>> = publicServerFns
+const listed: Readonly<Record<string, ReadonlyArray<string>>> = publicServerFns
+
+/**
+ * The names on the public list, by file (`public-server-fns.json`), checked as it is loaded.
+ * A list of the wrong shape makes nothing public, and says so in the server log.
+ */
+const publicNames = ((): ReadonlyMap<string, ReadonlyArray<string>> => {
+  const list: unknown = listed
+  const valid =
+    typeof list === "object" &&
+    list !== null &&
+    !Array.isArray(list) &&
+    Object.values(list).every(
+      (names) => Array.isArray(names) && names.every((n) => typeof n === "string"),
+    )
+  if (valid) return new Map(Object.entries(listed))
+  console.error(
+    'apps/web/src/server/public-server-fns.json must be { "<file>": ["<name>", ...] }. Every server function requires a session until it is.',
+  )
+  return new Map()
+})()
 
 /**
  * Whether a server function is on the public list, by the file the TanStack compiler recorded
  * for it (relative to apps/web) and the name it is declared as.
  */
 const isPublic = (fn: { readonly filename: string; readonly name: string } | undefined) =>
-  fn !== undefined && publicNames[`apps/web/${fn.filename}`]?.includes(fn.name) === true
+  fn !== undefined && publicNames.get(`apps/web/${fn.filename}`)?.includes(fn.name) === true
 
 /** One session lookup per request, however many middlewares ask for it. */
 const lookups = new WeakMap<Request, Promise<Session>>()

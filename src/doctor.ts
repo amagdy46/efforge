@@ -838,6 +838,96 @@ const bindingsCheck: Check = {
     }),
 }
 
+// --- Durable Objects ----------------------------------------------------------------------------
+
+const SERVER_ENTRY = "apps/web/src/server.ts"
+
+/** The value names `file` re-exports (`export { A, B } from ...`); `*` re-exports count as unknown. */
+const reExported = (file: string, text: string): { names: Set<string>; star: boolean } => {
+  const names = new Set<string>()
+  let star = false
+  for (const d of parseTs(file, text).getExportDeclarations()) {
+    if (d.isTypeOnly()) continue
+    if (d.isNamespaceExport()) star = true
+    for (const n of d.getNamedExports())
+      if (!n.isTypeOnly()) names.add(n.getAliasNode()?.getText() ?? n.getName())
+  }
+  return { names, star }
+}
+
+/**
+ * Every Durable Object class a binding names must be exported from the Worker entry, and, with
+ * wrangler, created by a migration: a class without one fails the deploy, and a binding to a
+ * class the entry doesn't export fails at the first request.
+ */
+const durableObjectsCheck: Check = {
+  id: "durable-objects",
+  title: "Durable Objects",
+  run: (ctx) =>
+    Effect.sync(() => {
+      const stack = ctx.manifest?.stack
+      if (stack === undefined) return skipped("efforge.jsonc isn't valid, so the stack is unknown.")
+      const classes =
+        stack.infra === "alchemy"
+          ? transformsOf(ctx, stack, "addAlchemyResource").flatMap(({ t, addon }) => {
+              const m = /Cloudflare\.DurableObject\("([^"]+)"/.exec(t.args.code ?? "")
+              return m === null ? [] : [{ name: m[1] as string, addon: addon.id }]
+            })
+          : transformsOf(ctx, stack, "addWranglerBinding")
+              .filter(({ t }) => t.args.key === "durable_objects.bindings")
+              .flatMap(({ t, addon }) => {
+                const v = record(JSON.parse(t.args.value as string))
+                return typeof v.class_name === "string"
+                  ? [{ name: v.class_name, addon: addon.id }]
+                  : []
+              })
+      if (classes.length === 0) return ok("This stack has no Durable Objects.")
+      const problems: string[] = []
+      const entry = ctx.read(SERVER_ENTRY)
+      const exported = entry === undefined ? undefined : reExported(SERVER_ENTRY, entry)
+      const unexported =
+        exported === undefined || exported.star
+          ? []
+          : classes.filter((c) => !exported.names.has(c.name))
+      if (entry === undefined) problems.push(`${SERVER_ENTRY} is missing.`)
+      if (unexported.length > 0)
+        problems.push(
+          `${SERVER_ENTRY} doesn't export ${unexported.map((c) => `${c.name} (${c.addon})`).join(", ")}; Cloudflare finds a Durable Object class on the Worker entry.`,
+        )
+      let unmigrated: typeof classes = []
+      if (stack.infra !== "alchemy") {
+        const doc = jsonc(ctx.read("wrangler.jsonc"))
+        if (doc !== undefined) {
+          const created = new Set<string>()
+          for (const m of Array.isArray(doc.migrations) ? doc.migrations : [])
+            for (const key of ["new_sqlite_classes", "new_classes"]) {
+              const list = record(m)[key]
+              if (Array.isArray(list))
+                for (const c of list) if (typeof c === "string") created.add(c)
+            }
+          unmigrated = classes.filter((c) => !created.has(c.name))
+          if (unmigrated.length > 0)
+            problems.push(
+              `No migration in wrangler.jsonc creates ${unmigrated.map((c) => `${c.name} (${c.addon})`).join(", ")}; the deploy fails without one.`,
+            )
+        }
+      }
+      if (problems.length > 0)
+        return {
+          status: "fail" as const,
+          message: problems.join(" "),
+          fix: null,
+          details: {
+            unexported: unexported.map((c) => c.name),
+            unmigrated: unmigrated.map((c) => c.name),
+          },
+        }
+      return ok(
+        `${SERVER_ENTRY} exports the ${classes.length} Durable Object ${classes.length === 1 ? "class" : "classes"} this stack binds (${classes.map((c) => c.name).join(", ")})${stack.infra === "alchemy" ? "; Alchemy writes their migrations" : ", and a migration in wrangler.jsonc creates each"}.`,
+      )
+    }),
+}
+
 // --- Database -----------------------------------------------------------------------------------
 
 const migrationsCheck: Check = {
@@ -976,6 +1066,109 @@ const layersCheck: Check = {
     }),
 }
 
+const START = "apps/web/src/start.ts"
+const ROUTES = "apps/web/src/server/routes.ts"
+
+/**
+ * The first element of the array literal `name` is declared as in `text`, and whether the
+ * array is there at all; undefined when there is no such declaration with an array literal.
+ */
+const firstOf = (file: string, text: string, name: string) => {
+  const init = parseTs(file, text).getVariableDeclaration(name)?.getInitializer()
+  if (init === undefined || !Node.isArrayLiteralExpression(init)) return undefined
+  const elements = init.getElements().map((e) => e.getText())
+  return { first: elements[0], has: (item: string) => elements.includes(item) }
+}
+
+/** Whether `createStart(...)` in `text` is given `functionMiddleware` (by name or shorthand). */
+const passedToStart = (file: string, text: string) =>
+  parseTs(file, text)
+    .getDescendantsOfKind(SyntaxKind.CallExpression)
+    .filter((c) => c.getExpression().getText() === "createStart")
+    .some((c) =>
+      c
+        .getDescendantsOfKind(SyntaxKind.Identifier)
+        .some((id) => id.getText() === "functionMiddleware"),
+    )
+
+/**
+ * On a stack with auth, the two session gates are what keep every server function and every
+ * route under `/api/` behind a session. A gate taken out, or one with something listed before
+ * it (which then runs for a signed-out caller), still passes typecheck and tests, so this says so.
+ */
+const gatesCheck: Check = {
+  id: "gates",
+  title: "The session gates, first",
+  run: (ctx) =>
+    Effect.gen(function* () {
+      const stack = ctx.manifest?.stack
+      if (stack === undefined) return skipped("efforge.jsonc isn't valid, so the stack is unknown.")
+      if (stack.auth === "none")
+        return skipped("This stack has no auth, so it has no session gates.")
+      const problems: Array<{ file: string; problem: string; lines: string }> = []
+      const unread: string[] = []
+      const start = ctx.read(START)
+      const fn = start === undefined ? undefined : firstOf(START, start, "functionMiddleware")
+      if (start === undefined || fn === undefined)
+        unread.push(`${START}: \`const functionMiddleware = [...]\``)
+      else if (fn.first !== "sessionGate" || !passedToStart(START, start))
+        problems.push({
+          file: START,
+          problem:
+            fn.first === "sessionGate"
+              ? "functionMiddleware is not passed to createStart, so sessionGate never runs"
+              : fn.has("sessionGate")
+                ? `${fn.first} runs before sessionGate, so it answers a signed-out caller`
+                : "sessionGate is not in functionMiddleware, so a server function without requireSession answers a signed-out caller",
+          lines:
+            'import { sessionGate } from "./server/require-session"\n\nconst functionMiddleware: Array<AnyFunctionMiddleware> = [sessionGate, ...]\n\ncreateStart(() => ({ functionMiddleware, ... }))',
+        })
+      const routes = ctx.read(ROUTES)
+      const api = routes === undefined ? undefined : firstOf(ROUTES, routes, "workerRoutes")
+      if (routes === undefined || api === undefined)
+        unread.push(`${ROUTES}: \`export const workerRoutes = [...]\``)
+      else if (api.first !== "requireApiSession")
+        problems.push({
+          file: ROUTES,
+          problem: api.has("requireApiSession")
+            ? `${api.first} runs before requireApiSession, so it answers a signed-out request under /api/`
+            : "requireApiSession is not in workerRoutes, so every route under /api/ answers a signed-out request",
+          lines:
+            'import { requireApiSession } from "./api-session"\n\nexport const workerRoutes: ReadonlyArray<WorkerRoute> = [requireApiSession, ...]',
+        })
+      if (problems.length > 0) {
+        // a project made before the gates: upgrade brings each one, first in its list
+        const plan = yield* ctx.plan
+        const gateOf = (file: string) => (file === START ? "sessionGate" : "requireApiSession")
+        const brought = problems.every((p) => {
+          const after = plan?.changes.get(p.file)
+          const list =
+            after === undefined
+              ? undefined
+              : firstOf(p.file, after, p.file === START ? "functionMiddleware" : "workerRoutes")
+          return list?.first === gateOf(p.file)
+        })
+        const fix = brought ? upgradeFix(ctx, plan) : null
+        return {
+          status: "fail" as const,
+          message: `${problems.map((p) => `${p.file}: ${p.problem}`).join(". ")}. ${brought ? "upgrade adds the gates, first in their lists." : "Put it back first in the list (details.lines)."}`,
+          fix,
+          details: { problems, ...(brought && fix === null ? upgradeFacts(ctx, plan) : {}) },
+        }
+      }
+      if (unread.length > 0)
+        return {
+          status: "unverified" as const,
+          message: `Couldn't find ${unread.join(" or ")}, so the session gates weren't checked. If code of yours puts sessionGate first before every server function and requireApiSession first before every route, that's fine; efforge can't tell.`,
+          fix: null,
+          details: { lookedFor: unread },
+        }
+      return ok(
+        "sessionGate is first in functionMiddleware (apps/web/src/start.ts) and requireApiSession first in workerRoutes (apps/web/src/server/routes.ts).",
+      )
+    }),
+}
+
 /** Local names imported into `text`. */
 const importedNames = (file: string, text: string): Set<string> =>
   new Set(
@@ -1103,9 +1296,11 @@ export const checks: ReadonlyArray<Check> = [
   peersCheck,
   envCheck,
   bindingsCheck,
+  durableObjectsCheck,
   migrationsCheck,
   postgresCheck,
   layersCheck,
+  gatesCheck,
   upgradeCheck,
 ]
 

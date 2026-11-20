@@ -53,38 +53,53 @@ Every command exits `1` on an error. A job that runs `upgrade --check` fails onl
 
 ## A project from efforge 0.2.0
 
-efforge 0.2.0 made projects without the Effect guard. When Effect 4.1 came out, a new install could put two Effect versions in one build, and `pnpm build` failed with `failed to resolve import "effect/..."`. Here is one such project brought forward: made with 0.2.0 (`--database=d1 --orm=effect-sql`, the default Better Auth with organizations), with one change of its owner's, the dashboard's heading renamed, committed. The output below is from the efforge of this writing; its counts change with each release.
+efforge 0.2.0 made projects without the Effect guard. When Effect 4.1 came out, a new install could put two Effect versions in one build, and `pnpm build` failed with `failed to resolve import "effect/..."`. Here is one such project brought forward: made with 0.2.0 (`--database=d1 --orm=effect-sql`, the default Better Auth with organizations), installed, with one change of its owner's, the dashboard's heading renamed, committed. The output below is from the efforge of this writing; its counts change with each release. (The project is efforge's own test fixture, `test/fixtures/v0.2.0`, and an end-to-end test checks that a real run still prints each line quoted here, counts and versions aside.)
 
 `doctor` finds the problem (exit code `2`):
 
+<!-- output: doctor -->
 ```text
-✗ pnpm          packageManager pins pnpm 12.4.2, which ignores the overrides that keep Effect's packages on one version (they work from pnpm 12.17.0). upgrade raises it with the overrides.
-                Try: npx -y create-efforge upgrade
-✗ effect        effect is 4.0.5, but @effect/platform-node-shared 4.1.4, @effect/sql-sqlite-do 4.1.4 resolved to another version: two Effects in one build, which fails (Effect's packages only work at one shared version). pnpm-workspace.yaml lacks the overrides that prevent it; upgrade writes them and installs.
-                Try: npx -y create-efforge upgrade
+✗ pnpm             packageManager pins pnpm 12.4.2, which ignores the overrides that keep Effect's packages on one version (they work from pnpm 12.17.0). upgrade raises it with the overrides.
+                   Try: npx -y create-efforge upgrade
 ...
-4 failed, 2 warnings, 7 ok, 1 skipped.
+✗ effect           effect is 4.0.5, but @effect/platform-node-shared 4.1.4, @effect/sql-sqlite-do 4.1.4 resolved to another version: two Effects in one build, which fails (Effect's packages only work at one shared version). pnpm-workspace.yaml lacks the overrides that prevent it; upgrade writes them and installs.
+                   Try: npx -y create-efforge upgrade
+...
+✗ gates            apps/web/src/server/routes.ts: requireApiSession is not in workerRoutes, so every route under /api/ answers a signed-out request. upgrade adds the gates, first in their lists.
+                   Try: npx -y create-efforge upgrade
+...
+5 failed, 2 warnings, 8 ok, 1 skipped.
 ```
 
-`upgrade --check` says what `upgrade` would do (exit code `2`):
+Besides the Effect guard, the `gates` check reports that the project has no session gates (0.2.0 had none): `requireApiSession`, which keeps routes under `/api/` behind a session, and `sessionGate`, which does the same for server functions. `upgrade` adds both.
 
+`upgrade --check` says what `upgrade` would do (exit code `2`), and what the session gates it brings change for the project's server functions and routes:
+
+<!-- output: upgrade --check -->
 ```text
-Made with efforge 0.2.0; this is 0.2.1. Needs action: 2 things that break the project. Behind: 25 pins, 20 files to refresh, 32 new files, 3 files to give what the new ones need, 3 scripts, 2 to remove.
-
+Made with efforge 0.2.0; this is 0.2.1. Needs action: 2 things that break the project. Behind: 25 pins, 18 files to refresh, 35 new files, 3 files to give what the new ones need, 3 scripts, 2 to remove.
+...
 Needs action
   ✗ pnpm-workspace.yaml has no overrides holding Effect's packages at effect 4.0.5. A library that asks for a newer one then installs it next to the older effect and the build breaks, as 0.2.0 projects did when Effect 4.1 shipped. (upgrade fixes it)
   ✗ packageManager pins pnpm 12.4.2, which accepts the Effect overrides and silently ignores them (they work from pnpm 12.17.0). (upgrade fixes it)
 ```
 
-`upgrade` applies it (exit code `0`). It added 32 files and refreshed the rest of efforge's, removed two efforge no longer generates, and gave the root `package.json` the `deploy` script and `wrangler`, so [the first deploy](deploy.md) works as it does for a new project. It kept the dashboard the owner changed, with the server files it imports:
+`upgrade` applies it (exit code `0`). It added 35 files and refreshed the rest of efforge's, removed two efforge no longer generates, and gave the root `package.json` the `deploy` script and `wrangler`, so [the first deploy](deploy.md) works as it does for a new project. It kept the dashboard the owner changed, with the server files it imports and the ones those need:
 
+<!-- output: upgrade -->
 ```text
 Kept as they are
   yours    apps/web/src/routes/app/index.tsx
            You changed it, and efforge's template changed too: the dashboard shows one card per capability, a working demo beside the Effect code behind it.
+  held     apps/web/src/server/auth-live.ts
+           Kept as it is: apps/web/src/server/layers.ts imports `AuthLive` with the type it has now from it, and efforge's new version changes it.
+  held     apps/web/src/server/auth.ts
+           Kept as it is: apps/web/src/server/auth-live.ts imports `AuthInstance` as it is now, `makeAuth` as it is now from it, and efforge's new version changes it.
   held     apps/web/src/server/greeting.ts
            Kept as it is: apps/web/src/routes/app/index.tsx imports `getGreeting` from it, and efforge's new version changes it.
            Held with it, because they need it: apps/web/src/capabilities/runtime.tsx.
+  held     apps/web/src/server/layers.ts
+           Kept as it is: apps/web/src/server/runtime.ts imports `AppLayer` with the type it has now from it, and efforge's new version changes it.
   held     apps/web/src/server/notes.ts
            Kept as it is: apps/web/src/routes/app/index.tsx imports `listNotes` with the type it has now from it, and efforge's new version changes it.
            Held with it, because they need it: apps/web/src/capabilities/auth.tsx, apps/web/src/capabilities/database.tsx, apps/web/src/capabilities/registry.ts, +6 more.

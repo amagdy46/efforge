@@ -1,5 +1,5 @@
 import { stripVTControlCharacters } from "node:util"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
@@ -17,6 +17,7 @@ import {
   textGraph,
   writeGraph,
 } from "../src/graph.ts"
+import { hash, renderManifest } from "../src/manifest.ts"
 import { presetIds } from "../src/presets.ts"
 import { type Answer, scriptedPromptIO } from "../src/prompts/navigable.ts"
 import { GraphOutput, InfoOutput } from "../src/schemas.ts"
@@ -422,21 +423,58 @@ it("doctor's env check gives each variable the same secret and set as info", asy
   expect(vars.find((v) => v.name === "LLM_API_KEY")).toMatchObject({ secret: true, set: false })
 }, 60_000)
 
+it("add --dry-run groups the files by add-on, as create --dry-run does; --verbose lists each", async () => {
+  await create("app", "--database=d1", "--orm=effect-sql", "--auth=none")
+  const r = await cli(["add", "realtime", "email", "--dry-run", "--cwd", "app"])
+  expect(r.exitCode).toBe(0)
+  const box = stripVTControlCharacters([r.out, ...r.s.output].join("\n"))
+  expect(box).toMatch(/extras\/realtime +\+\d+ +apps\/web \d+, packages\/core \d+/)
+  expect(box).toMatch(/extras\/email +\+\d+ /)
+  expect(box).toMatch(/edited +~\d+ /)
+  expect(box).toContain("Every file: add --verbose, or --json for the list as data.")
+  expect(box).not.toContain("+ apps/web/src/lib/use-room.ts")
+  const verbose = await cli(["add", "realtime", "--dry-run", "--verbose", "--cwd", "app"])
+  expect(stripVTControlCharacters(verbose.s.output.join("\n"))).toContain(
+    "+ apps/web/src/lib/use-room.ts",
+  )
+})
+
 it("add auth says every server function now needs a session, names the owner's own, and how to open one", async () => {
   await create("app", "--database=d1", "--orm=effect-sql", "--auth=none")
   writeFileSync(
     join("app", "apps/web/src/server/export.ts"),
     'import { createServerFn } from "@tanstack/react-start"\n\nexport const exportAll = createServerFn({ method: "GET" }).handler(() => "rows")\n',
   )
+  // one not exported, in a route file: the usual form there
+  writeFileSync(
+    join("app", "apps/web/src/routes/report.tsx"),
+    'import { createFileRoute } from "@tanstack/react-router"\nimport { createServerFn } from "@tanstack/react-start"\n\nconst inRoute = createServerFn({ method: "GET" }).handler(() => "rows")\n\nexport const Route = createFileRoute("/report")({ loader: () => inRoute() })\n',
+  )
   const r = await cli(["add", "auth/better-auth", "--json", "--no-install", "--cwd", "app"])
-  expect(r.exitCode).toBe(0)
+  expect(r.exitCode, r.out).toBe(0)
   const notes = json(r.out).notes as string[]
   const note = notes.filter((n) => n.startsWith("Every server function now requires a session"))
   expect(note).toHaveLength(1)
   expect(note[0]).toContain("exportAll (apps/web/src/server/export.ts)")
+  expect(note[0]).toContain("inRoute (apps/web/src/routes/report.tsx)")
+  // what pnpm check now does with them, and how to open one
+  expect(note[0]).toContain(
+    "pnpm check fails on each of them until it chains .middleware([requireSession])",
+  )
   expect(note[0]).toContain("apps/web/src/server/public-server-fns.json")
-  // efforge's own server functions are not the owner's
-  expect(note[0]).not.toContain("greet")
+  // routes: under /api/ they need a session now, outside it they check it themselves
+  expect(note[0]).toContain("Every request under /api/ now requires a session too")
+  expect(note[0]).toContain("public-api-paths.json (/api/auth/)")
+  expect(note[0]).toContain("A route outside /api/ is not checked")
+  // efforge's own server functions are guarded, and the public ones are public
+  for (const name of ["greet", "getGreeting", "getSession", "getStack", "listNotes"])
+    expect(note[0]).not.toContain(`${name} (`)
+  // the same line in text
+  await create("app2", "--database=d1", "--orm=effect-sql", "--auth=none")
+  const plain = await cli(["add", "auth/better-auth", "--no-install", "--cwd", "app2"])
+  expect(
+    stripVTControlCharacters([plain.out, ...plain.s.output].join("\n")).replace(/\s+/g, " "),
+  ).toContain("A route outside /api/ is not checked")
   const text = await cli(["add", "storage", "--no-install", "--cwd", "app"])
   expect(stripVTControlCharacters(text.out)).not.toContain("Every server function now requires")
 })
@@ -487,3 +525,47 @@ it("an add-on that brings a migration lists the migrate step: every add-on that 
   }
   expect(seen).toEqual(["ai/effect-ai-byok", "auth/better-auth", "auth/better-auth-orgs"])
 }, 120_000)
+
+it("add on a project whose card boundary is older than its cards refuses, with upgrade as the fix; after upgrade it adds", async () => {
+  await create("app", "--database=d1", "--orm=effect-sql", "--auth=none")
+  // a project made between releases: server functions still answer { ok, value }, and
+  // efforge.jsonc records that file as efforge's
+  const old = readFileSync(new URL("fixtures/outcome-before-exit.ts.txt", import.meta.url), "utf8")
+  const file = "apps/web/src/server/outcome.ts"
+  writeFileSync(join("app", file), old)
+  const manifestText = readFileSync(join("app", "efforge.jsonc"), "utf8")
+  const manifest = JSON.parse(manifestText.slice(manifestText.indexOf("{")))
+  manifest.files[file] = hash(old)
+  writeFileSync(join("app", "efforge.jsonc"), renderManifest(manifest))
+  const before = readFileSync(join("app", "apps/web/src/capabilities/registry.ts"), "utf8")
+  const r = await cli(["add", "realtime", "--json", "--no-install", "--cwd", "app"])
+  expect(r.exitCode).toBe(1)
+  expect(json(r.out).error).toMatchObject({
+    code: "UpgradeFirst",
+    fix: "npx -y create-efforge upgrade --json --cwd app",
+    file,
+    addons: ["extras/realtime"],
+    after: "npx -y create-efforge add realtime --json --no-install --cwd app",
+  })
+  // the experimental cluster card is held the same way
+  const cluster = await cli(["add", "cluster", "--json", "--no-install", "--cwd", "app"])
+  expect(cluster.exitCode).toBe(1)
+  expect(json(cluster.out).error).toMatchObject({
+    code: "UpgradeFirst",
+    file,
+    addons: ["extras/cluster"],
+    after: "npx -y create-efforge add cluster --json --no-install --cwd app",
+  })
+  // nothing written
+  expect(readFileSync(join("app", "apps/web/src/capabilities/registry.ts"), "utf8")).toBe(before)
+  expect(existsSync(join("app", "packages/core/src/cluster.ts"))).toBe(false)
+  // an add-on without a card is not held up
+  expect((await cli(["add", "infra", "--json", "--no-install", "--cwd", "app"])).exitCode).toBe(0)
+  const up = await cli(["upgrade", "--json", "--no-install", "--cwd", "app"])
+  expect(up.exitCode, up.out).toBe(0)
+  expect(readFileSync(join("app", file), "utf8")).toContain("failureCodec")
+  const again = await cli(["add", "realtime", "--json", "--no-install", "--cwd", "app"])
+  expect(again.exitCode, again.out).toBe(0)
+  const clusterAgain = await cli(["add", "cluster", "--json", "--no-install", "--cwd", "app"])
+  expect(clusterAgain.exitCode, clusterAgain.out).toBe(0)
+})

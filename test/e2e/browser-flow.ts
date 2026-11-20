@@ -293,6 +293,36 @@ const othersDataIsTheirs = async (page: Page) => {
     throw new Error("the second user's listFiles returned the first user's upload")
 }
 
+/**
+ * At 1280 px, a laptop's width, every file of every card's code panel shows its lines whole: the
+ * card lays the code column out to hold 80 characters (docs/capability-cards.md).
+ */
+const codePanelsFit1280 = async (page: Page) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto("/app")
+  await hydrated(page)
+  const tabs = page.locator('section[id] [role="tab"]')
+  const scrolling: string[] = []
+  const measure = () =>
+    // a string, since this file is type-checked without the DOM library
+    page.evaluate<
+      string[]
+    >(`(() => [...document.querySelectorAll("section[id]")].flatMap((card) => {
+      const pre = card.querySelector("pre")
+      const tab = card.querySelector('[role="tab"][aria-selected="true"]')
+      return pre && pre.scrollWidth > pre.clientWidth + 1
+        ? [card.id + " " + (tab ? tab.textContent : "") + " " + pre.scrollWidth + " in " + pre.clientWidth]
+        : []
+    }))()`)
+  scrolling.push(...(await measure()))
+  for (let i = 0; i < (await tabs.count()); i++) {
+    await tabs.nth(i).click()
+    scrolling.push(...(await measure()))
+  }
+  if (scrolling.length > 0)
+    throw new Error(`code panels scroll sideways at 1280 px: ${[...new Set(scrolling)].join(", ")}`)
+}
+
 /** At 390 px, with long unbroken input in the cards, nothing is wider than its card or the page. */
 const cardsFitPhoneWidth = async (page: Page) => {
   await page.setViewportSize({ width: 390, height: 844 })
@@ -471,6 +501,7 @@ export const orgsFlow = async (baseURL: string): Promise<void> => {
     await expectVisible(annPage, "Realtime room")
     await cardsRequireSession(annPage)
     await cardsFitPhoneWidth(annPage)
+    await codePanelsFit1280(annPage)
     // a host Better Auth does not allow under pnpm dev gets a clear 403, not a 500
     const lan = await postWithHost(
       `${baseURL}/api/auth/sign-in/email`,

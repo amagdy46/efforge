@@ -87,7 +87,8 @@
               "browser",
               "storage",
               "email",
-              "rpc"
+              "rpc",
+              "cluster"
             ]
           }
         }

@@ -50,7 +50,7 @@ npx -y create-efforge create my-app --yes --database=d1 --orm=effect-sql --auth=
 
 When it finishes, `create` prints the next steps for the stack: `docker compose up -d --wait` for Postgres, `pnpm db:migrate` when there is a database, then `pnpm dev` (with Alchemy, no `db:migrate` on D1). Whether `pnpm db:migrate` is still owed is read from the project, as `doctor`'s `migrations` check reads it: on D1 it is there while the local database lacks a migration file, so `add` says it after an add-on that brings a migration (auth's tables) and after any earlier run that never migrated, and leaves it out when everything is applied. Postgres can't be read without connecting, so there it follows the migration files the run writes. The generated README's "Run it" has the same steps, from the same code, and its other sections (scripts, layout, capabilities, a first deploy for wrangler or Alchemy) are written for the stack too.
 
-Compatibility rules: `orm` is set exactly when `database` is; `auth` needs a database; `d1`, `workflows`, `realtime` and `browser` need the Cloudflare runtime. With `infra=none`, bindings live in `wrangler.jsonc`; with `infra=alchemy`, they live in `infra/alchemy.run.ts` and there is no `wrangler.jsonc`.
+Compatibility rules: `orm` is set exactly when `database` is; `auth` needs a database; `d1`, `workflows`, `realtime`, `browser` and `cluster` need the Cloudflare runtime. With `infra=none`, bindings live in `wrangler.jsonc`; with `infra=alchemy`, they live in `infra/alchemy.run.ts` and there is no `wrangler.jsonc`.
 
 ## CI, scripts and coding agents
 
@@ -82,7 +82,7 @@ npx -y create-efforge add email
 npx -y create-efforge add ai/effect-ai-byok extras/storage --dry-run
 ```
 
-Ids are `email`, `extras/email` or `ai/effect-ai-byok`, in any case. A slot name with one add-on (`ai`, `infra`) means that add-on; a typo or an ambiguous id (`auth`) gets a suggestion. Flags: `--overwrite`, `--dry-run`, `--json`, `--cwd <dir>`, `--no-install`.
+Ids are `email`, `extras/email` or `ai/effect-ai-byok`, in any case. A slot name with one add-on (`ai`, `infra`) means that add-on; a typo or an ambiguous id (`auth`) gets a suggestion. Flags: `--overwrite`, `--dry-run` (what would change, by add-on, as `create --dry-run` shows it; `--verbose` lists every file), `--json`, `--cwd <dir>`, `--no-install`.
 
 The single-choice slots depend on each other, so add them together: on a project without a database, `add database/d1 orm/effect-sql auth/better-auth` works where `add auth/better-auth` alone is refused (the error lists each combination that works, as a command to run; which database and ORM is your choice).
 
@@ -162,7 +162,7 @@ npx -y create-efforge doctor --json    # {status, checks: [{id, status, message,
 
 Run inside a generated project, or pass `--cwd <dir>`.
 
-Checks the checkout as it is now: Node and pnpm against `engines` and `packageManager`; that `node_modules` was installed by pnpm and matches the package.json files and `pnpm-lock.yaml`; that exactly one Effect version is installed (the one-line explanation of the 0.2.0 build failure); `pnpm peers check`, with the known upstream Alchemy `unenv` issue and optional peers reported as known; every env var the add-ons declare and the code reads, against `.dev.vars` (or `.env` with Alchemy) and `.env.example`, never printing a value; the bindings the stack needs in `wrangler.jsonc` or `infra/alchemy.run.ts`; D1 migrations not applied locally; whether the local Postgres answers (it starts nothing); `efforge.jsonc` against its schema; a layer in `layers.ts` for each add-on, read as code; and `upgrade --check`'s answer (a failure for needs action, a warning for behind).
+Checks the checkout as it is now: Node and pnpm against `engines` and `packageManager`; that `node_modules` was installed by pnpm and matches the package.json files and `pnpm-lock.yaml`; that exactly one Effect version is installed (the one-line explanation of the 0.2.0 build failure); `pnpm peers check`, with the known upstream Alchemy `unenv` issue and optional peers reported as known; every env var the add-ons declare and the code reads, against `.dev.vars` (or `.env` with Alchemy) and `.env.example`, never printing a value; the bindings the stack needs in `wrangler.jsonc` or `infra/alchemy.run.ts`; that each Durable Object class a binding names is exported from `apps/web/src/server.ts` and, with wrangler, created by a migration; D1 migrations not applied locally; whether the local Postgres answers (it starts nothing); `efforge.jsonc` against its schema; a layer in `layers.ts` for each add-on, read as code; on a stack with auth, that `sessionGate` and `requireApiSession` are each first in their list; and `upgrade --check`'s answer (a failure for needs action, a warning for behind).
 
 Each problem comes with a fix you can run (after it, that check passes and nothing else gets worse), or with what to change when only you can. A check that can't read what it looks for, such as a layer of yours where efforge's was, says it could not verify, and isn't a failure. `pnpm peers check` runs with the pnpm `packageManager` pins when that pnpm made `node_modules`.
 

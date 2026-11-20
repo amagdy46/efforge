@@ -55,7 +55,7 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - `add auth` puts `requireSession` first in a server function's existing middleware list, names in a note any function it cannot edit, and says once, in text and under `--json`, that every server function now requires a session, naming yours, and how to make one public.
 - On a project with auth, the realtime room refuses a WebSocket without a session (close code 4401, "Not signed in"), and the card shows it. Without auth, the card says the room is open.
 - Lint rejects `?raw` and other whole-file imports, and `pnpm build` fails if a server file, `.dev.vars`, `.env*` or a secret's value would reach the browser.
-- Nine layer colours, the tempering sequence then Sky, Gold, Plum, Slate and Teal, with a light and a dark variant each in `scripts/brand/source.ts`: each reaches 3:1 on both surfaces of its theme and stands apart from its neighbours (`docs/brand.md` has the checked table). The dashboard and `efforge graph`'s Mermaid use the same values; the brand's named colours keep theirs. The layer graph balances its rows, so no layer sits alone on one (nine layers are three rows of three).
+- Ten layer colours, the tempering sequence then Sky, Gold, Plum, Slate, Teal and Moss, with a light and a dark variant each in `scripts/brand/source.ts`: each reaches 3:1 on both surfaces of its theme and stands apart from its neighbours (`docs/brand.md` has the checked table). The dashboard and `efforge graph`'s Mermaid use the same values; the brand's named colours keep theirs. The layer graph balances its rows, so no layer sits alone on one (nine layers are three rows of three). A project with every add-on, cluster included, repeats none.
 - A signed-in user's uploads and workflow runs are their own: uploads live under `uploads/<user id>/`, a run id starts with a hash of its owner, and another user can't list, open, delete or watch them (`apps/web/src/server/owner.ts`; per user with organizations too). Notes are shared on purpose, and the card says so.
 - The auth section of `AGENTS.md`, the README's new "Before you deploy" and `docs/limits.md` say that sign-up is open, so any visitor can register and use the cards that spend, and how to close it (`disableSignUp: true` in `auth.ts`).
 
@@ -68,7 +68,12 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - The generated `AGENTS.md` says how to add an error to a service and handle it in a component, to restart `pnpm dev` after adding a dependency, and where the Local Explorer is (`/cdn-cgi/local/explorer/`: D1 rows, R2 objects, Durable Object storage, Workflows, traces).
 - `efforge add rpc` (or `--extras=rpc`): call Effect from TanStack Start with Effect RPC. `AppRpcs` in `packages/core/src/rpc.ts` is one contract for the server and the browser; `RpcLive`, a layer in `AppLayer`, serves it at `POST /api/rpc` from a Start server route, so its handlers run on the same layers as the server functions and each call is a span (`rpc.Greet`). `AppClient` (`AtomRpc`, `@effect/atom-react`) makes each call an atom: a failure arrives as its error's class with its fields, and a stream call streams. With auth, `/api/rpc` needs a session like the rest of `/api/`, and a call without one fails with `Unauthorized`, as a server function's does. A dashboard card calls it, shows the typed error and watches a stream; it adds about 40 KiB of gzipped JavaScript to the dashboard and nothing to the landing page. [docs/rpc.md](docs/rpc.md) compares it with a server function and `HttpApi`.
 - An add-on's card module can have variants for different stacks: a later card file with the same target and its own `when`. Each is registered on its stacks.
-- The dashboard has a tenth layer colour, Moss.
+- `efforge add cluster` (experimental): Effect Cluster, Effect Workflow and a durable queue on Durable Objects, through Effect's `@effect/platform-cloudflare` 4.1.4, pinned exactly with `effect`. A `Counter` entity keeps its count in its own SQLite; a `Review` workflow runs two activities around a durable wait for an approval; a `GreetingQueue` is drained by the request that offers to it, since nothing runs a worker in the background on Workers. The dashboard card, labelled experimental, increments a counter, starts and approves a run step by step, and offers a greeting; counters and runs are per user. It works on wrangler and on Alchemy (four `DurableObject` resources), beside `extras/workflows` and `extras/realtime`. `docs/cluster.md` walks through it and says what experimental means here: a durable sleep that is a run's first wait wakes about a minute late in 4.1.4, `pnpm dev` needs a restart after a handler changes, and a deploy is not tested.
+- `doctor` checks that every Durable Object class a binding names is created by a migration in `wrangler.jsonc` and exported from the Worker entry.
+- `doctor` has a `gates` check on stacks with auth: `sessionGate` first in `functionMiddleware` and passed to `createStart`, `requireApiSession` first in `workerRoutes`. A gate taken out, or something listed before it, fails with the lines to put back; on a project made before the gates, the fix is `upgrade`, which adds them.
+- `add --dry-run` groups what it would write by add-on, as `create --dry-run` does, with rows for the files it edits and removes; `--verbose` lists every file.
+- A new error code, `UpgradeFirst`: `add` refuses to write dashboard cards onto a project whose card boundary (`apps/web/src/server/outcome.ts`) is older than the cards, and writes nothing. `fix` is `upgrade`; `after` is the same `add`, to run once it is done.
+- `upgrade --json` and `upgrade --check --json` have `notes`, as `add` does.
 
 ### Changed
 
@@ -121,11 +126,15 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - The example server functions `example-job.ts` and `run-browser.ts` are now the cards' `workflows-demo.ts` and `browser-demo.ts`. A project made before cards (0.2.x) that adds workflows or browser gets the service, its layer and its tests but no demo server function, and `add` says so: its note now names the card files it left out instead of saying there is nothing to do.
 - The browser container answers a refused address with 403 and a page that would not load with 502, and returns a screenshot.
 - A missing or unusable setting names itself on the page and from `/api/auth/*`, for example `STORAGE_SIGNING_SECRET is too short`, a malformed `BETTER_AUTH_URL`, or an `LLM_PROVIDER` that is not a provider.
-- Every region a card shows fits 80 characters on every stack, so the code panel never scrolls sideways at 1440 px; a test checks all nine cards on both infras.
+- Every region a card shows fits 80 characters on every stack, and the code column is never narrower than 80 characters of its font, so the code panel never scrolls sideways at 1280 px or wider; below that the demo and the code stack. A test checks every card on both infras, and the browser flow every tab at 1280 px.
 - The README's Deploy section covers every add-on that binds a Cloudflare resource, from one record in `src/readme.ts`; a test fails for a new add-on with a wrangler binding until Deploy names it on both infras.
 
 - Service errors in `packages/core` are `Schema.TaggedError` classes (were `Data.TaggedError`), and several carry the fields a UI needs: `InvalidName.length`, `InvalidNote.limit`, `MessageTooLarge.limit`, `FileTooLarge.size` and `limit`, `InvalidAddress.address`, `UrlRefused.url`, `InvalidUrl.url`.
 - Effect's "experimental API" warning is off in `tsconfig.base.json` and lint, like the "unstable" one: an add-on that uses an experimental API (Effect Cluster) no longer fails `pnpm check`.
+- A server function's errors are one list, declared beside it (`export const AnnounceErrors = [MessageTooLarge, RealtimeError] as const`) and spread on both sides: `runOutcome(program, ...AnnounceErrors)` and `useServerCall(announce, ...AnnounceErrors)`. The types hold them together: a client that lists other errors, one too few or none does not typecheck. Every card, `docs/capability-cards.md` and the generated `AGENTS.md` show it.
+- The note `add auth` prints names every server function `pnpm check` now fails on, exported or not, in a route file too, and says what changed for routes: under `/api/` they need a session, outside it they check it themselves. `upgrade` prints the same note when it brings the session gates to a project made before them.
+- The realtime room's rule for which sockets count is `isAttended` in `realtime-limits.ts`, with a test in the generated project.
+- `docs/upgrading.md`'s worked example is today's output, and an end-to-end test holds each quoted line to a real run on the committed 0.2.0 project.
 
 ### Fixed
 
@@ -170,6 +179,11 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - With Alchemy and the AI add-on, `pnpm dev` starts without `LLM_API_KEY`. Before, Alchemy refused to plan.
 - `vite.config.ts` no longer warns about `./regions` on every `pnpm dev` and `pnpm build`.
 - The browser add-on passes the lint of a project made by efforge 0.2.x (it read `_tag`, which that lint forbids).
+- `scripts/history.ts` read `src/history.data.ts` with `JSON.parse`, which fails on the formatted file; it went on with an empty history, so the next release would have dropped every earlier one's record. It imports the module now.
+- `add` wrote a re-export wider than 100 characters on one line, which `pnpm check` then reported; `addExport` writes it one name per line, as `create`'s formatter does.
+- A route file under `/api/auth/` answered a signed-out request at `/API/auth/...` or `/%61pi/auth/...`: `requireApiSession` exempted the path after lower-casing and decoding it, while Better Auth's handler takes only the raw `/api/auth/`. A path is now public only as that handler serves it.
+- `public-server-fns.json` and `public-api-paths.json` are checked as they load. A string where a list belongs no longer matches as a substring: a list of the wrong shape makes nothing public and says so in the server log.
+- A `// #region card` line inside a template string or a string started a card region. The markers in a `.ts` or `.tsx` file are now read as comments by the parser.
 
 ## 0.2.1 (2026-11-18)
 

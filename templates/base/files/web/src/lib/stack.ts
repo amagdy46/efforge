@@ -38,6 +38,7 @@ const extras: Record<string, { label: string; path: string }> = {
   storage: { label: "Storage", path: "packages/core/src/storage.ts" },
   email: { label: "Email", path: "packages/core/src/mailer.ts" },
   rpc: { label: "Effect RPC", path: "packages/core/src/rpc.ts" },
+  cluster: { label: "Cluster (experimental)", path: "packages/core/src/cluster.ts" },
 }
 
 const chosen = (value: string) => value !== "none"

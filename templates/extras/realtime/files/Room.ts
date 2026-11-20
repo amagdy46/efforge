@@ -1,4 +1,4 @@
-import { isMessageTooLarge, MAX_ROOM_CONNECTIONS } from "@repo/core/realtime-limits"
+import { isAttended, isMessageTooLarge, MAX_ROOM_CONNECTIONS } from "@repo/core/realtime-limits"
 import { Effect, Layer, Option, Schema } from "effect"
 import { DurableObject, DurableObjectState, DurableObjectWebSocket, Worker } from "effect-cf"
 
@@ -10,14 +10,9 @@ export class RoomNamespace extends DurableObject.Tag<RoomNamespace>()("Room", {
 /** When the room accepted a socket. */
 const Accepted = DurableObjectWebSocket.attachment(Schema.Struct({ at: Schema.Finite }))
 
-/** How long a new socket has to send its first ping (`useRoom` sends one when it opens). */
-const JOIN_GRACE_MS = 10_000
-
 /**
- * The sockets with a client on the other end. A client that closes its socket before or during
- * the handshake (a reload, React StrictMode running an effect twice) can leave the room's end
- * open with nobody there. It never pings, so once the grace period is over it is closed and
- * neither counted nor sent to.
+ * The sockets with a client on the other end (`isAttended`); the rest are closed, and neither
+ * counted nor sent to.
  */
 const sockets = Effect.gen(function* () {
   const state = yield* DurableObjectState.DurableObjectState
@@ -27,8 +22,8 @@ const sockets = Effect.gen(function* () {
     const accepted = yield* Accepted.deserialize(socket).pipe(
       Effect.orElseSucceed(() => Option.none()),
     )
-    const joining = Option.exists(accepted, ({ at }) => Date.now() - at < JOIN_GRACE_MS)
-    if (pinged || joining) live.push(socket)
+    const acceptedAt = Option.getOrUndefined(Option.map(accepted, ({ at }) => at))
+    if (isAttended({ pinged, acceptedAt }, Date.now())) live.push(socket)
     else yield* Effect.ignore(socket.close(1001, "No ping since the handshake"))
   }
   return live

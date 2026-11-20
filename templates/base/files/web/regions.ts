@@ -1,26 +1,62 @@
 import { existsSync, readFileSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { basename, join } from "node:path"
-import type { Plugin } from "vite"
+import { type Plugin, parseSync } from "vite"
 
 const START = /^\s*\/\/ #region (\S+)\s*$/
 const END = /^\s*\/\/ #endregion\b/
 const QUERY = /\?region=([\w-]+)$/
 
+/** Files whose markers are read as code: only a real `//` comment is one. */
+const CODE = /\.[cm]?[jt]sx?$/
+
+/**
+ * The numbers of the lines of `source` that start a real `//` comment, parsed as `file` (a
+ * `// #region` line inside a template string or a string is text, not a marker); undefined for a
+ * file that is not JavaScript or TypeScript, whose markers are read line by line.
+ */
+const commentLines = (source: string, file: string): Set<number> | undefined => {
+  if (!CODE.test(file)) return undefined
+  const starts = [0]
+  for (let i = source.indexOf("\n"); i !== -1; i = source.indexOf("\n", i + 1)) starts.push(i + 1)
+  const lineOf = (offset: number) => {
+    let lo = 0
+    let hi = starts.length - 1
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1
+      if ((starts[mid] ?? 0) <= offset) lo = mid
+      else hi = mid - 1
+    }
+    return lo
+  }
+  return new Set(
+    parseSync(file, source)
+      .comments.filter((c) => c.type === "Line")
+      .map((c) => lineOf(c.start)),
+  )
+}
+
 /**
  * The lines between `// #region <name>` and the next `// #endregion` in `source`, without their
  * common indent, or undefined when the file has no such region. A region that reaches another
- * `// #region` before its `// #endregion` is not one: it would ship the next region too.
+ * `// #region` before its `// #endregion` is not one: it would ship the next region too. In a
+ * JavaScript or TypeScript `file` the markers are comments the parser sees, so a marker line
+ * inside a template string is part of the string.
  */
-export const region = (source: string, name: string): string | undefined => {
+export const region = (source: string, name: string, file = "source.ts"): string | undefined => {
   const lines = source.split("\n")
-  const start = lines.findIndex((line) => START.exec(line)?.[1] === name)
+  const comments = commentLines(source, file)
+  const marker = (pattern: RegExp, line: string, at: number) =>
+    pattern.test(line) && (comments === undefined || comments.has(at))
+  const start = lines.findIndex(
+    (line, at) => marker(START, line, at) && START.exec(line)?.[1] === name,
+  )
   if (start === -1) return undefined
   const body = lines.slice(start + 1)
-  const end = body.findIndex((line) => END.test(line))
+  const end = body.findIndex((line, at) => marker(END, line, start + 1 + at))
   if (end === -1) return undefined
   const picked = body.slice(0, end)
-  if (picked.some((line) => START.test(line))) return undefined
+  if (picked.some((line, at) => marker(START, line, start + 1 + at))) return undefined
   const indent = Math.min(
     ...picked
       .filter((line) => line.trim() !== "")
@@ -47,7 +83,7 @@ export const regions = (): Plugin => ({
     const file = id.slice(0, query.index)
     const name = query[1] ?? "card"
     this.addWatchFile(file)
-    const text = region(await readFile(file, "utf8"), name)
+    const text = region(await readFile(file, "utf8"), name, file)
     if (text === undefined)
       this.error(
         `${file} has no complete "// #region ${name}" ... "// #endregion" block (a region ends at its own #endregion and holds no other #region). A card shows only a marked region of a file, so mark the part to show.`,

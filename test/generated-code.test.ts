@@ -21,6 +21,10 @@ const load = async <M>(path: string): Promise<M> => {
   const copy = join(dir, basename(dirname(path)), basename(path))
   mkdirSync(dirname(copy), { recursive: true })
   copyFileSync(join(templates, path), copy)
+  // the generated project's vite; efforge itself has it as vite-plus
+  const text = readFileSync(copy, "utf8")
+  if (text.includes('from "vite"'))
+    writeFileSync(copy, text.replace('from "vite"', 'from "vite-plus"'))
   return (await import(copy)) as M
 }
 // what server/manifest.ts reads from efforge.jsonc, and the module settings.ts takes NotConfigured from
@@ -188,7 +192,7 @@ it("asFailure: a rejected call keeps its tag, and only a bug is a Defect", () =>
 })
 
 const { region, regions } = await load<{
-  region: (source: string, name: string) => string | undefined
+  region: (source: string, name: string, file?: string) => string | undefined
   regions: () => {
     load: (this: unknown, id: string) => Promise<string | null>
   }
@@ -223,6 +227,25 @@ it("regions: a card gets only the marked region of a file, and a file without on
   await expect(
     plugin.load.call(context, `${join(dir, "unmarked.ts")}?region=card`),
   ).rejects.toThrow(/has no complete "\/\/ #region card"/)
+  // a marker inside a template string or a string is text, not a marker
+  const inString = [
+    "const doc = `",
+    "// #region card",
+    "export const notShown = 1",
+    "// #endregion",
+    "`",
+    "// #region card",
+    "export const shown = /[\"'`]/",
+    "// #endregion",
+  ].join("\n")
+  expect(region(inString, "card", "doc.ts")).toBe("export const shown = /[\"'`]/")
+  expect(region('const s = "\\\n// #region card\\\n"\n', "card", "s.ts")).toBeUndefined()
+  // an #endregion inside a string does not end a region
+  expect(
+    region("// #region card\nconst s = `\n// #endregion\n`\n// #endregion", "card", "t.tsx"),
+  ).toBe("const s = `\n// #endregion\n`")
+  // a file that is not code is read line by line
+  expect(region("# x\n// #region card\nshown\n// #endregion\n", "card", "notes.txt")).toBe("shown")
   // a region that runs into another region is not one: it would ship that region too
   expect(
     region("// #region card\nconst a = 1\n// #region other\nconst b = 2\n// #endregion", "card"),
@@ -254,7 +277,7 @@ it("clientGuard: a settings file or a whole server file in the browser build fai
   expect(secretValues([settings])).toEqual([["BETTER_AUTH_SECRET", "dev-only-secret-0123456789"]])
 })
 
-/** The code panel fits this many characters at 1440 px wide (docs/capability-cards.md). */
+/** The code panel holds this many characters without scrolling (docs/capability-cards.md). */
 const REGION_WIDTH = 80
 
 const stacksWithCards = (["none", "better-auth", "better-auth-orgs"] as const)
@@ -291,7 +314,7 @@ it(`every region a registered card shows fits in ${REGION_WIDTH} characters, on 
       if (!file.startsWith("apps/web/src/") || !file.endsWith(".tsx")) continue
       for (const m of text.matchAll(/from "([^"]+)\?region=card"/g)) {
         const target = posix.normalize(posix.join(posix.dirname(file), m[1] as string))
-        const shown = region(tree.get(target) ?? "", "card")
+        const shown = region(tree.get(target) ?? "", "card", target)
         expect(shown, `${file} shows ${target}, which has no card region`).toBeDefined()
         regionsChecked++
         for (const line of (shown ?? "").split("\n"))

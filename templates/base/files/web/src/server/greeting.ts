@@ -8,8 +8,11 @@ const GreetInput = Schema.Struct({
   name: Schema.String.check(Schema.isMaxLength(200)),
 })
 
-/** Runs `greet` on the server; `InvalidName` reaches the browser as itself. */
+/** What `greet` can fail with; the card lists the same, as itself. */
+export const GreetErrors = [InvalidName] as const
+
+/** Runs `greet` on the server. */
 export const greet = createServerFn({ method: "GET" })
   .validator(Schema.toStandardSchemaV1(GreetInput))
-  .handler(({ data }) => runOutcome(greetProgram(data.name), InvalidName))
+  .handler(({ data }) => runOutcome(greetProgram(data.name), ...GreetErrors))
 // #endregion

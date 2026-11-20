@@ -5,8 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useServerCall } from "@/lib/use-server-call"
 import { useStack } from "@/lib/use-stack"
-import { InvalidAddress, MailerError } from "@repo/core/mailer"
-import { mailSettings, sendTestEmail } from "@/server/email-demo"
+import { mailSettings, sendTestEmail, SendTestEmailErrors } from "@/server/email-demo"
 import program from "../../../../packages/core/src/mailer.ts?region=card"
 import serverFn from "../server/email-demo.ts?region=card"
 import layer from "../server/mailer.ts?region=card"
@@ -23,7 +22,7 @@ const cloudflareNote = import.meta.env.DEV
 /** Send a test email; with the console transport, the card shows what would have gone out. */
 function EmailDemo() {
   const settings = useServerCall(mailSettings)
-  const sending = useServerCall(sendTestEmail, InvalidAddress, MailerError)
+  const sending = useServerCall(sendTestEmail, ...SendTestEmailErrors)
   const [to, setTo] = useState("")
   const stack = useStack()
   const load = settings.run

@@ -356,6 +356,17 @@ it("addExport treats type-only re-exports as distinct from value re-exports", as
   expect(done.get("w.ts")).toBe('export * from "./room"\n')
 })
 
+it("addExport writes a re-export wider than 100 characters one name per line, as vp fmt does", async () => {
+  const names = "ClusterDurableQueue, ClusterEntity, ClusterSingleton, ClusterWorkflow"
+  const wide = await once({ "w.ts": "export default {}\n" }, exp(names, "./cluster/objects"))
+  const written =
+    'export default {}\nexport {\n  ClusterDurableQueue,\n  ClusterEntity,\n  ClusterSingleton,\n  ClusterWorkflow,\n} from "./cluster/objects"\n'
+  expect(wide.get("w.ts")).toBe(written)
+  expect((await once({ "w.ts": written }, exp(names, "./cluster/objects"))).get("w.ts")).toBe(
+    written,
+  )
+})
+
 it("addExport fails on a missing file", async () => {
   const e = await fail(new Map(), exp("Room", "./room", "nope.ts"))
   expect(e).toBeInstanceOf(TransformAnchorMissing)

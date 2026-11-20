@@ -278,9 +278,20 @@ export const checkConsistency = (input: ConsistencyInput): ConsistencyResult => 
       text = next
       did.push(`its \`// #region ${region}\` block`)
     }
+    // names today's file imports: a declaration that uses one the file lacks can't be added alone
+    const importedToday = new Map(want.imports.flatMap((e) => e.names.map((n) => [n, e.spec])))
     for (const d of closure(want, names)) {
       const statement = t.slice(d.start, d.end)
-      const mine = info(to, text)?.declarations.get(d.name)
+      const now = info(to, text)
+      const has = new Set(now?.imports.flatMap((e) => e.names) ?? [])
+      const unimported = [...d.refs].filter(
+        (r) => importedToday.has(r) && !has.has(r) && !(now?.declarations.has(r) ?? false),
+      )
+      if (unimported.length > 0)
+        return fail(
+          `${unimported.map((r) => `import { ${r} } from "${importedToday.get(r)}"`).join("\n")}\n\n${statement}`,
+        )
+      const mine = now?.declarations.get(d.name)
       if (mine !== undefined) {
         const same = d.kind === "type" ? mine.text === d.text : mine.signature === d.signature
         if (same) continue

@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useServerCall } from "@/lib/use-server-call"
-import { BrowserError, BrowserUnavailable, InvalidUrl, UrlRefused } from "@repo/core/browser"
+import { BrowserUnavailable } from "@repo/core/browser"
 import type { Failure } from "@/lib/outcome"
-import { visitPage } from "@/server/browser-demo"
+import { visitPage, VisitPageErrors } from "@/server/browser-demo"
 import program from "../../../../packages/core/src/browser.ts?region=card"
 import serverFn from "../server/browser-demo.ts?region=card"
 import type { Capability } from "./types"
@@ -17,13 +17,7 @@ const shown = (error: Failure): Failure =>
 
 function BrowserDemo() {
   const [url, setUrl] = useState("https://example.com")
-  const { state, run } = useServerCall(
-    visitPage,
-    InvalidUrl,
-    UrlRefused,
-    BrowserUnavailable,
-    BrowserError,
-  )
+  const { state, run } = useServerCall(visitPage, ...VisitPageErrors)
 
   const submit = (event: SubmitEvent) => {
     event.preventDefault()

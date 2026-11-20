@@ -6,7 +6,13 @@ import { type ParseError, parse } from "jsonc-parser"
 import { sameJsonc } from "../structure.ts"
 import pc from "picocolors"
 import { parseDocument } from "yaml"
-import { type AddonLoadError, type AddonManifest, addonIdsFor, loadAddons } from "../addon.ts"
+import {
+  type AddonLoadError,
+  type AddonManifest,
+  addonIdsFor,
+  type LoadedAddon,
+  loadAddons,
+} from "../addon.ts"
 import {
   CARDS_DIR,
   cardModuleFor,
@@ -14,6 +20,7 @@ import {
   PUBLIC_LIST_FILE,
   presentCardTransforms,
   REGISTRY_FILE,
+  SERVER_DIR,
   START_FILE,
 } from "../cards.ts"
 import {
@@ -31,10 +38,13 @@ import { type CommandFailed, exec, has, INSTALL, INSTALL_ARGS } from "../exec.ts
 import {
   addonSuggestions,
   alternative,
+  commandLine,
   finish,
   fix,
   type Intent,
+  intentOf,
   nearbyProject,
+  render,
   withFlag,
 } from "../fix.ts"
 import { GenerateError, generate, isComputed, matches, rootScripts } from "../generate.ts"
@@ -71,6 +81,7 @@ import {
   renderGroups,
 } from "../env.ts"
 import { migrateOwed } from "../migrations.ts"
+import { publicList, sessionNote, unguardedIn } from "../session-note.ts"
 import { WRANGLER_FILE } from "../transforms/addWranglerBinding.ts"
 import {
   runTransform,
@@ -96,7 +107,7 @@ import {
   pnpmWildcardOverrides,
   versions,
 } from "../versions.ts"
-import { elapsed, type EnvVar, PnpmMissing, TemplatesDir } from "./create.ts"
+import { elapsed, type EnvVar, origins, PnpmMissing, TemplatesDir, whereIn } from "./create.ts"
 
 export class NotAnEfforgeProject extends Schema.TaggedError<NotAnEfforgeProject>()(
   "NotAnEfforgeProject",
@@ -176,6 +187,7 @@ export interface AddedAddon {
 
 export type AddError =
   | NotAnEfforgeProject
+  | UpgradeFirst
   | UnknownAddon
   | RemoveNotSupported
   | SlotAlreadySet
@@ -428,6 +440,16 @@ export const addAddons = (
       return hasRegistry ? files : []
     }
 
+    // a card written onto an older card boundary would not typecheck: upgrade the boundary first
+    if (hasRegistry) {
+      const withCards = fresh
+        .filter(({ manifest: m }) => (m.card?.files ?? []).some((f) => switchedOn(m.id, f.when)))
+        .map(({ manifest: m }) => m.id)
+      const outcome = yield* read(OUTCOME_FILE)
+      if (withCards.length > 0 && outcome !== undefined && !currentBoundary(outcome))
+        return yield* new UpgradeFirst({ file: OUTCOME_FILE, addons: withCards })
+    }
+
     // 2. overlays: write if absent, replace if still what efforge generated, else conflict
     const overlays = new Map<string, string>()
     for (const { manifest: m, dir: addonDir } of scope)
@@ -592,43 +614,40 @@ export const addAddons = (
     const gated = /\bsessionGate\b/.test(current.get(START_FILE) ?? (yield* read(START_FILE)) ?? "")
     // a server function the guard could not reach (its `.middleware(...)` is not a written-out
     // list) is named, with the fix; the project's own lint rule fails on it until then
+    const namedAlready = new Set<string>()
     for (const t of active) {
       if (t.name !== "addServerFnMiddleware" || t.args.file === undefined) continue
       const text = current.get(t.args.file)
       if (text === undefined) continue
       const middleware = t.args.middleware ?? "requireSession"
-      for (const fn of unguardedServerFns(t.args.file, text, middleware))
+      for (const fn of unguardedServerFns(t.args.file, text, middleware)) {
+        namedAlready.add(`${t.args.file}#${fn}`)
         notes.push(
           `${fn} in ${t.args.file} has no ${middleware}: its .middleware(...) is not a list efforge can add to. Put ${middleware} first in it, as .middleware([${middleware}, ...]), and import it from "${t.args.from ?? "./require-session"}". ${gated ? "sessionGate still refuses a signed-out call at runtime, but" : "Until then it answers signed-out requests, and"} pnpm check fails on it (efforge/server-fn-session).`,
         )
+      }
     }
-    // auth added now: say what changed for the owner's own server functions, and how to open one
+    // auth added now: say what changed for server functions and routes, and name every server
+    // function pnpm check now fails on (the owner's own, exported or not, in a route file too)
     if (gated && newIds.some((id) => id.startsWith("auth/"))) {
-      const own: string[] = []
-      // efforge's own files: written by a release (hashed) or by an add-on of this stack
-      const efforgeFiles = new Set([
-        ...Object.keys(manifest.files),
-        ...written,
-        ...scope.flatMap(({ manifest: m }) =>
-          [...m.files, ...(m.card?.files ?? [])].map((f) => f.target),
-        ),
-      ])
       const names = yield* fs
         .readDirectory(path.join(dir, WEB_SRC), { recursive: true })
         .pipe(Effect.orElseSucceed(() => [] as string[]))
-      const files = names
-        .map((n) => `${WEB_SRC}${n.split(path.sep).join("/")}`)
-        .filter((f) => /\.tsx?$/.test(f) && !f.endsWith(".d.ts"))
-        .toSorted(byName)
-      for (const file of files) {
-        if (efforgeFiles.has(file)) continue
+      const files = new Set([
+        ...names.map((n) => `${WEB_SRC}${n.split(path.sep).join("/")}`),
+        ...[...current.keys()].filter((f) => f.startsWith(WEB_SRC)),
+      ])
+      const texts: Array<[string, string]> = []
+      for (const file of [...files].toSorted(byName)) {
+        if (!/\.tsx?$/.test(file)) continue
         const text = current.get(file) ?? (yield* read(file))
-        if (text === undefined || !text.includes("createServerFn")) continue
-        for (const m of text.matchAll(/export const (\w+)\s*=\s*[\w.]*createServerFn\b/g))
-          own.push(`${m[1]} (${file})`)
+        if (text !== undefined) texts.push([file, text])
       }
+      const list = publicList(current.get(PUBLIC_LIST_FILE) ?? (yield* read(PUBLIC_LIST_FILE)))
       notes.push(
-        `Every server function now requires a session: sessionGate runs before each one (${START_FILE}), ${own.length > 0 ? `yours too: ${own.join(", ")}` : "including any you write later"}. A signed-out call gets Unauthorized. To let signed-out visitors call one, add its file and name to ${PUBLIC_LIST_FILE}, as getSession and getStack are.`,
+        sessionNote(
+          unguardedIn(texts, list).filter((f) => !namedAlready.has(`${f.file}#${f.name}`)),
+        ),
       )
     }
     const transformed = new Set<string>()
@@ -968,6 +987,21 @@ export class AddIncomplete extends Schema.TaggedError<AddIncomplete>()("AddIncom
 }) {}
 
 /** `add` was given no ids: `available` are the add-ons the project doesn't have yet. */
+/**
+ * The project's cards talk to their server functions through an older boundary than the cards
+ * `add` writes (`apps/web/src/server/outcome.ts` from before server functions returned an `Exit`),
+ * so the new cards would not typecheck. `upgrade` brings the boundary up to date.
+ */
+export class UpgradeFirst extends Schema.TaggedError<UpgradeFirst>()("UpgradeFirst", {
+  file: Schema.String,
+  addons: Schema.Array(Schema.String),
+}) {}
+
+/** The server half of the card boundary, and what its current shape has that older ones lack. */
+const OUTCOME_FILE = `${SERVER_DIR}outcome.ts`
+const currentBoundary = (text: string) =>
+  /\bfailureCodec\b/.test(text) && /\.\.\.errors\b/.test(text)
+
 export class NoAddonIds extends Schema.TaggedError<NoAddonIds>()("NoAddonIds", {
   available: Schema.Array(Schema.String),
 }) {}
@@ -1103,6 +1137,12 @@ const needsOf = (ways: ReadonlyArray<ReadonlyArray<string>>) => {
 }
 
 /** What went wrong in `add` (or `list --cwd`), as the contract reports it. */
+/** `upgrade` in the same project, keeping the caller's --cwd and --json. */
+const upgradeInstead = (args: ReadonlyArray<string>): string => {
+  const kept = intentOf(args).flags.filter((f) => f.name === "cwd" || f.name === "json")
+  return commandLine(render({ verb: "upgrade", word: "upgrade", operands: [], flags: kept }))
+}
+
 export const addFailure = (
   e: { readonly _tag: string; readonly message?: string } & Record<string, unknown>,
   args: ReadonlyArray<string>,
@@ -1197,6 +1237,15 @@ export const addFailure = (
         more: alternatives.map((a) => `  ${a.command}  # ${a.description}`).join("\n"),
       }
     }
+    case "UpgradeFirst": {
+      const command = upgradeInstead(args)
+      return {
+        code: "UpgradeFirst",
+        message: `${String(e.file)} is from an older efforge: the dashboard ${(e.addons as string[]).length === 1 ? "card" : "cards"} of ${(e.addons as string[]).join(", ")} would not typecheck against it. Nothing was written. Run ${command} first, then this add again.`,
+        fix: command,
+        details: { file: String(e.file), addons: e.addons, after: commandLine(args) },
+      }
+    }
     case "OverlayConflict": {
       const files = e.files as string[]
       return {
@@ -1263,7 +1312,11 @@ export const addConfig = {
     Flag.withDefault(false),
   ),
   dryRun: Flag.Boolean("dry-run").pipe(
-    Flag.withDescription("Print what would change; write nothing"),
+    Flag.withDescription("Print what would change, by add-on; write nothing"),
+    Flag.withDefault(false),
+  ),
+  verbose: Flag.Boolean("verbose").pipe(
+    Flag.withDescription("With --dry-run, list every file"),
     Flag.withDefault(false),
   ),
   json: Flag.Boolean("json").pipe(
@@ -1310,6 +1363,49 @@ const wrap = (text: string, width: number): string[] => {
 
 const list = (files: ReadonlyArray<string>, mark: string) => files.map((f) => `${mark} ${f}`)
 
+/**
+ * What an `add --dry-run` would do, as `create --dry-run` shows it: the new files by the add-on
+ * they come from (a count and the top-level directories), then the files it edits and removes.
+ */
+export const changesByOrigin = (
+  stack: StackConfig,
+  addons: ReadonlyMap<string, LoadedAddon>,
+  created: ReadonlyArray<string>,
+  changed: ReadonlyArray<string>,
+  removed: ReadonlyArray<string>,
+): string => {
+  const from = origins(stack, addons, created)
+  const group = (label: string, mark: string, files: ReadonlyArray<string>) =>
+    ({ label, mark, files }) as const
+  const rows = [
+    // `base` here is what no add-on's files list: settings and package files written for them
+    ...addonIdsFor(stack).map((id) =>
+      group(
+        id === "base" ? "settings" : id,
+        "+",
+        created.filter((f) => from.get(f) === id),
+      ),
+    ),
+    group("edited", "~", changed),
+    group("removed", "-", removed),
+  ].filter((r) => r.files.length > 0)
+  // three directories at most, so a row fits the box
+  const where = (files: ReadonlyArray<string>) => {
+    const all = whereIn(files).split(", ")
+    return all.length <= 3 ? all.join(", ") : `${all.slice(0, 3).join(", ")}, +${all.length - 3}`
+  }
+  const width = Math.max(...rows.map((r) => r.label.length))
+  const count = Math.max(...rows.map((r) => String(r.files.length).length)) + 1
+  return [
+    ...rows.map(
+      (r) =>
+        `${r.label.padEnd(width)}  ${`${r.mark}${r.files.length}`.padStart(count)}  ${pc.dim(where(r.files))}`,
+    ),
+    "",
+    pc.dim("Every file: add --verbose, or --json for the list as data."),
+  ].join("\n")
+}
+
 /** An added add-on's title, then where its card and AGENTS.md sections are. */
 const addedLines = (a: AddedAddon): string[] => {
   const facts: Array<[string, string]> = []
@@ -1323,6 +1419,7 @@ export const addHandler = (input: {
   ids: ReadonlyArray<string>
   overwrite: boolean
   dryRun: boolean
+  verbose?: boolean
   json: boolean
   cwd: string
   install: boolean
@@ -1518,7 +1615,19 @@ export const addHandler = (input: {
     if (!changed) {
       yield* io.info(`Already there: ${result.skipped.join(", ")}`)
       if (!owed) return yield* io.outro("Nothing to do.")
-    } else
+    } else if (input.dryRun && input.verbose !== true)
+      // as create --dry-run: the new files by the add-on they come from, then what is edited
+      yield* io.note(
+        changesByOrigin(
+          result.stack,
+          yield* loadAddons(yield* TemplatesDir),
+          result.created,
+          changedFiles,
+          result.removed,
+        ),
+        `Would change: ${result.added.map((a) => a.title).join(", ") || "stack"}`,
+      )
+    else
       yield* io.note(
         [
           ...list(result.created, pc.green("+")),
@@ -1527,6 +1636,8 @@ export const addHandler = (input: {
         ].join("\n"),
         `${input.dryRun ? "Would change" : "Changed"}: ${result.added.map((a) => a.title).join(", ") || "stack"}`,
       )
+    if (input.verbose === true && !input.dryRun && !input.json)
+      yield* io.warn("--verbose only changes what --dry-run prints, so it does nothing here.")
     yield* replacementWarnings
     if (result.packageManager !== null)
       yield* io.info(

@@ -6,9 +6,12 @@ import { runOutcome } from "./outcome"
 // #region card
 const newestFirst = Notes.use((notes) => notes.list)
 
-/** Newest first. A database that is not set up: `NotesUnavailable`. */
+/** What `listNotes` can fail with: a database that is not set up. */
+export const ListNotesErrors = [NotesUnavailable] as const
+
+/** Newest first. */
 export const listNotes = createServerFn({ method: "GET" }).handler(() =>
-  runOutcome(newestFirst, NotesUnavailable),
+  runOutcome(newestFirst, ...ListNotesErrors),
 )
 
 const AddNoteInput = Schema.Struct({
@@ -16,7 +19,7 @@ const AddNoteInput = Schema.Struct({
 })
 
 /** What `addNote` can fail with; they reach the browser as these classes. */
-const AddNoteErrors = [InvalidNote, NotesUnavailable] as const
+export const AddNoteErrors = [InvalidNote, NotesUnavailable] as const
 
 export const addNote = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(AddNoteInput))

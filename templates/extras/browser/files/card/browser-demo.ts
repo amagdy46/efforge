@@ -24,7 +24,7 @@ const VisitInput = Schema.Struct({
 })
 
 /** What `visitPage` can fail with; each reaches the browser as its class. */
-const VisitErrors = [
+export const VisitPageErrors = [
   InvalidUrl, // not an http(s) address
   UrlRefused, // the container's URL policy refused it
   BrowserUnavailable, // no container runs here
@@ -34,5 +34,8 @@ const VisitErrors = [
 /** Loads a page in the browser container; the URL policy runs there too. */
 export const visitPage = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(VisitInput))
-  .handler(({ data }) => runOutcome(explain(visit(data.url)), ...VisitErrors))
+  .handler(({ data }) => {
+    const program = explain(visit(data.url))
+    return runOutcome(program, ...VisitPageErrors)
+  })
 // #endregion
