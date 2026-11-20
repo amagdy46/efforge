@@ -51,7 +51,10 @@ const RpcServices = Layer.mergeAll(AppRpcsHandlers, RpcSerialization.layerNdjson
 export const RpcLive = Layer.effect(
   RpcHandler,
   Effect.map(Effect.context<Layer.Success<typeof RpcServices>>(), (services) =>
-    HttpEffect.toWebHandler(Effect.provide(Effect.flatten(RpcServer.toHttpEffect(AppRpcs)), services)),
+    HttpEffect.toWebHandler(
+      // without the layer's Scope: each request's server lives in its own
+      Effect.provide(Effect.flatten(RpcServer.toHttpEffect(AppRpcs)), Context.omit(Scope.Scope)(services)),
+    ),
   ),
 ).pipe(Layer.provide(RpcServices))
 

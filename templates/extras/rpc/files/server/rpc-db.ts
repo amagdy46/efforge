@@ -1,7 +1,7 @@
 import { AppRpcs } from "@repo/core/rpc"
 import { AppRpcsHandlers } from "@repo/core/rpc-handlers"
 import { DatabaseLayer } from "@repo/db"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Scope } from "effect"
 import { HttpEffect } from "effect/http"
 import { RpcSerialization, RpcServer } from "effect/rpc"
 import { WorkerEnvLive } from "./cloudflare"
@@ -32,8 +32,11 @@ const RpcServices = AppRpcsHandlers.pipe(
  */
 export const RpcLive = Layer.effect(
   RpcHandler,
-  Effect.map(Effect.context<Layer.Success<typeof RpcServices>>(), (services) =>
-    HttpEffect.toWebHandler(Effect.provide(Effect.flatten(serve), services)),
+  Effect.map(Effect.context<Layer.Success<typeof RpcServices>>(), (context) =>
+    HttpEffect.toWebHandler(
+      // without the layer's Scope: each request's server lives in its own
+      Effect.provide(Effect.flatten(serve), Context.omit(Scope.Scope)(context)),
+    ),
   ),
 ).pipe(Layer.provide(RpcServices))
 // #endregion
