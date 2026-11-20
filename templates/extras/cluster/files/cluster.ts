@@ -1,7 +1,7 @@
 import * as CloudflareCluster from "@effect/platform-cloudflare/CloudflareCluster"
 import { Counter } from "@repo/core/cluster"
 import { ClusterHandlers } from "@repo/core/cluster-handlers"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, ManagedRuntime } from "effect"
 import { WorkerEnvironment } from "effect-cf"
 import { WorkerEnvLive } from "./cloudflare"
 
@@ -28,11 +28,8 @@ const namespace = (env: object, name: (typeof CLUSTER_BINDINGS)[number]) => {
 }
 
 // #region card
-/**
- * Entities, workflows and queues on Durable Objects. Server functions get
- * `Sharding` and `WorkflowEngine` from it; the handlers register here.
- */
-export const ClusterLive = ClusterHandlers.pipe(
+/** Entities, workflows and queues on Durable Objects; the handlers register here. */
+const ClusterServices = ClusterHandlers.pipe(
   Layer.provideMerge(
     Layer.unwrap(
       Effect.gen(function* () {
@@ -49,4 +46,13 @@ export const ClusterLive = ClusterHandlers.pipe(
   ),
   Layer.provide(WorkerEnvLive),
 )
+
+/**
+ * One cluster per Worker isolate, built once: the Durable Objects wait for it
+ * (`../cluster/objects.ts`), and the handlers stay registered while it lives.
+ */
+export const clusterRuntime = ManagedRuntime.make(ClusterServices)
+
+/** Server functions get `Sharding` and `WorkflowEngine` from it. */
+export const ClusterLive = Layer.effectContext(clusterRuntime.contextEffect)
 // #endregion

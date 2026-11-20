@@ -1,11 +1,14 @@
 import { setInitializer } from "@effect/platform-cloudflare/CloudflareDurableObjects"
-import { runtime } from "../server/runtime"
+import { clusterRuntime } from "../server/cluster"
 
 /*
  * The cluster's Durable Object classes, re-exported from `src/server.ts`
- * (Cloudflare finds them on the Worker entry). Each object waits for the app's
- * runtime before it handles a request or an alarm: that build registers the
- * entity and workflow handlers (`ClusterLive` in AppLayer).
+ * (Cloudflare finds them on the Worker entry). Each object waits for the
+ * cluster's runtime before it handles a request or an alarm: that build
+ * registers the entity and workflow handlers (`clusterRuntime` in
+ * `../server/cluster.ts`, which AppLayer shares). It is the cluster alone,
+ * not AppLayer, so it is the same on every database: a per-call AppLayer
+ * (Postgres) would drop the handlers when its call ends.
  *
  * `setInitializer` may be called once per isolate, but `pnpm dev` evaluates
  * this module again after an edit, so the first call is kept and reads the
@@ -13,13 +16,13 @@ import { runtime } from "../server/runtime"
  * Object keeps the handlers it started with.
  */
 const shared = globalThis as typeof globalThis & {
-  clusterRuntime?: typeof runtime
+  clusterRuntime?: typeof clusterRuntime
   clusterInitialized?: boolean
 }
-shared.clusterRuntime = runtime
+shared.clusterRuntime = clusterRuntime
 if (shared.clusterInitialized !== true) {
   shared.clusterInitialized = true
-  setInitializer(() => (shared.clusterRuntime ?? runtime).context())
+  setInitializer(() => (shared.clusterRuntime ?? clusterRuntime).context())
 }
 
 export {

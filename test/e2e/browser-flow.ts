@@ -66,6 +66,31 @@ const useRpcCard = async (page: Page) => {
 }
 
 /**
+ * The cluster card on Postgres, where server functions build the app's layers per call: the
+ * counter keeps its count between calls, the review run waits for its approval and publishes, and
+ * the queue's worker writes the greeting.
+ */
+const useClusterCard = async (page: Page) => {
+  const cluster = page.locator("#cluster")
+  const increment = cluster.getByRole("button", { name: "Increment" })
+  await cluster.getByLabel("Counter name").fill(`visits-${Date.now()}`)
+  await increment.click()
+  await cluster.getByText("1 in the entity's own SQLite").waitFor({ timeout: 30_000 })
+  await increment.click()
+  await cluster.getByText("2 in the entity's own SQLite").waitFor({ timeout: 30_000 })
+  await cluster.getByLabel("Counter name").fill("")
+  await increment.click()
+  await cluster.getByRole("alert").getByText("InvalidCounterName").waitFor()
+  await cluster.getByRole("button", { name: "Start" }).click()
+  await cluster.getByRole("button", { name: "Approve" }).click({ timeout: 30_000 })
+  await cluster
+    .getByText('"Release notes" drafted, approved, published')
+    .waitFor({ timeout: 30_000 })
+  await cluster.getByRole("button", { name: "Offer" }).click()
+  await cluster.getByText("Hello, Ada. Written by the queue worker.").waitFor({ timeout: 30_000 })
+}
+
+/**
  * Signed out, `/api/rpc` is refused by the session gate (401 `Unauthorized`), and the card's call
  * fails with the group's `Unauthorized`, marked as rejected.
  */
@@ -403,6 +428,7 @@ const cardsRequireSession = async (page: Page) => {
   await realtime.getByText(/broadcast it to/).waitFor()
   await useServiceCards(page)
   await useRpcCard(page)
+  await useClusterCard(page)
 
   annWatch = calls.find((c) => serverFnName(c.url()).startsWith("watchWorkflow"))?.url()
   annUpload = calls.find((c) => serverFnName(c.url()).startsWith("listFiles"))?.url()

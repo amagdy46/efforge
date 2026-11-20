@@ -54,8 +54,12 @@ Worker entry again after every edit, so the package's README pattern makes every
   every demo ran under `alchemy dev`. The deploy is not tested, on either infra.
 - `apps/web/src/cluster/objects.ts` keeps the first `setInitializer` per isolate (a flag on
   `globalThis`) and reads the newest runtime, so `pnpm dev` survives an edit. The initializer is
-  the app's `ManagedRuntime`: a cold Durable Object builds `AppLayer` once, inside Cloudflare's
-  15 second limit.
+  the cluster's own `ManagedRuntime` (`clusterRuntime` in `server/cluster.ts`), which `ClusterLive`
+  in `AppLayer` shares: a cold Durable Object builds the cluster once, inside Cloudflare's 15 second
+  limit. (The first version used the app's runtime. On Postgres that runtime builds `AppLayer` per
+  call and closes it after, so it has no context to give and would unregister the handlers when a
+  call ends: the project did not typecheck and every demo failed. The final pass before 0.3.0
+  found it; the e2e matrix now builds every add-on on every database the rules allow it on.)
 - It sits beside `extras/workflows` (Cloudflare Workflows behind `Jobs`, GA) and `extras/realtime`
   (a hand-written `Room` for WebSockets); `AGENTS.md` says when to use which. A project with all
   three passes its gate.
