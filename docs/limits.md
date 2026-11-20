@@ -20,3 +20,13 @@ efforge is young, and the CLI's options may still change.
 - Server functions and the socket upgrade don't check `Origin`. What stops a cross-site request carrying a user's cookie is the session cookie's `SameSite=Lax` and the browser's CORS preflight for JSON bodies; TanStack Start's CSRF middleware is not on.
 - The build check that keeps server files and secrets out of the browser looks for whole-file imports and for the values of settings named like secrets (`*SECRET*`, `*KEY*`, `*TOKEN*`, `*PASSWORD*`, 8 characters or more) in `.dev.vars` and `.env*`. A secret kept elsewhere, or under another name, is not checked.
 - `extras/cluster` is experimental, as `@effect/platform-cloudflare` is upstream: its API may change in a patch release, so efforge pins it exactly, with `effect`. In 4.1.4 a durable sleep that is the first thing a workflow run awaits wakes about a minute late (two alarms race; [cluster.md](cluster.md#what-experimental-means-here)), nothing runs a queue worker in the background (the request that offers runs it, for up to 10 seconds; no Cron Trigger is wired), and `pnpm dev` must be restarted after a handler changes. Its deploy, on wrangler or Alchemy, and everything that only shows on real Durable Objects (eviction, hibernation, several isolates, alarm timing, code updates while an entity is kept alive) are not tested. Counters and review runs are per user with auth; the greeting queue is shared.
+
+## Not in 0.3.0
+
+- No `observability` add-on. Every service call and server function is already a named span, and `TelemetryLive` in `layers.ts` is the slot for a tracer, but Effect's Cloudflare tracer is merged upstream and not yet in a published `@effect/platform-cloudflare` (4.1.4 has none). The add-on waits for that release.
+
+## Never verified
+
+- Nothing efforge's tests run deploys to a real Cloudflare account. CI builds every stack, and on wrangler stacks goes as far as `pnpm run deploy --dry-run`, which builds the Worker and checks its config; Alchemy stacks are built, never planned against an account. A first deploy, the `prod` stage on Alchemy, Hyperdrive in front of a real Postgres, and the R2, email, container and Durable Object bindings in production are the parts the docs describe but no test has run.
+- The browser add-on's container is built and its card refuses local and private addresses, but it has not been run against a public page on the machine that tested this release.
+- `extras/cluster`, beyond what is above: its deploy, and anything that only shows on real Durable Objects.
