@@ -50,7 +50,8 @@ const EFFORGE = /^(?:npm create efforge|npx(?: -y)? create-efforge(?:@latest)?)(
 /** efforge commands in a page: whole lines of ```sh blocks, and code spans in the prose. */
 const commandsIn = (text: string): string[] => {
   const blocks = [...text.matchAll(/```sh\n([\s\S]*?)```/g)].flatMap((m) =>
-    (m[1] as string).split("\n").map((l) => l.replace(/\s+#.*$/, "").trim()),
+    // the efforge part of a pipeline (`upgrade --check --diff --file x | git apply`)
+    (m[1] as string).split("\n").map((l) => l.replace(/\s+(#|\|).*$/, "").trim()),
   )
   const prose = text.replace(/```[\s\S]*?```/g, "")
   const spans = [...prose.matchAll(/`([^`\n]+)`/g)].map((m) => (m[1] as string).trim())
