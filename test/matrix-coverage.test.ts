@@ -1,6 +1,6 @@
 import { expect, it } from "vitest"
 import { available, slots } from "../src/slots.ts"
-import { withDefaults } from "../src/stack.ts"
+import { type StackConfig, withDefaults } from "../src/stack.ts"
 import { stacks } from "./e2e/stacks.ts"
 
 /*
@@ -9,13 +9,15 @@ import { stacks } from "./e2e/stacks.ts"
  */
 it("the e2e matrix builds every extra and AI add-on on every database that allows it", () => {
   const built = stacks.map(([, partial]) => withDefaults(partial))
-  const databases = slots.find((s) => s.id === "database")?.options.map((o) => o.id) ?? []
+  const databases = (slots.find((s) => s.id === "database")?.options ?? []).map(
+    (o) => o.id as StackConfig["database"],
+  )
   expect(databases).toEqual(["postgres", "d1", "none"])
   const missing: string[] = []
   for (const database of databases) {
     const allowed = { runtime: "cloudflare" as const, database }
     for (const extra of available("extras", allowed).map((o) => o.id))
-      if (!built.some((s) => s.database === database && s.extras.includes(extra)))
+      if (!built.some((s) => s.database === database && (s.extras as string[]).includes(extra)))
         missing.push(`extras/${extra} on ${database}`)
     for (const ai of available("ai", allowed).map((o) => o.id))
       if (ai !== "none" && !built.some((s) => s.database === database && s.ai === ai))

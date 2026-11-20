@@ -6,7 +6,7 @@ import type { withDefaults } from "../../src/stack.ts"
  * names). `test/matrix-coverage.test.ts` holds it to every add-on on every database it allows.
  */
 
-const preset = (id: string) => (presetById(id) as Preset).stack
+export const preset = (id: string) => (presetById(id) as Preset).stack
 
 export const stacks: Array<[string, Parameters<typeof withDefaults>[0]]> = [
   // the minimal preset's stack
