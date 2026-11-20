@@ -15,7 +15,7 @@ npx -y create-efforge@latest upgrade
 pnpm typecheck && pnpm check && pnpm test && pnpm build
 ```
 
-`upgrade` refuses uncommitted changes, writes nothing if any step fails, and runs `pnpm install`. It applies what efforge can prove is still its own: the Effect version guard (the `overrides` in `pnpm-workspace.yaml` and a `packageManager` that honours them), the pins, scripts and dependencies efforge wrote, every generated file you haven't changed, the new files (the dashboard's cards, `apps/web/src/start.ts` with the session gate, the test layers), the env vars the stack reads that `.env.example` lacks, and removal of files efforge no longer generates that you never changed (`components/widgets.tsx`, the placeholder `core.test.ts`). In a file efforge edits in place that you changed (`layers.ts`, `routes.ts`, `AGENTS.md`), it adds only what its new files need there.
+Run `upgrade` before any `add`: `add` writes nothing on a 0.2.x project and answers `UpgradeFirst`, because 0.3.0's add-ons need files and pins 0.2.x didn't generate. `upgrade` refuses uncommitted changes, writes nothing if any step fails, and runs `pnpm install`. It applies what efforge can prove is still its own: the Effect version guard (the `overrides` in `pnpm-workspace.yaml` and a `packageManager` that honours them), the pins, scripts and dependencies efforge wrote, every generated file you haven't changed, the new files (the dashboard's cards, `apps/web/src/start.ts` with the session gate, the test layers), the env vars the stack reads that `.env.example` lacks, and removal of files efforge no longer generates that you never changed (`components/widgets.tsx`, the placeholder `core.test.ts`). In a file efforge edits in place that you changed (`layers.ts`, `routes.ts`, `AGENTS.md`), it adds only what its new files need there.
 
 It leaves alone every file you changed, a file or `AGENTS.md` section you removed, a layer you replaced, a binding you renamed and a pin you set yourself. It lists those under "Kept", each with why; `upgrade --check --diff --file <path>` prints efforge's version. A file of efforge's that your file still needs as it is (your edited dashboard imports `getGreeting` from `greeting.ts`) is held back, with the files that need it. Merge your file by hand and run `upgrade` again, and the held files arrive. [docs/upgrading.md](https://github.com/amagdy46/efforge/blob/main/docs/upgrading.md) walks a real 0.2.0 project through it.
 
@@ -90,7 +90,7 @@ A script reading `envVars` or `written` gets `undefined` with no error, so check
 - With Alchemy, local settings go to `.env`, the file `alchemy dev` reads, at `create` and at every `add`; `add infra/alchemy` moves what `.dev.vars` held. `.env.example` has a value that works locally for every variable and an empty one marked "Fill in" for a real secret.
 - With Alchemy and Postgres, `DATABASE_URL` has no default keyed on the stage name, and `pnpm dev` turns TLS off only for a database on this machine.
 - Whether `pnpm db:migrate` is still owed is read from the local database, in the next steps of `create`, `add` and `upgrade`.
-- `efforge add realtime` on a 0.2.x project no longer edits its dashboard to show the widget: the widgets are gone, and an add-on on a project without a card registry comes without its card, with a note that says so.
+- `efforge add` writes only onto a project from its own release line. On a 0.2.x project it writes nothing and answers `UpgradeFirst`: run `upgrade`, then the same `add`.
 - The browser container answers a refused address with 403 and a page that would not load with 502, and returns a screenshot.
 - Effect's "experimental API" warning is off in `tsconfig.base.json` and lint, like the "unstable" one.
 - Generated projects use `@effect/atom-react`, `@effect/platform-cloudflare` and `@effect/sql-sqlite-node` 4.1.4 for rpc and cluster, held with `effect` by the overrides. The other pins are 0.2.1's.
@@ -110,7 +110,7 @@ A script reading `envVars` or `written` gets `undefined` with no error, so check
 - The realtime room counts only clients that are there, so the count stays right under `pnpm dev`. A signed-out plain `GET` on its path answered 500; it gets 401. `HEAD` on a signed file link answers like `GET` instead of 404.
 - With Alchemy and AI, `pnpm dev` starts without `LLM_API_KEY`.
 - On Alchemy stacks the landing page said the app is configured in `wrangler.jsonc`.
-- The browser add-on failed the lint of a project made by 0.2.x. `add` wrote a re-export wider than 100 characters on one line, which `pnpm check` then reported.
+- `add browser` wrote a re-export wider than 100 characters on one line, which `pnpm check` then reported.
 
 ### In this repository
 

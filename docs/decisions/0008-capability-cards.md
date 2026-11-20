@@ -49,9 +49,11 @@ capability working, next to the Effect code behind it, and adding an add-on adds
 
 ## Consequences
 
-- A project made before this (0.2.x), or one whose dashboard was removed, has no registry. `add`
-  then writes the add-on without its card unit and reports it in `notes`; the card files are
-  separate in the manifest because they import base files such a project does not have.
+- A project whose dashboard was removed has no registry. `add` then writes the add-on without its
+  card unit and reports it in `notes`; the card files are separate in the manifest because they
+  import base files such a project may not have. (A 0.2.x project, made before cards, got the
+  same until the final pass before 0.3.0 found that `add rpc` left it unbuildable; `add` now
+  refuses a project from an older release line with `UpgradeFirst`, ADR 0017.)
 - The landing page's labels and file paths for each slot option live in `lib/stack.ts` in base. A
   new add-on (a new slot option) needs a row there as well as its card.
 - Region lines are kept to 80 characters (the code column is laid out to hold 80 characters beside the demo from 1280 px); a repo test checks every

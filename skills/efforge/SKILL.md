@@ -135,7 +135,7 @@ It applies only what is still efforge's (pins, guards, scripts, files the user n
 | `UnknownAddon` | Run `fix` when it isn't `null` (a clear typo, or the one id a fragment names). Otherwise pick from `suggestions`, or run `list --json` for the ids the project can add; if what the user wants isn't there, efforge doesn't offer it: tell them. |
 | `SlotAlreadySet` | The project already has another choice for that slot, and swapping isn't supported. Tell the user; a different choice needs a new project. |
 | `RemoveNotSupported` | Removing an add-on isn't supported. Tell the user. |
-| `UpgradeFirst` | `add` would write dashboard cards the project's older card boundary can't typecheck. Nothing was written. Run `fix` (`upgrade`), then `after` (the same `add`). |
+| `UpgradeFirst` | The project is from an older efforge (`version`) than this one adds to (`needs`). Nothing was written. Commit, run `fix` (`upgrade`), run the gate, then `after` (the same `add`). |
 | `OverlayConflict` | `add` would replace files the user edited (`files`, `diff`). Nothing was written. Show the diff and ask before running `fix`, which adds `--overwrite` and discards those edits. |
 | `TransformAnchorMissing` | Nothing was written. Apply `snippet` to `file` by hand, then run the same command again. |
 | `PnpmMissing` | Install pnpm (`npm install --global pnpm`) and run the command again, or ask the user. |

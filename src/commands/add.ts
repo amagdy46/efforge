@@ -20,7 +20,6 @@ import {
   PUBLIC_LIST_FILE,
   presentCardTransforms,
   REGISTRY_FILE,
-  SERVER_DIR,
   START_FILE,
 } from "../cards.ts"
 import {
@@ -107,6 +106,7 @@ import {
   pnpmWildcardOverrides,
   versions,
 } from "../versions.ts"
+import { addFloor, tooOldToAdd } from "../history.ts"
 import { elapsed, type EnvVar, origins, PnpmMissing, TemplatesDir, whereIn } from "./create.ts"
 
 export class NotAnEfforgeProject extends Schema.TaggedError<NotAnEfforgeProject>()(
@@ -401,6 +401,13 @@ export const addAddons = (
     const { stack, skipped: alreadyThere } = yield* applyIds(manifest.stack, ids)
     const before = new Set(addonIdsFor(manifest.stack))
     const newIds = addonIdsFor(stack).filter((id) => !before.has(id))
+    // add-ons are written against this CLI's release line; an older project upgrades first
+    if (tooOldToAdd(manifest.efforgeVersion))
+      return yield* new UpgradeFirst({
+        version: manifest.efforgeVersion,
+        needs: addFloor(),
+        addons: newIds,
+      })
     const addons = yield* loadAddons(templatesDir)
     const fresh = []
     // every add-on of the new stack, in generate order: new ones apply fully, existing ones only
@@ -425,7 +432,7 @@ export const addAddons = (
     const written = new Set<string>()
     const hashes: Record<string, string> = {}
 
-    // a project made before capability cards (or whose dashboard was deleted) has no registry: its
+    // a project whose dashboard was removed (or is held back by upgrade) has no registry: its
     // add-ons come without their card, and the card's transforms are skipped with it
     const hasRegistry = (yield* read(REGISTRY_FILE)) !== undefined
     const notes: string[] = []
@@ -438,16 +445,6 @@ export const addAddons = (
         demosSkipped.push(...files.slice(1).map((f) => f.target))
       }
       return hasRegistry ? files : []
-    }
-
-    // a card written onto an older card boundary would not typecheck: upgrade the boundary first
-    if (hasRegistry) {
-      const withCards = fresh
-        .filter(({ manifest: m }) => (m.card?.files ?? []).some((f) => switchedOn(m.id, f.when)))
-        .map(({ manifest: m }) => m.id)
-      const outcome = yield* read(OUTCOME_FILE)
-      if (withCards.length > 0 && outcome !== undefined && !currentBoundary(outcome))
-        return yield* new UpgradeFirst({ file: OUTCOME_FILE, addons: withCards })
     }
 
     // 2. overlays: write if absent, replace if still what efforge generated, else conflict
@@ -508,7 +505,7 @@ export const addAddons = (
     }
     if (cardsSkipped.length > 0)
       notes.push(
-        `No dashboard card for ${cardsSkipped.join(", ")}: this project has no ${REGISTRY_FILE} (made before efforge 0.3, or its dashboard was removed). Each add-on's service, layer and tests are written; its card${demosSkipped.length > 0 ? ` and the card's server functions (${demosSkipped.join(", ")})` : ""} are not. Nothing else is needed: call the service from your own server functions.`,
+        `No dashboard card for ${cardsSkipped.join(", ")}: this project has no ${REGISTRY_FILE} (its dashboard was removed, or upgrade is holding it back). Each add-on's service, layer and tests are written; its card${demosSkipped.length > 0 ? ` and the card's server functions (${demosSkipped.join(", ")})` : ""} are not. Nothing else is needed: call the service from your own server functions.`,
       )
     if (conflicts.length > 0)
       return yield* new OverlayConflict({
@@ -990,19 +987,15 @@ export class AddIncomplete extends Schema.TaggedError<AddIncomplete>()("AddIncom
 
 /** `add` was given no ids: `available` are the add-ons the project doesn't have yet. */
 /**
- * The project's cards talk to their server functions through an older boundary than the cards
- * `add` writes (`apps/web/src/server/outcome.ts` from before server functions returned an `Exit`),
- * so the new cards would not typecheck. `upgrade` brings the boundary up to date.
+ * The project was made (or last upgraded) by an efforge older than this CLI's release line
+ * (`needs`, from `addFloor`): this CLI's add-ons need files and pins it doesn't have. `upgrade`
+ * brings it to this line; then the same `add` runs.
  */
 export class UpgradeFirst extends Schema.TaggedError<UpgradeFirst>()("UpgradeFirst", {
-  file: Schema.String,
+  version: Schema.String,
+  needs: Schema.String,
   addons: Schema.Array(Schema.String),
 }) {}
-
-/** The server half of the card boundary, and what its current shape has that older ones lack. */
-const OUTCOME_FILE = `${SERVER_DIR}outcome.ts`
-const currentBoundary = (text: string) =>
-  /\bfailureCodec\b/.test(text) && /\.\.\.errors\b/.test(text)
 
 export class NoAddonIds extends Schema.TaggedError<NoAddonIds>()("NoAddonIds", {
   available: Schema.Array(Schema.String),
@@ -1243,9 +1236,14 @@ export const addFailure = (
       const command = upgradeInstead(args)
       return {
         code: "UpgradeFirst",
-        message: `${String(e.file)} is from an older efforge: the dashboard ${(e.addons as string[]).length === 1 ? "card" : "cards"} of ${(e.addons as string[]).join(", ")} would not typecheck against it. Nothing was written. Run ${command} first, then this add again.`,
+        message: `This project is from efforge ${String(e.version)}, and this efforge adds only to projects from ${String(e.needs)} on: its add-ons need files and pins older projects lack. Nothing was written. Run ${command} first, then this add again.`,
         fix: command,
-        details: { file: String(e.file), addons: e.addons, after: commandLine(args) },
+        details: {
+          version: String(e.version),
+          needs: String(e.needs),
+          addons: e.addons,
+          after: commandLine(args),
+        },
       }
     }
     case "OverlayConflict": {

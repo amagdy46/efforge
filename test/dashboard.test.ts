@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { NodeFileSystem, NodeServices } from "@effect/platform-node"
@@ -172,7 +172,7 @@ for (const [addon, card, server] of laterCards)
     }
   })
 
-it("a project without a card registry (before efforge 0.3) gets the add-on without its card", async () => {
+it("a project whose card registry was removed gets the add-on without its card", async () => {
   const { tmp, dir, result } = await addLater(d1Auth, ["realtime"], (d) =>
     rmSync(join(d, REGISTRY_FILE)),
   )
@@ -187,33 +187,6 @@ it("a project without a card registry (before efforge 0.3) gets the add-on witho
     expect(existsSync(join(dir, "apps/web/src/server/realtime-demo.ts"))).toBe(false)
     expect(existsSync(join(dir, REGISTRY_FILE))).toBe(false)
     expect(result.written).not.toContain(REGISTRY_FILE)
-  } finally {
-    rmSync(tmp, { recursive: true, force: true })
-  }
-})
-
-// A real 0.2.0 project (test/fixtures/v0.2.0), on an auth stack: no registry, so the realtime card
-// unit, its session guard included, is skipped as a whole, and everything else is added.
-const v020 = new URL("fixtures/v0.2.0/d1-effect-sql-auth", import.meta.url).pathname
-
-it("add realtime on a 0.2.0 auth project succeeds without the card, and says so", async () => {
-  const tmp = mkdtempSync(join(tmpdir(), "efforge-dashboard-"))
-  const dir = join(tmp, "old")
-  cpSync(v020, dir, { recursive: true })
-  try {
-    const before = readFileSync(join(dir, DASHBOARD), "utf8")
-    const result = await Effect.runPromise(
-      addAddons(dir, ["realtime"], { overwrite: false, dryRun: false, install: false }).pipe(
-        Effect.provide(NodeServices.layer),
-      ),
-    )
-    expect(readFileSync(join(dir, DASHBOARD), "utf8")).toBe(before)
-    expect(readFileSync(join(dir, "apps/web/src/server/layers.ts"), "utf8")).toContain(
-      "RealtimeLive",
-    )
-    for (const f of [`${CARDS_DIR}realtime.tsx`, "apps/web/src/server/realtime-demo.ts"])
-      expect(existsSync(join(dir, f)), f).toBe(false)
-    expect(result.notes).toEqual([expect.stringMatching(/^No dashboard card for Realtime: /)])
   } finally {
     rmSync(tmp, { recursive: true, force: true })
   }

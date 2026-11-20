@@ -1,5 +1,13 @@
 import { stripVTControlCharacters } from "node:util"
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import {
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
@@ -7,6 +15,7 @@ import { afterEach, beforeEach, expect, it, vi } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { loadAddons } from "../src/addon.ts"
 import { completionScript, runWith } from "../src/cli.ts"
+import { addable } from "../src/commands/add.ts"
 import { TemplatesDir } from "../src/commands/create.ts"
 import {
   GRAPH_REGION,
@@ -17,11 +26,11 @@ import {
   textGraph,
   writeGraph,
 } from "../src/graph.ts"
-import { hash, renderManifest } from "../src/manifest.ts"
 import { presetIds } from "../src/presets.ts"
 import { type Answer, scriptedPromptIO } from "../src/prompts/navigable.ts"
 import { GraphOutput, InfoOutput } from "../src/schemas.ts"
 import { Schema } from "effect"
+import { efforgeVersion } from "../src/versions.ts"
 import { recordingSpawner } from "./recordingSpawner.ts"
 
 // `info`, `graph` and the `add` picker, run against the real templates.
@@ -526,59 +535,50 @@ it("an add-on that brings a migration lists the migrate step: every add-on that 
   expect(seen).toEqual(["ai/effect-ai-byok", "auth/better-auth", "auth/better-auth-orgs"])
 }, 120_000)
 
-it("add on a project whose card boundary is older than its cards refuses, with upgrade as the fix; after upgrade it adds", async () => {
-  await create("app", "--database=d1", "--orm=effect-sql", "--auth=none")
-  // a project made between releases: server functions still answer { ok, value }, and
-  // efforge.jsonc records that file as efforge's
-  const old = readFileSync(new URL("fixtures/outcome-before-exit.ts.txt", import.meta.url), "utf8")
-  const file = "apps/web/src/server/outcome.ts"
-  writeFileSync(join("app", file), old)
-  const manifestText = readFileSync(join("app", "efforge.jsonc"), "utf8")
-  const manifest = JSON.parse(manifestText.slice(manifestText.indexOf("{")))
-  manifest.files[file] = hash(old)
-  writeFileSync(join("app", "efforge.jsonc"), renderManifest(manifest))
-  const before = readFileSync(join("app", "apps/web/src/capabilities/registry.ts"), "utf8")
-  const r = await cli(["add", "realtime", "--json", "--no-install", "--cwd", "app"])
-  expect(r.exitCode).toBe(1)
-  expect(json(r.out).error).toMatchObject({
-    code: "UpgradeFirst",
-    fix: "npx -y create-efforge upgrade --json --cwd app",
-    file,
-    addons: ["extras/realtime"],
-    after: "npx -y create-efforge add realtime --json --no-install --cwd app",
-  })
-  // the experimental cluster card is held the same way
-  const cluster = await cli(["add", "cluster", "--json", "--no-install", "--cwd", "app"])
-  expect(cluster.exitCode).toBe(1)
-  expect(json(cluster.out).error).toMatchObject({
-    code: "UpgradeFirst",
-    file,
-    addons: ["extras/cluster"],
-    after: "npx -y create-efforge add cluster --json --no-install --cwd app",
-  })
-  // and the rpc card, whose card module has a variant per stack
-  const rpc = await cli(["add", "rpc", "--json", "--no-install", "--cwd", "app"])
-  expect(rpc.exitCode).toBe(1)
-  expect(json(rpc.out).error).toMatchObject({
-    code: "UpgradeFirst",
-    file,
-    addons: ["extras/rpc"],
-    after: "npx -y create-efforge add rpc --json --no-install --cwd app",
-  })
-  // nothing written
-  expect(readFileSync(join("app", "apps/web/src/capabilities/registry.ts"), "utf8")).toBe(before)
-  expect(existsSync(join("app", "packages/core/src/cluster.ts"))).toBe(false)
-  expect(existsSync(join("app", "packages/core/src/rpc.ts"))).toBe(false)
-  expect(existsSync(join("app", "apps/web/src/routes/api/rpc.ts"))).toBe(false)
-  // an add-on without a card is not held up
-  expect((await cli(["add", "infra", "--json", "--no-install", "--cwd", "app"])).exitCode).toBe(0)
-  const up = await cli(["upgrade", "--json", "--no-install", "--cwd", "app"])
-  expect(up.exitCode, up.out).toBe(0)
-  expect(readFileSync(join("app", file), "utf8")).toContain("failureCodec")
-  const again = await cli(["add", "realtime", "--json", "--no-install", "--cwd", "app"])
-  expect(again.exitCode, again.out).toBe(0)
-  const clusterAgain = await cli(["add", "cluster", "--json", "--no-install", "--cwd", "app"])
-  expect(clusterAgain.exitCode, clusterAgain.out).toBe(0)
-  const rpcAgain = await cli(["add", "rpc", "--json", "--no-install", "--cwd", "app"])
-  expect(rpcAgain.exitCode, rpcAgain.out).toBe(0)
+// A real 0.2.0 project (test/fixtures/v0.2.0): D1, Effect SQL, Better Auth with organizations.
+const v020 = new URL("fixtures/v0.2.0/d1-effect-sql-auth", import.meta.url).pathname
+
+/** Every file under `dir` with its text, to show that nothing changed. */
+const snapshot = (dir: string) =>
+  readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((e) => e.isFile())
+    .map((e) => join(e.parentPath, e.name))
+    .toSorted()
+    .map((f) => `${f}\n${readFileSync(f, "utf8")}`)
+    .join("\n")
+
+it("add of any add-on on a 0.2.0 or 0.2.1 project refuses with UpgradeFirst and writes nothing; after upgrade the same add runs", async () => {
+  for (const version of ["0.2.0", "0.2.1"]) {
+    cpSync(v020, "old", { recursive: true })
+    cpSync(`${v020}-rest`, "old", { recursive: true })
+    const manifestFile = join("old", "efforge.jsonc")
+    writeFileSync(
+      manifestFile,
+      readFileSync(manifestFile, "utf8").replace(
+        /"efforgeVersion": "[^"]*"/,
+        `"efforgeVersion": "${version}"`,
+      ),
+    )
+    const before = snapshot("old")
+    const ids = addable(json((await cli(["list", "--json", "--cwd", "old"])).out).stack as never)
+    expect(ids.length).toBeGreaterThan(8)
+    for (const id of ids) {
+      const r = await cli(["add", id, "--json", "--no-install", "--cwd", "old"])
+      expect(r.exitCode, `${version} add ${id}`).toBe(1)
+      expect(json(r.out).error, `${version} add ${id}`).toMatchObject({
+        code: "UpgradeFirst",
+        fix: "npx -y create-efforge upgrade --json --cwd old",
+        version,
+        needs: efforgeVersion,
+        after: `npx -y create-efforge add ${id} --json --no-install --cwd old`,
+      })
+    }
+    expect(snapshot("old"), version).toBe(before)
+    const up = await cli(["upgrade", "--json", "--no-install", "--allow-dirty", "--cwd", "old"])
+    expect(up.exitCode, up.out).toBe(0)
+    const again = await cli(["add", "rpc", "cluster", "--json", "--no-install", "--cwd", "old"])
+    expect(again.exitCode, again.out).toBe(0)
+    expect(existsSync(join("old", "apps/web/src/capabilities/rpc.tsx"))).toBe(true)
+    rmSync("old", { recursive: true, force: true })
+  }
 })

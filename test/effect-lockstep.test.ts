@@ -12,6 +12,7 @@ import { generate } from "../src/generate.ts"
 import { withDefaults } from "../src/stack.ts"
 import {
   effectLockstep,
+  efforgeVersion,
   isEffectLockstep,
   overrideKey,
   pnpmVersion,
@@ -154,11 +155,24 @@ it("add restores the guard on an older project, at that project's effect version
 
 // What 0.2.0 really generated (test/fixtures/v0.2.0/README.md): packageManager pnpm@12.4.2, which
 // accepts the wildcard overrides and ignores them, so `add` must raise it for the guard to work.
+// Recorded as this efforge's own line: `add` refuses a project from an older one (UpgradeFirst),
+// and puts the guard back on one of its own that has lost it.
 const v020 = join(import.meta.dirname, "fixtures/v0.2.0/d1-effect-sql-auth")
-
-it("add on a project made by 0.2.0 writes the guard and raises packageManager so pnpm honours it", async () => {
-  const dir = join(tmp, "old")
+const copyWithoutGuard = (dir: string) => {
   cpSync(v020, dir, { recursive: true })
+  const m = join(dir, "efforge.jsonc")
+  writeFileSync(
+    m,
+    readFileSync(m, "utf8").replace(
+      /"efforgeVersion": "[^"]*"/,
+      `"efforgeVersion": "${efforgeVersion}"`,
+    ),
+  )
+}
+
+it("add on a project without the guard writes it and raises packageManager so pnpm honours it", async () => {
+  const dir = join(tmp, "old")
+  copyWithoutGuard(dir)
   const result = await run(
     addAddons(dir, ["email"], { overwrite: false, dryRun: false, install: false }),
   )
@@ -177,7 +191,7 @@ it("add on a project made by 0.2.0 writes the guard and raises packageManager so
 it("add never lowers packageManager, and leaves one new enough alone", async () => {
   for (const pm of [`pnpm@${pnpmVersion}`, "pnpm@13.0.0", "pnpm@12.17.0"]) {
     const dir = join(tmp, pm)
-    cpSync(v020, dir, { recursive: true })
+    copyWithoutGuard(dir)
     const file = join(dir, "package.json")
     writeFileSync(file, readFileSync(file, "utf8").replace("pnpm@12.4.2", pm))
     const result = await run(
@@ -192,7 +206,7 @@ it("add never lowers packageManager, and leaves one new enough alone", async () 
 
 it("add keeps an unscoped effect override written by hand", async () => {
   const dir = join(tmp, "hand")
-  cpSync(v020, dir, { recursive: true })
+  copyWithoutGuard(dir)
   const file = join(dir, "pnpm-workspace.yaml")
   writeFileSync(
     file,

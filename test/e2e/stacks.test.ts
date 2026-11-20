@@ -560,6 +560,55 @@ const upgradeOld = (ref: string, flags: string, edited: boolean): Effect.Effect<
     rmSync(work, { recursive: true, force: true })
   })
 
+/**
+ * The final pass's B2: `add` on a project made by an older release line writes nothing and answers
+ * `UpgradeFirst`; its `fix` (upgrade), a commit and its `after` (the same add) end with the gate
+ * passing, and upgrade --check --strict and doctor agreeing. rpc and cluster need Effect 4.1 and
+ * files only 0.3.0 projects have.
+ */
+const addAfterUpgrade = (ref: string, flags: string): Effect.Effect<void, unknown> =>
+  Effect.gen(function* () {
+    const source = releaseSource(ref)
+    const work = mkdtempSync(`${e2eRoot}/old-add-${ref.replace(/\W+/g, "-")}-`)
+    yield* Effect.try(() =>
+      sh(work, `node ${JSON.stringify(join(source, "src/bin.ts"))} old --yes ${flags}`),
+    )
+    const dir = join(work, "old")
+    if (flags.includes("--infra=alchemy"))
+      yield* Effect.try(() => sh(dir, "test -f .env || cp .env.example .env"))
+    const status = () =>
+      spawnSync("git", ["status", "--porcelain"], { cwd: dir, encoding: "utf8" }).stdout
+    const clean = status()
+    const refused = yield* cliJson(["add", "rpc", "cluster", "--json", "--cwd", dir])
+    const error = refused.doc.error as Record<string, unknown> | undefined
+    if (refused.exit !== 1 || error?.code !== "UpgradeFirst")
+      throw new Error(`add on an old project:\n${JSON.stringify(refused.doc, null, 2)}`)
+    if (status() !== clean) throw new Error(`the refused add wrote files:\n${status()}`)
+    const fix = String(error.fix)
+    const after = String(error.after)
+    if (!fix.includes(" upgrade ") || !after.includes(" add rpc cluster "))
+      throw new Error(`UpgradeFirst fix / after: ${fix} / ${after}`)
+    const upgraded = yield* cliJson(["upgrade", "--json", "--cwd", dir])
+    if (upgraded.exit !== 0 || upgraded.doc.ok !== true)
+      throw new Error(`upgrade failed:\n${JSON.stringify(upgraded.doc, null, 2)}`)
+    yield* Effect.try(() =>
+      sh(
+        dir,
+        "git add -A && git -c user.name=e2e -c user.email=e2e@example.com commit -qm upgrade",
+      ),
+    )
+    const added = yield* cliJson(["add", "rpc", "cluster", "--json", "--cwd", dir])
+    if (added.exit !== 0 || added.doc.ok !== true)
+      throw new Error(`add after upgrade:\n${JSON.stringify(added.doc, null, 2)}`)
+    yield* Effect.try(() => checkEffectLockstep(dir))
+    yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
+    yield* Effect.try(() =>
+      sh(dir, "git add -A && git -c user.name=e2e -c user.email=e2e@example.com commit -qm add"),
+    )
+    yield* checkDoctor(dir)
+    rmSync(work, { recursive: true, force: true })
+  })
+
 /** A line as the guide quotes it and as a run prints it: versions and counts left out. */
 const shapeOf = (line: string) =>
   line
@@ -690,6 +739,12 @@ describe("upgrade an old project", () => {
     () => upgradingGuide(),
     { timeout: 20 * 60 * 1000 },
   )
+  for (const [version, ref, flags] of releases.slice(0, 2))
+    it.effect(
+      `${version}: add answers UpgradeFirst and writes nothing; upgrade, then the same add, then the full gate`,
+      () => addAfterUpgrade(ref, flags),
+      { timeout: 20 * 60 * 1000 },
+    )
   for (const [version, ref, flags] of releases)
     for (const edited of [false, true])
       it.effect(

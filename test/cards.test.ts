@@ -280,7 +280,7 @@ const beforeCards = (dir: string) => {
   for (const f of BEFORE_CARDS) rmSync(join(dir, f), { force: true })
 }
 
-it("a project from before cards gets a guarded card's add-on without the card, and one note", async () => {
+it("a project without its dashboard gets a guarded card's add-on without the card, and one note", async () => {
   const { dir, result } = await addLater(d1("better-auth"), ["realtime"], beforeCards)
   expect(existsSync(join(dir, "packages/core/src/realtime.ts"))).toBe(true)
   expect(readFileSync(join(dir, "apps/web/src/server/layers.ts"), "utf8")).toContain("RealtimeLive")
@@ -297,13 +297,13 @@ it("a project from before cards gets a guarded card's add-on without the card, a
   )
 })
 
-it("auth added to a project from before cards leaves its existing server functions alone", async () => {
+it("auth added to a project without its dashboard leaves its existing server functions alone", async () => {
   const { dir, result } = await addLater(d1("none", ["realtime"]), ["auth/better-auth"], (d) => {
     beforeCards(d)
     rmSync(join(d, `${CARDS_DIR}realtime.tsx`))
     rmSync(join(d, "apps/web/src/server/realtime-demo.ts"))
   })
-  // greeting.ts was there in 0.2.x, without the card; it is not the card's to guard there
+  // greeting.ts is there without the card; it is not the card's to guard there
   expect(readFileSync(join(dir, "apps/web/src/server/greeting.ts"), "utf8")).not.toContain(
     "requireSession",
   )

@@ -2258,9 +2258,11 @@ npx -y create-efforge add auth/none --json --cwd my-app
 
 ### `UpgradeFirst`
 
-`add` would write a dashboard card that the project's card boundary can't typecheck: `apps/web/src/server/outcome.ts` is from an efforge made before server functions returned an `Exit` (a project made between releases). Nothing was written. An add-on without a card is not held up.
+The project was made (or last upgraded) by an efforge older than this one's release line, read from `efforgeVersion` in `efforge.jsonc`: this efforge's add-ons are written against what its own line generates, and would not build there. Nothing was written. Every add-on is refused the same way. Each release keeps the rule: 0.3.x adds to projects from 0.3.0 on, 0.4.x will add to projects from 0.4.0 on.
 
-Fields: `file` (the boundary file), `addons` (the add-ons whose cards need the newer boundary), `after` (this `add`, to run once `upgrade` is done). `fix`: `upgrade` in the same project (keeping `--cwd` and `--json`), which brings the boundary up to date; then run `after`.
+Fields: `version` (the project's efforge), `needs` (the oldest efforge this one adds to), `addons` (the add-ons asked for), `after` (this `add`, to run once `upgrade` is done). `fix`: `upgrade` in the same project (keeping `--cwd` and `--json`); then run `after`.
+
+Here, `my-app` was made by efforge 0.2.0.
 
 <!-- example: UpgradeFirst -->
 
@@ -2275,9 +2277,10 @@ npx -y create-efforge add realtime --json --cwd my-app
   "ok": false,
   "error": {
     "code": "UpgradeFirst",
-    "message": "apps/web/src/server/outcome.ts is from an older efforge: the dashboard card of extras/realtime would not typecheck against it. Nothing was written. Run npx -y create-efforge upgrade --json --cwd my-app first, then this add again.",
+    "message": "This project is from efforge 0.2.0, and this efforge adds only to projects from 0.3.0 on: its add-ons need files and pins older projects lack. Nothing was written. Run npx -y create-efforge upgrade --json --cwd my-app first, then this add again.",
     "fix": "npx -y create-efforge upgrade --json --cwd my-app",
-    "file": "apps/web/src/server/outcome.ts",
+    "version": "0.2.0",
+    "needs": "0.3.0",
     "addons": [
       "extras/realtime"
     ],

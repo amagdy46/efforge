@@ -1,6 +1,7 @@
 import { releases } from "./history.data.ts"
 import { decodeRecord, shingles } from "./record.ts"
 import { compareVersions, exactVersion } from "./semver.ts"
+import { efforgeVersion } from "./versions.ts"
 
 // What each efforge release generated, so `upgrade` can tell its own older output from an owner's
 // choice where it has no hash: a pin, a script or a dependency equal to what a release wrote is
@@ -146,3 +147,26 @@ export const efforgeGenerated = (version: string, file: string) =>
 /** True when the project's own release wrote no root `engines`. */
 export const enginesNew = (version: string) =>
   ownRelease(version).every(([, r]) => r.engines === null)
+
+/** A version's release line: its minor before 1.0 (`0.3`), its major after (`1`). */
+const lineOf = (version: string): string => {
+  const [major = 0, minor = 0] = (version.split("-")[0] ?? "").split(".").map(Number)
+  return major === 0 ? `0.${minor}` : `${major}`
+}
+
+/**
+ * The oldest efforge whose projects this CLI's `add` writes onto: the first recorded release of
+ * the CLI's own line (0.3.0 for any 0.3.x). Add-ons are written against what that line generates
+ * (its card boundary, its pins), so a project from an older line runs `upgrade` first. Every
+ * release keeps this rule without a change; a patch release whose add-ons need something earlier
+ * releases of its line didn't generate is a minor release instead
+ * (docs/decisions/0017-add-only-onto-the-clis-own-release-line.md).
+ */
+export const addFloor = (cli: string = efforgeVersion): string =>
+  Object.keys(releases)
+    .filter((r) => lineOf(r) === lineOf(cli) && compareVersions(r, cli) <= 0)
+    .toSorted(compareVersions)[0] ?? `${lineOf(cli)}${lineOf(cli).startsWith("0.") ? "" : ".0"}.0`
+
+/** True when `add` must refuse a project made (or last upgraded) by efforge `version`. */
+export const tooOldToAdd = (version: string, cli: string = efforgeVersion): boolean =>
+  exactVersion(version) !== undefined && compareVersions(version, addFloor(cli)) < 0

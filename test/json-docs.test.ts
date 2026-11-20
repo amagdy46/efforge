@@ -183,17 +183,7 @@ const scenarios: Record<string, Scenario> = {
       writeFileSync(layout, `${readFileSync(layout, "utf8")}// signed-in pages share this layout\n`)
     },
   },
-  UpgradeFirst: {
-    setup: async (work) => {
-      await myApp(work)
-      // the card boundary as a project made between releases has it
-      const old = readFileSync(
-        new URL("fixtures/outcome-before-exit.ts.txt", import.meta.url),
-        "utf8",
-      )
-      writeFileSync(join(work, "my-app/apps/web/src/server/outcome.ts"), old)
-    },
-  },
+  UpgradeFirst: { setup: (work) => pinnedLike020(work) },
   TransformAnchorMissing: {
     setup: async (work) => {
       await myApp(work)
