@@ -839,6 +839,13 @@ describe("upgrade an old project", () => {
       "896be2a83df3b1e9bcf1156b4204c2f661eeb40c",
       "--database=d1 --orm=drizzle --auth=better-auth --extras=storage,email,realtime",
     ],
+    // a project made by next with the cluster card, before one error list per server function:
+    // each card names its errors twice, and nothing in core knows <Name>Errors
+    [
+      "next (055d320)",
+      "055d320586b09d21fd3364cefec6cf32dcaa5fc7",
+      "--database=d1 --orm=effect-sql --auth=better-auth --extras=workflows,realtime,cluster",
+    ],
   ]
   it.effect(
     "docs/upgrading.md's 0.2.0 example: each quoted line is what doctor, upgrade --check and upgrade print",
