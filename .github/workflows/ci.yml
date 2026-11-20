@@ -133,7 +133,7 @@ jobs:
           cache: ${{ (github.event_name != 'schedule' && github.event_name != 'workflow_dispatch') && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:e2e -t "^upgrade an old project > " --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/e2e.json"
-      - run: node scripts/expect-tests-ran.ts "$RUNNER_TEMP/e2e.json" 9
+      - run: node scripts/expect-tests-ran.ts "$RUNNER_TEMP/e2e.json" 12
 
   # `pnpm smoke:pack`: checks the packed manifest has no dependencies, installs the tarball with
   # npm (its own cache, no lockfile, outside the repo), runs it through npm, npx and pnpm dlx,
