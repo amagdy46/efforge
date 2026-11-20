@@ -59,16 +59,16 @@ efforge 0.2.0 made projects without the Effect guard. When Effect 4.1 came out, 
 
 <!-- output: doctor -->
 ```text
-✗ pnpm          packageManager pins pnpm 12.4.2, which ignores the overrides that keep Effect's packages on one version (they work from pnpm 12.17.0). upgrade raises it with the overrides.
-                Try: npx -y create-efforge upgrade
+✗ pnpm             packageManager pins pnpm 12.4.2, which ignores the overrides that keep Effect's packages on one version (they work from pnpm 12.17.0). upgrade raises it with the overrides.
+                   Try: npx -y create-efforge upgrade
 ...
-✗ effect        effect is 4.0.5, but @effect/platform-node-shared 4.1.4, @effect/sql-sqlite-do 4.1.4 resolved to another version: two Effects in one build, which fails (Effect's packages only work at one shared version). pnpm-workspace.yaml lacks the overrides that prevent it; upgrade writes them and installs.
-                Try: npx -y create-efforge upgrade
+✗ effect           effect is 4.0.5, but @effect/platform-node-shared 4.1.4, @effect/sql-sqlite-do 4.1.4 resolved to another version: two Effects in one build, which fails (Effect's packages only work at one shared version). pnpm-workspace.yaml lacks the overrides that prevent it; upgrade writes them and installs.
+                   Try: npx -y create-efforge upgrade
 ...
-✗ gates         apps/web/src/server/routes.ts: requireApiSession is not in workerRoutes, so every route under /api/ answers a signed-out request. upgrade adds the gates, first in their lists.
-                Try: npx -y create-efforge upgrade
+✗ gates            apps/web/src/server/routes.ts: requireApiSession is not in workerRoutes, so every route under /api/ answers a signed-out request. upgrade adds the gates, first in their lists.
+                   Try: npx -y create-efforge upgrade
 ...
-5 failed, 2 warnings, 7 ok, 1 skipped.
+5 failed, 2 warnings, 8 ok, 1 skipped.
 ```
 
 Besides the Effect guard, the `gates` check reports that the project has no session gates (0.2.0 had none): `requireApiSession`, which keeps routes under `/api/` behind a session, and `sessionGate`, which does the same for server functions. `upgrade` adds both.
