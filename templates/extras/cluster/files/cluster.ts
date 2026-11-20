@@ -28,7 +28,7 @@ const namespace = (env: object, name: (typeof CLUSTER_BINDINGS)[number]) => {
 }
 
 // #region card
-/** Entities, workflows and queues on Durable Objects; the handlers register here. */
+/** Entities, workflows and queues on Durable Objects; the handlers register. */
 const ClusterServices = ClusterHandlers.pipe(
   Layer.provideMerge(
     Layer.unwrap(

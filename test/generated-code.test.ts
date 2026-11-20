@@ -338,7 +338,7 @@ const stacksWithCards = (["none", "better-auth", "better-auth-orgs"] as const)
             auth,
             infra,
             ai: "effect-ai-byok",
-            extras: ["realtime", "storage", "email", "workflows", "browser"],
+            extras: ["realtime", "storage", "email", "workflows", "browser", "rpc", "cluster"],
           }),
         ),
       ),
