@@ -18,12 +18,16 @@ Every efforge project has these. A server function is TanStack Start's own RPC: 
 
 <!-- sample: repo:templates/base/files/web/src/server/greeting.ts -->
 ```ts
+/** What `greet` can fail with; the card lists the same, as itself. */
+export const GreetErrors = [InvalidName] as const
+
+/** Runs `greet` on the server. */
 export const greet = createServerFn({ method: "GET" })
   .validator(Schema.toStandardSchemaV1(GreetInput))
-  .handler(({ data }) => runOutcome(greetProgram(data.name), InvalidName))
+  .handler(({ data }) => runOutcome(greetProgram(data.name), ...GreetErrors))
 ```
 
-In a component, `useServerCall(greet, InvalidName)` calls it, and `state.error instanceof InvalidName` holds when it fails. A route loader can call it during server rendering, so its data is in the first HTML.
+The errors are one list, exported beside the function. In a component, `useServerCall(greet, ...GreetErrors)` calls it (the types hold the two sides to the same list), and `state.error instanceof InvalidName` holds when it fails. A route loader can call it during server rendering, so its data is in the first HTML.
 
 Use a server function for a form post, for data a page needs when it first renders, and for anything one page calls. It is the default for a reason: it needs nothing, and it already carries typed errors.
 
@@ -58,7 +62,8 @@ export const RpcLive = Layer.effect(
   ),
 ).pipe(Layer.provide(RpcServices))
 
-// apps/web/src/routes/api/rpc.ts: a TanStack Start server route serves it
+// apps/web/src/routes/api/rpc.ts: a TanStack Start server route serves it (the real one also
+// holds the call open until a stream's body is read, and answers a missing setting with a 503)
 export const Route = createFileRoute("/api/rpc")({
   server: {
     handlers: {
@@ -83,9 +88,9 @@ const greet = useAtomSet(greetAtom)
 What the add-on decides for you:
 
 - **The server is a layer; each request gets its own RPC server.** `RpcLive` is in `AppLayer`, and builds a fresh RPC server inside each request on `AppLayer`'s services: on Workers, I/O such as a Postgres socket belongs to the request that started it. The handlers run on the same layers as the server functions (the database card's `Notes`, Better Auth), not on copies, and the telemetry slot under `AppLayer` reaches the RPC server, so each call is a span named `rpc.Greet`, as a server function's is `serverFn.greet`.
-- **Errors are the same idea as a server function's.** Declare them with `Schema.TaggedError` and a brand, and set them as a call's `error`. In the browser, the failure is the class with its fields (`instanceof InvalidName`, `length`); the dashboard shows it with the same `FailureNote`. A field holding a driver's error is `cause: ServerOnly` and stays on the server. A call that got no RPC answer at all fails with `RpcClientError`.
+- **Errors are the same idea as a server function's.** Declare them with `Schema.TaggedError` and a brand, and set them as a call's `error`. In the browser, the failure is the class with its fields (`instanceof InvalidName`, `length`); the dashboard shows it with the same `FailureNote`. A field holding a driver's error is `cause: ServerOnly` and stays on the server. A setting the server needs that is missing fails a call with `NotConfigured`, naming it, and the card shows the "not configured" state every card has: the route answers 503 before RPC runs, and the client's `RpcSettings` middleware reads that answer back. A call that got no RPC answer at all fails with `RpcClientError`.
 - **The session rule is the same.** On a stack with auth, `/api/rpc` is under `/api/`, so `requireApiSession` refuses a call without a session with 401 `Unauthorized` before RPC runs. The client reads that answer back as `Unauthorized`, the class a server function's session gate gives, so the browser matches it the same way. Behind the gate, the group's `RpcSession` middleware checks the session again from the RPC request's cookies and gives each handler `Auth` for the caller.
-- **Streams stream.** A call with `stream: true` is sent as newline-delimited JSON over one HTTP response; the countdown on the dashboard shows each number as it arrives.
+- **Streams stream, on every database.** A call with `stream: true` is sent as newline-delimited JSON over one HTTP response; the countdown on the dashboard shows each number as it arrives. A stream writes its later parts after the route has answered, so the route keeps the runtime call open until the answer's body has been read or the browser has gone. On Postgres, where the runtime builds `AppLayer` for each call and closes it when the call returns, a stream's handler can still use the database.
 - **Nothing calls the server while a page renders on the server.** A query atom read during server rendering runs there, where `/api/rpc` has no origin; it fails at once, the server's HTML shows that failure while the browser starts from nothing, and React reports a hydration mismatch. That was the warning the first spike saw. The card starts every call from a click and gives its atoms their own `RegistryProvider`, so no atom state is shared between server renders. For data in the first render, use a route loader with a server function.
 
 What it costs: `@effect/atom-react` and Effect's RPC client, about 40 KiB of gzipped JavaScript. Measured on a D1 + Better Auth project, built and served with `vite preview`, counting every script a first visit fetches:

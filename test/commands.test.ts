@@ -556,9 +556,20 @@ it("add on a project whose card boundary is older than its cards refuses, with u
     addons: ["extras/cluster"],
     after: "npx -y create-efforge add cluster --json --no-install --cwd app",
   })
+  // and the rpc card, whose card module has a variant per stack
+  const rpc = await cli(["add", "rpc", "--json", "--no-install", "--cwd", "app"])
+  expect(rpc.exitCode).toBe(1)
+  expect(json(rpc.out).error).toMatchObject({
+    code: "UpgradeFirst",
+    file,
+    addons: ["extras/rpc"],
+    after: "npx -y create-efforge add rpc --json --no-install --cwd app",
+  })
   // nothing written
   expect(readFileSync(join("app", "apps/web/src/capabilities/registry.ts"), "utf8")).toBe(before)
   expect(existsSync(join("app", "packages/core/src/cluster.ts"))).toBe(false)
+  expect(existsSync(join("app", "packages/core/src/rpc.ts"))).toBe(false)
+  expect(existsSync(join("app", "apps/web/src/routes/api/rpc.ts"))).toBe(false)
   // an add-on without a card is not held up
   expect((await cli(["add", "infra", "--json", "--no-install", "--cwd", "app"])).exitCode).toBe(0)
   const up = await cli(["upgrade", "--json", "--no-install", "--cwd", "app"])
@@ -568,4 +579,6 @@ it("add on a project whose card boundary is older than its cards refuses, with u
   expect(again.exitCode, again.out).toBe(0)
   const clusterAgain = await cli(["add", "cluster", "--json", "--no-install", "--cwd", "app"])
   expect(clusterAgain.exitCode, clusterAgain.out).toBe(0)
+  const rpcAgain = await cli(["add", "rpc", "--json", "--no-install", "--cwd", "app"])
+  expect(rpcAgain.exitCode, rpcAgain.out).toBe(0)
 })
