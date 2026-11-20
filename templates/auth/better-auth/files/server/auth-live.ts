@@ -5,7 +5,7 @@ import { Config, Context, Data, Effect, Layer, Option, Redacted } from "effect"
 import { WorkerConfig } from "effect-cf"
 import { type AuthInstance, makeAuth } from "./auth"
 import { AuthDatabase, AuthDatabaseLayer } from "./auth-database"
-import { authBaseURL } from "./auth-url"
+import { authBaseURL, isWebURL } from "./auth-url"
 import { WorkerEnvLive } from "./cloudflare"
 
 const ignore = () => undefined
@@ -21,12 +21,12 @@ const checkURL = (value: Option.Option<string>) =>
   Option.match(value, {
     onNone: () => Effect.succeed(value),
     onSome: (url) =>
-      URL.canParse(url) || url.trim() === ""
+      isWebURL(url) || url.trim() === ""
         ? Effect.succeed(value)
         : Effect.fail(
             new AuthConfigError({
               setting: "BETTER_AUTH_URL",
-              message: `BETTER_AUTH_URL is "${url}", which is not a URL (use an origin such as https://app.example.com, or leave it empty).`,
+              message: `BETTER_AUTH_URL is "${url}", which is not an http or https URL (use an origin such as https://app.example.com, or leave it empty).`,
             }),
           ),
   })

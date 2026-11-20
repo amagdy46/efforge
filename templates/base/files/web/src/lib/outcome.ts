@@ -11,7 +11,8 @@ export class NotConfigured extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("NotConfigured", {
   setting: Schema.String,
-  file: Schema.String,
+  /** Where `pnpm dev` reads it; absent outside development */
+  file: Schema.optionalKey(Schema.String),
   problem: Schema.String,
   message: Schema.String,
 }) {}

@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button"
 interface Missing {
   readonly _tag: "NotConfigured"
   readonly setting: string
-  readonly file: string
+  /** Where `pnpm dev` reads it; absent outside development */
+  readonly file?: string
   /** What is wrong with it: "X is not set.", or the layer's own reason */
   readonly problem?: string
 }
@@ -19,6 +20,17 @@ const isMissing = (error: unknown): error is Missing =>
  * state for a new project, not a crash); anything else shows its message and a way back.
  */
 export function ErrorPage({ error, reset }: ErrorComponentProps) {
+  if (isMissing(error) && error.file === undefined)
+    return (
+      <main className="mx-auto flex min-h-svh max-w-xl flex-col justify-center gap-4 px-6 py-16">
+        <Settings2 aria-hidden className="size-6 text-muted-foreground" />
+        <h1 className="text-2xl font-semibold tracking-tight">Not configured yet</h1>
+        <p>
+          This page needs <code className="font-mono text-[0.9em]">{error.setting}</code>, a secret
+          or a variable of the Worker.
+        </p>
+      </main>
+    )
   if (isMissing(error))
     return (
       <main className="mx-auto flex min-h-svh max-w-xl flex-col justify-center gap-4 px-6 py-16">

@@ -13,3 +13,7 @@ export const authBaseURL = (configured: string | undefined, dev: boolean) => {
   const url = configured === "" || configured === EXAMPLE_URL ? undefined : configured
   return url === undefined && dev ? LOCAL : url
 }
+
+/** An http or https URL. `URL.canParse` alone accepts `localhost:4173` (scheme `localhost:`). */
+export const isWebURL = (url: string) =>
+  URL.canParse(url) && ["http:", "https:"].includes(new URL(url).protocol)

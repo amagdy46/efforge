@@ -2,6 +2,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { basename, dirname, join, posix } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { afterAll, expect, it } from "@effect/vitest"
+import { vi } from "vitest"
 import { Cause, Config, ConfigProvider, Effect, Exit, Layer } from "effect"
 import { loadAddons } from "../src/addon.ts"
 import { generate } from "../src/generate.ts"
@@ -32,8 +33,9 @@ mkdirSync(join(dir, "server"), { recursive: true })
 writeFileSync(join(dir, "server/manifest.ts"), 'export const stack = { infra: "none" }\n')
 await load("base/files/web/src/lib/outcome.ts")
 
-const { authBaseURL } = await load<{
+const { authBaseURL, isWebURL } = await load<{
   authBaseURL: (url: string | undefined, dev: boolean) => unknown
+  isWebURL: (url: string) => boolean
 }>("auth/better-auth/files/shared/server/auth-url.ts")
 const { asFailure } = await load<{
   asFailure: (error: unknown) => { _tag: string; message: string }
@@ -48,6 +50,14 @@ it("authBaseURL: BETTER_AUTH_URL wins whenever it is set, in dev too", () => {
     expect(authBaseURL(unset, true)).toEqual(local)
     expect(authBaseURL(unset, false)).toBeUndefined()
   }
+})
+
+it("isWebURL: BETTER_AUTH_URL needs http or https, so host:port is not configured, not a 500", () => {
+  for (const url of ["http://localhost:4173", "https://app.example.com:8443", "https://a.b/"])
+    expect(isWebURL(url), url).toBe(true)
+  // URL.canParse takes these as a scheme and a path; Better Auth refuses them with a 500
+  for (const url of ["localhost:4173", "app.example.com:8443", "ftp://x.y", "app.example.com"])
+    expect(isWebURL(url), url).toBe(false)
 })
 
 const { checkSettings } = await load<{
@@ -111,6 +121,42 @@ it("asNotConfigured: every configuration error names its setting, and keeps a la
       "LLM_PROVIDER must be one of: anthropic, openai, openrouter, ollama. Set LLM_PROVIDER in .dev.vars and restart pnpm dev.",
   })
   expect(asNotConfigured({ _tag: "NotFound", message: "X_Y" })).toBeUndefined()
+})
+
+it("outside development, NotConfigured names the setting and nothing else; the reason goes to the log", async () => {
+  vi.stubEnv("DEV", false)
+  const logged: unknown[] = []
+  const spies = (["log", "error", "warn"] as const).map((m) =>
+    vi.spyOn(console, m).mockImplementation((...a: unknown[]) => void logged.push(a)),
+  )
+  try {
+    const answer = asNotConfigured({
+      _tag: "StorageConfigError",
+      setting: "STORAGE_SIGNING_SECRET",
+      message: "STORAGE_SIGNING_SECRET is too short: use at least 32 characters.",
+    })
+    expect(answer).toEqual(
+      expect.objectContaining({
+        setting: "STORAGE_SIGNING_SECRET",
+        problem: "STORAGE_SIGNING_SECRET is not configured.",
+        message: "STORAGE_SIGNING_SECRET is not configured.",
+      }),
+    )
+    expect(answer).not.toHaveProperty("file")
+    const layer = Layer.effectDiscard(
+      Effect.gen(function* () {
+        yield* Config.String("BETTER_AUTH_SECRET")
+      }),
+    ).pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))))
+    const exit = await Effect.runPromiseExit(Layer.build(checkSettings(layer)).pipe(Effect.scoped))
+    const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
+    expect(JSON.stringify(error)).not.toMatch(/dev\.vars|pnpm dev|\.env/)
+    expect(error).toMatchObject({ setting: "BETTER_AUTH_SECRET" })
+    expect(JSON.stringify(logged)).toContain("BETTER_AUTH_SECRET is not set.")
+  } finally {
+    for (const spy of spies) spy.mockRestore()
+    vi.unstubAllEnvs()
+  }
 })
 
 /**

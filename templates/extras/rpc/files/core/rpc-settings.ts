@@ -6,14 +6,15 @@ import { RpcClientError, RpcMiddleware } from "effect/rpc"
  * A setting the server needs is missing or unusable, so the app's layers could
  * not start and no call ran. The same tag and fields as the web app's
  * `NotConfigured` (apps/web/src/lib/outcome.ts), so a card shows it as its
- * "not configured" state, naming the setting and the file to put it in.
+ * "not configured" state, naming the setting (and under `pnpm dev`, the file).
  */
 export class NotConfigured extends Schema.TaggedError<
   NotConfigured,
   { readonly brand: unique symbol }
 >()("NotConfigured", {
   setting: Schema.String,
-  file: Schema.String,
+  /** Where `pnpm dev` reads it; absent outside development */
+  file: Schema.optionalKey(Schema.String),
   problem: Schema.String,
   message: Schema.String,
 }) {}

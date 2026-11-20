@@ -40,6 +40,30 @@ layer(clientAnswered(missingSetting))("a missing setting on the server", (it) =>
   )
 })
 
+/** The same outside development: the setting's name and nothing else. */
+const missingInProduction = () =>
+  Response.json(
+    {
+      _tag: "NotConfigured",
+      setting: "LLM_API_KEY",
+      problem: "LLM_API_KEY is not configured.",
+      message: "LLM_API_KEY is not configured.",
+    },
+    { status: 503 },
+  )
+
+layer(clientAnswered(missingInProduction))("a missing setting on a deployed Worker", (it) => {
+  it.effect("arrives as NotConfigured, with no file", () =>
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(Rpcs)
+      const error = yield* Effect.flip(client.Greet({ name: "Ada" }))
+      expect(error).toBeInstanceOf(NotConfigured)
+      expect(error).toMatchObject({ setting: "LLM_API_KEY" })
+      expect(error).not.toHaveProperty("file")
+    }).pipe(Effect.scoped),
+  )
+})
+
 layer(clientAnswered(() => new Response("Service Unavailable", { status: 503 })))(
   "any other 503",
   (it) => {
