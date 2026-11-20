@@ -198,8 +198,6 @@ The project's README has the first deploy for its stack, and [Deploy](https://gi
 
 efforge is young. Cloudflare is the only runtime, add-ons can be added but not removed, and Drizzle and Alchemy are pinned to pre-releases. Only the `--json` output is versioned. CI builds and tests a matrix of generated stacks on every change, but no test deploys to a real Cloudflare account, so a first deploy is described, not verified. `cluster` is experimental, and there is no observability add-on yet: it waits for Effect's Cloudflare tracer to be published. Details: [Status and limits](https://github.com/amagdy46/efforge/blob/main/docs/limits.md).
 
-Use something else if you want Next.js, a runtime other than Cloudflare, or plain async code without Effect: `npm create cloudflare` for TanStack Start on Workers without Effect, [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack) for many other stacks, or [Alchemy's examples](https://github.com/alchemy-run/alchemy) for Effect on Cloudflare without an app around it.
-
 ## Docs
 
 [All docs](https://github.com/amagdy46/efforge/blob/main/docs/README.md), in reading order; the [add-on pages](https://github.com/amagdy46/efforge/blob/main/docs/addons/README.md); the [CLI reference](https://github.com/amagdy46/efforge/blob/main/docs/cli.md); [contributing](https://github.com/amagdy46/efforge/blob/main/CONTRIBUTING.md) and the [changelog](https://github.com/amagdy46/efforge/blob/main/CHANGELOG.md).
