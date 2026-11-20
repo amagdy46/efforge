@@ -1,5 +1,5 @@
 import { stripVTControlCharacters } from "node:util"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
@@ -547,8 +547,18 @@ it("add on a project whose card boundary is older than its cards refuses, with u
     addons: ["extras/realtime"],
     after: "npx -y create-efforge add realtime --json --no-install --cwd app",
   })
+  // the experimental cluster card is held the same way
+  const cluster = await cli(["add", "cluster", "--json", "--no-install", "--cwd", "app"])
+  expect(cluster.exitCode).toBe(1)
+  expect(json(cluster.out).error).toMatchObject({
+    code: "UpgradeFirst",
+    file,
+    addons: ["extras/cluster"],
+    after: "npx -y create-efforge add cluster --json --no-install --cwd app",
+  })
   // nothing written
   expect(readFileSync(join("app", "apps/web/src/capabilities/registry.ts"), "utf8")).toBe(before)
+  expect(existsSync(join("app", "packages/core/src/cluster.ts"))).toBe(false)
   // an add-on without a card is not held up
   expect((await cli(["add", "infra", "--json", "--no-install", "--cwd", "app"])).exitCode).toBe(0)
   const up = await cli(["upgrade", "--json", "--no-install", "--cwd", "app"])
@@ -556,4 +566,6 @@ it("add on a project whose card boundary is older than its cards refuses, with u
   expect(readFileSync(join("app", file), "utf8")).toContain("failureCodec")
   const again = await cli(["add", "realtime", "--json", "--no-install", "--cwd", "app"])
   expect(again.exitCode, again.out).toBe(0)
+  const clusterAgain = await cli(["add", "cluster", "--json", "--no-install", "--cwd", "app"])
+  expect(clusterAgain.exitCode, clusterAgain.out).toBe(0)
 })
