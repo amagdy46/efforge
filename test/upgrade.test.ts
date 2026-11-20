@@ -597,11 +597,7 @@ it("the release history has this efforge, with the pins versions.ts has", () => 
   // pins added since this release (new add-ons' packages): scripts/history.ts records them at
   // the next release, and then this list is emptied. Every other pin must be the one the release
   // wrote, and a new pin left off this list fails too
-  const unreleased = new Set([
-    "@effect/atom-react",
-    "@effect/platform-cloudflare",
-    "@effect/sql-sqlite-node",
-  ])
+  const unreleased = new Set<string>([])
   const pinned = Object.entries(versions).filter(([name]) => !unreleased.has(name))
   expect(entry?.pins).toEqual(Object.fromEntries(pinned.toSorted(([a], [b]) => (a < b ? -1 : 1))))
   expect(entry?.pnpm).toBe(pnpmVersion)

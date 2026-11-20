@@ -79,7 +79,7 @@ npx -y create-efforge create my-app --json --database=d1 --auth=better-auth
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": true,
   "dryRun": false,
@@ -147,7 +147,7 @@ npx -y create-efforge create my-app --json --dry-run
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": true,
   "dryRun": true,
@@ -216,7 +216,7 @@ npx -y create-efforge add email --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": true,
   "dryRun": false,
@@ -310,7 +310,7 @@ npx -y create-efforge add ai storage --json --dry-run --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": true,
   "dryRun": true,
@@ -450,7 +450,7 @@ npx -y create-efforge list --json
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": true,
   "project": false,
@@ -537,7 +537,7 @@ npx -y create-efforge list --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": true,
   "project": true,
@@ -644,7 +644,7 @@ npx -y create-efforge info email --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": true,
   "id": "extras/email",
@@ -765,7 +765,7 @@ npx -y create-efforge graph --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": true,
   "directory": "/home/me/projects/my-app",
@@ -920,7 +920,7 @@ npx -y create-efforge upgrade --check --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": true,
   "check": true,
@@ -936,8 +936,8 @@ npx -y create-efforge upgrade --check --json --cwd my-app
     "extras": []
   },
   "efforgeVersion": {
-    "project": "0.2.1",
-    "cli": "0.2.1",
+    "project": "0.3.0",
+    "cli": "0.3.0",
     "status": "same"
   },
   "status": "current",
@@ -1014,7 +1014,7 @@ npx -y create-efforge upgrade --check --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": true,
   "check": true,
@@ -1031,7 +1031,7 @@ npx -y create-efforge upgrade --check --json --cwd my-app
   },
   "efforgeVersion": {
     "project": "0.2.0",
-    "cli": "0.2.1",
+    "cli": "0.3.0",
     "status": "behind"
   },
   "status": "needs-action",
@@ -1171,7 +1171,7 @@ npx -y create-efforge upgrade --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": true,
   "check": false,
@@ -1189,7 +1189,7 @@ npx -y create-efforge upgrade --json --cwd my-app
   },
   "efforgeVersion": {
     "from": "0.2.0",
-    "to": "0.2.1"
+    "to": "0.3.0"
   },
   "status": "current",
   "created": [],
@@ -1254,7 +1254,7 @@ npx -y create-efforge doctor --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": true,
   "directory": "/home/me/projects/my-app",
@@ -1289,7 +1289,7 @@ npx -y create-efforge doctor --json --cwd my-app
     {
       "id": "manifest",
       "status": "ok",
-      "message": "efforge.jsonc is valid: made with efforge 0.2.1.",
+      "message": "efforge.jsonc is valid: made with efforge 0.3.0.",
       "fix": null
     },
     {
@@ -1393,7 +1393,7 @@ npx -y create-efforge doctor --json --cwd my-app
     {
       "id": "upgrade",
       "status": "ok",
-      "message": "Made with efforge 0.2.1; nothing to apply from efforge 0.2.1.",
+      "message": "Made with efforge 0.3.0; nothing to apply from efforge 0.3.0.",
       "fix": null,
       "details": {
         "status": "current"
@@ -1419,7 +1419,7 @@ npx -y create-efforge create my-app --json --databse=d1
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -1448,7 +1448,7 @@ npx -y create-efforge create my-app --json --database
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -1481,7 +1481,7 @@ npx -y create-efforge create my app --json
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -1509,7 +1509,7 @@ npx -y create-efforge lst --json
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -1547,7 +1547,7 @@ npx -y create-efforge app2 --json
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -1601,7 +1601,7 @@ npx -y create-efforge create my-app --json --database=mysql
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -1635,7 +1635,7 @@ npx -y create-efforge create my-app --json --database=none --auth=better-auth
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -1676,7 +1676,7 @@ npx -y create-efforge add auth/better-auth --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -1741,7 +1741,7 @@ npx -y create-efforge create 'My App' --json
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -1770,7 +1770,7 @@ npx -y create-efforge create my-app --json --database=d1 --auth=better-auth
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -1844,7 +1844,7 @@ npx -y create-efforge create my-app --json
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -1871,7 +1871,7 @@ npx -y create-efforge create my-app --json
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -1978,7 +1978,7 @@ npx -y create-efforge create my-app --json
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -2082,7 +2082,7 @@ npx -y create-efforge create my-app --json
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -2110,7 +2110,7 @@ npx -y create-efforge add email --json
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -2140,7 +2140,7 @@ npx -y create-efforge add --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -2178,7 +2178,7 @@ npx -y create-efforge add emial --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -2214,7 +2214,7 @@ npx -y create-efforge add database/postgres --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -2244,7 +2244,7 @@ npx -y create-efforge add auth/none --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -2270,7 +2270,7 @@ npx -y create-efforge add realtime --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -2302,7 +2302,7 @@ npx -y create-efforge add auth/better-auth --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -2333,7 +2333,7 @@ npx -y create-efforge add email --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -2363,7 +2363,7 @@ npx -y create-efforge add ai --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -2479,15 +2479,15 @@ npx -y create-efforge upgrade --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
     "code": "ProjectNewerThanCli",
-    "message": "This project was made or upgraded with efforge 0.4.0, newer than this CLI (0.2.1). An older efforge would undo what the newer one did, so it stops here. Run npx -y create-efforge@latest upgrade --json --cwd my-app.",
+    "message": "This project was made or upgraded with efforge 0.4.0, newer than this CLI (0.3.0). An older efforge would undo what the newer one did, so it stops here. Run npx -y create-efforge@latest upgrade --json --cwd my-app.",
     "fix": null,
     "project": "0.4.0",
-    "cli": "0.2.1",
+    "cli": "0.3.0",
     "command": "npx -y create-efforge@latest upgrade --json --cwd my-app"
   }
 }
@@ -2505,7 +2505,7 @@ npx -y create-efforge upgrade --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -2535,7 +2535,7 @@ npx -y create-efforge graph --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -2562,7 +2562,7 @@ npx -y create-efforge graph --write --json --cwd my-app
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {
@@ -2591,7 +2591,7 @@ npx -y create-efforge list --json
 
 ```json
 {
-  "efforge": "0.2.1",
+  "efforge": "0.3.0",
   "contract": 1,
   "ok": false,
   "error": {

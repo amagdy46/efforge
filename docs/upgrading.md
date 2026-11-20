@@ -77,7 +77,7 @@ Besides the Effect guard, the `gates` check reports that the project has no sess
 
 <!-- output: upgrade --check -->
 ```text
-Made with efforge 0.2.0; this is 0.2.1. Needs action: 2 things that break the project. Behind: 25 pins, 18 files to refresh, 35 new files, 3 files to give what the new ones need, 3 scripts, 2 to remove.
+Made with efforge 0.2.0; this is 0.3.0. Needs action: 2 things that break the project. Behind: 25 pins, 18 files to refresh, 35 new files, 3 files to give what the new ones need, 3 scripts, 2 to remove.
 ...
 Needs action
   ✗ pnpm-workspace.yaml has no overrides holding Effect's packages at effect 4.0.5. A library that asks for a newer one then installs it next to the older effect and the build breaks, as 0.2.0 projects did when Effect 4.1 shipped. (upgrade fixes it)
@@ -107,7 +107,7 @@ Kept as they are
            Kept as it is: apps/web/src/server/greeting.ts imports `runtime` with the type it has now from it, and efforge's new version changes it.
 ```
 
-A held server file still gets `requireSession` on its server functions, which the project's lint asks for. After the upgrade, `pnpm typecheck && pnpm check && pnpm test && pnpm build` passed, `pnpm run deploy --dry-run` built the Worker with its `DB` binding, `doctor` reported no failure, and `upgrade --check` said "Up to date: nothing to apply". To take the new dashboard, the owner merges `apps/web/src/routes/app/index.tsx` with efforge's version by hand, then runs `upgrade` again for the held files.
+A held server file still gets `requireSession` on its server functions, which the project's lint asks for. After the upgrade, `pnpm typecheck && pnpm check && pnpm test && pnpm build` passed, `pnpm run deploy --dry-run` built the Worker with its `DB` binding, `doctor` reported no failure, and `upgrade --check` said "Up to date: nothing to apply". To take the new dashboard, the owner merges `apps/web/src/routes/app/index.tsx` with efforge's version by hand, then runs `upgrade` again for the held files. `efforge.jsonc` lists under `held` the one it held back before writing it (`registry.ts`), so that run adds it rather than taking it for a file the owner removed. Taking efforge's dashboard whole and running `upgrade` again added the rest, after which the gate passed and `upgrade --check --strict` exited `0`.
 
 ## Without the new CLI
 

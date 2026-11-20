@@ -1,6 +1,6 @@
 {
   "name": "create-efforge",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "The maintained way to start a full-stack Effect app on Cloudflare: TanStack Start on Workers, where every capability is a layer you can add, see, test and upgrade",
   "keywords": [
     "alchemy",
