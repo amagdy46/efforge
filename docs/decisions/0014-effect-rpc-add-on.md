@@ -36,8 +36,20 @@ classes, streams and auth with the least code, for about 64 KiB of gzipped clien
   `RpcHandler`; it reads no binding or setting of its own.
 - **A TanStack Start server route serves it** (`routes/api/rpc.ts`), not a Worker route: it is
   the Start answer to a Start question, and it runs inside Start's request context. It answers
-  inside the runtime call, so on Postgres `AppLayer` is open while the call runs; a stream's
-  later parts run after that call returns, so on Postgres a stream must not use the database.
+  inside the runtime call, and the call lasts until the answer's body has been read or the
+  browser has gone. A stream's later parts are written after the route has answered; on
+  Postgres the runtime closes `AppLayer` (and its connection) when the call returns, so a
+  shorter call left a stream's handler without its database. Holding the call keeps the
+  services a stream uses alive as long as the stream, on every runtime, and costs nothing on D1,
+  where the runtime outlives the call anyway. Documenting "a stream must not use the database"
+  was the first answer; it was easy to miss and failed only at runtime, on one database.
+- **A missing setting is `NotConfigured`, as on every card.** When `AppLayer` cannot start for a
+  setting, the route (and on auth stacks the route gate, which needs the runtime for the
+  session) answers 503 with a `NotConfigured` body before RPC runs. That is no RPC answer, so
+  the client reads it back the way it reads the gate's 401: `RpcSettings` is a middleware with a
+  client half only (`clientError: NotConfigured`), which the browser's group adds; the server
+  never sees it. Its `NotConfigured` (core) has the web app's tag and fields, so `FailureNote`
+  shows it as the "not configured" state, naming the setting.
 - **The session rule is the route gate, then a middleware.** `/api/rpc` stays behind
   `requireApiSession` and off `public-api-paths.json`. The gate answers 401 before RPC runs,
   which is no RPC answer, so `RpcSessionClient`, the client half of the group's `RpcSession`
@@ -65,10 +77,12 @@ classes, streams and auth with the least code, for about 64 KiB of gzipped clien
 - A project with `rpc` has two ways in to the same layers. `docs/rpc.md` says when to use each,
   and when `HttpApi` would be the right third.
 - About 40 KiB of gzipped JavaScript on the dashboard; none on the landing page (measured).
-- A runtime that cannot start answers `/api/rpc` with a 500, which the client sees as
-  `RpcClientError` rather than `NotConfigured`. Server functions keep the better answer.
+- On Postgres, a stream holds its `AppLayer` (a database connection) open for as long as the
+  browser reads it. A long stream is a long-held connection, which Hyperdrive pools.
+- `NotConfigured` is declared twice, in the web app and in core, with the same tag and fields;
+  core cannot import the web app's.
 - The add-on has four variants of the server file (no database, a database, auth, organizations) and two of most others. A change to one is a
   change to all; `test/rpc-addon.test.ts` and the e2e rows cover the stacks.
 - `@effect/atom-react` is a new pin, held with `effect` by the `@effect/atom-*` override. The
-  release history records it at the next release (until then a test allows pins newer than the
-  history).
+  release history records it at the next release (until then the history test lists it as
+  unreleased).
