@@ -45,11 +45,13 @@ None: this add-on adds no service of its own.
 | `packages/core/src/greeting.ts` (*only if missing*) | Always |
 | `packages/core/src/rpc.ts` | Always |
 | `packages/core/src/rpc-handlers.ts` | Always |
+| `packages/core/src/rpc-settings.ts` | Always |
 | `packages/core/src/rpc-session.ts` | `auth=better-auth` or `auth=better-auth-orgs` |
 | `apps/web/src/server/rpc.ts` | Always |
 | `apps/web/src/routes/api/rpc.ts` | Always |
 | `apps/web/src/lib/rpc-client.ts` | Always |
 | `packages/core/test/rpc.test.ts` | Always |
+| `packages/core/test/rpc-settings.test.ts` | Always |
 | `packages/core/test/rpc-session.test.ts` | `auth=better-auth` or `auth=better-auth-orgs` |
 | `apps/web/src/capabilities/rpc.tsx` | Always |
 
@@ -100,9 +102,9 @@ None.
 ### Effect RPC
 
 - `AppRpcs` in `packages/core/src/rpc.ts` is the app's RPC group: each call's payload, success and tagged `error` as `Schema`, one contract for the server and the browser. Add a call there with `Rpc.make`, and its handler to `AppRpcsHandlers` in `rpc-handlers.ts`: ordinary Effect code that asks for services from `@repo/core`, as a server function's program does. A handler that needs another layer's service gets it from `RpcLive` in `apps/web/src/server/rpc.ts`: add that layer's exported constant to its `Layer.provide` (`Layer.provide(MailerLive)`), and Effect builds it once, so it is `AppLayer`'s instance.
-- `RpcLive` is in `AppLayer`, under the telemetry slot; `apps/web/src/routes/api/rpc.ts` serves it at `POST /api/rpc` (a TanStack Start server route) and answers inside the runtime call. Each request gets its own RPC server on `AppLayer`'s services: on Workers, I/O (a Postgres socket) belongs to the request that started it, so nothing may run a request's work in a fiber another request started. Each call is a span named `rpc.<Call>`. A stream's handler runs after the route has returned its response; on Postgres, where the runtime closes `AppLayer` when the call returns, a stream must not use the database.
+- `RpcLive` is in `AppLayer`, under the telemetry slot; `apps/web/src/routes/api/rpc.ts` serves it at `POST /api/rpc` (a TanStack Start server route) and answers inside the runtime call. Each request gets its own RPC server on `AppLayer`'s services: on Workers, I/O (a Postgres socket) belongs to the request that started it, so nothing may run a request's work in a fiber another request started. Each call is a span named `rpc.<Call>`. A stream writes its later parts after the route has answered, so the route keeps the runtime call open until the answer's body has been read or the browser has gone: on Postgres, where the runtime closes `AppLayer` when the call returns, a stream's handler may still use the database.
 - Errors: declare them with `Schema.TaggedError` and a brand, as for a server function, and set them as the call's `error`. They reach the browser as their classes, fields included; a field holding a driver's error is `cause: ServerOnly` and stays on the server.
-- Client: `AppClient` in `apps/web/src/lib/rpc-client.ts` (`AtomRpc`, with `@effect/atom-react`). `AppClient.mutation("Greet")` is an atom: `useAtomSet(atom)({ payload })` calls it, `useAtomValue(atom)` reads its `AsyncResult`. A stream call is an `AppClient.runtime.fn` atom that holds the latest value (`countdownAtom`). In a failure, `Cause.findErrorOption(result.cause)` is the call's error as its class (`instanceof InvalidName`), or `RpcClientError` when no RPC answer came back (a 500, no network).
+- Client: `AppClient` in `apps/web/src/lib/rpc-client.ts` (`AtomRpc`, with `@effect/atom-react`). `AppClient.mutation("Greet")` is an atom: `useAtomSet(atom)({ payload })` calls it, `useAtomValue(atom)` reads its `AsyncResult`. A stream call is an `AppClient.runtime.fn` atom that holds the latest value (`countdownAtom`). In a failure, `Cause.findErrorOption(result.cause)` is the call's error as its class (`instanceof InvalidName`), `NotConfigured` when a setting the server needs is missing (the route answers 503 naming it, and `RpcSettingsClient` from `packages/core/src/rpc-settings.ts` turns that into the error, which the card shows as its "not configured" state), or `RpcClientError` when no RPC answer came back (a 500, no network).
 - Server rendering: start a call from an event, as the dashboard card does. Never read a query atom (`AppClient.query(...)`) in a component the server renders: it runs on the server, where `/api/rpc` has no origin, fails at once, and the page hydrates with a mismatch. For data in the first render, use a route loader with a server function. Put components that use atoms under a `RegistryProvider` from `@effect/atom-react`, so atom state is never shared between server renders.
 - Tests: `packages/core/test/rpc.test.ts` runs the real client against the real handlers in memory (ndjson both ways, no network), with test layers for the services they use. `RpcTest.makeClient(AppRpcs)` is the lighter in-process client.
 - Use RPC for typed calls your own UI makes, streams included; a server function for a form post or a loader; `HttpApi` (`effect/http-api`) for a public REST API with OpenAPI.
@@ -125,5 +127,3 @@ Only with `auth=none`:
 - Effect's RPC modules are marked unstable upstream; efforge pins Effect exactly, so an upgrade is a deliberate step.
 - The client adds about 40 KiB of gzipped JavaScript to the dashboard, and nothing to pages that do not import it.
 - A query atom read while the server renders a page calls the server during server rendering and fails; start calls from an event, or load first-render data with a route loader.
-- A runtime that cannot start (a missing setting) answers `/api/rpc` with a 500, which the client sees as `RpcClientError`, not as `NotConfigured`.
-- On Postgres a stream call must not use the database: the runtime closes `AppLayer` when the route returns its response, before the stream ends.

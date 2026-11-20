@@ -20,9 +20,13 @@ const write = (name: string, source: string) => {
   return file
 }
 
-/** `requireApiSession`, signed out, with `paths` as public-api-paths.json. */
+/**
+ * `requireApiSession`, signed out, with `paths` as public-api-paths.json. With `missing`, the
+ * runtime fails with it, as it does when a setting is missing.
+ */
 const apiGate = async (
   paths: unknown = JSON.parse(readFileSync(join(server, "public-api-paths.json"), "utf8")),
+  missing?: { setting: string; message: string },
 ) => {
   const source = readFileSync(join(server, "api-session.ts"), "utf8")
     .replace(
@@ -35,17 +39,25 @@ const apiGate = async (
     )
     .replace(
       /^import \{ runtime \} from .*$/m,
-      "const runtime = { runPromise: (x: unknown) => Promise.resolve(x) }",
+      missing === undefined
+        ? "const runtime = { runPromise: (x: unknown) => Promise.resolve(x) }"
+        : `const runtime = { runPromise: (_: unknown) => Promise.reject(${JSON.stringify({ _tag: "NotConfigured", file: ".dev.vars", problem: "", ...missing })}) }`,
+    )
+    .replace(
+      /^import \{ asNotConfigured \} from .*$/m,
+      "const asNotConfigured = (e: any) => (e?._tag === 'NotConfigured' ? e : undefined)",
     )
     .replace(/^import \{ signedIn \} from .*$/m, "const signedIn = (_: Headers) => false")
   const { requireApiSession } = (await import(write("api-session", source))) as {
     requireApiSession: (request: Request) => Promise<Response | undefined>
   }
+  const raw = (path: string) => requireApiSession(new Request(`http://localhost${path}`))
   /** What the gate does with `path`, sent as written: `pass` (on to the next route) or 401. */
-  return async (path: string) => {
-    const answer = await requireApiSession(new Request(`http://localhost${path}`))
+  const status = async (path: string) => {
+    const answer = await raw(path)
     return answer === undefined ? "pass" : answer.status
   }
+  return Object.assign(status, { raw })
 }
 
 /** `sessionGate`, signed out, with `list` as public-server-fns.json. */
@@ -132,6 +144,18 @@ describe("the route gate (requireApiSession), signed out", () => {
       "/api\\leak",
     ])
       expect(await gate(path), path).toBe(401)
+  })
+
+  it("answers 503 NotConfigured, naming the setting, when the session can't be looked up for one", async () => {
+    const message = "BETTER_AUTH_SECRET is not set. Set it in .dev.vars and restart pnpm dev."
+    const gate = await apiGate(undefined, { setting: "BETTER_AUTH_SECRET", message })
+    const answer = await gate.raw("/api/rpc")
+    expect(answer?.status).toBe(503)
+    expect(await answer?.json()).toMatchObject({
+      _tag: "NotConfigured",
+      setting: "BETTER_AUTH_SECRET",
+      message,
+    })
   })
 
   it("leaves paths outside /api/ to the routes after it", async () => {

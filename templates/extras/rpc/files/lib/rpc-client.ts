@@ -1,12 +1,16 @@
 import { AppRpcs, rpcOverHttp } from "@repo/core/rpc"
-import { Effect, Stream } from "effect"
+import { RpcSettings, RpcSettingsClient } from "@repo/core/rpc-settings"
+import { Effect, Layer, Stream } from "effect"
 import { AtomRpc } from "effect/reactivity"
 
 // #region card
-/** The typed client for /api/rpc. A failure arrives as its error's class. */
+/**
+ * The typed client for /api/rpc. A failure arrives as its error's class; a
+ * missing setting on the server as `NotConfigured` (`RpcSettings`).
+ */
 export class AppClient extends AtomRpc.Service<AppClient>()("AppClient", {
-  group: AppRpcs,
-  protocol: rpcOverHttp("/api/rpc"),
+  group: AppRpcs.middleware(RpcSettings),
+  protocol: Layer.merge(rpcOverHttp("/api/rpc"), RpcSettingsClient),
 }) {}
 
 /** Call it with `{ payload: { name } }`; its value is an `AsyncResult`. */

@@ -1,6 +1,7 @@
 import publicApiPaths from "./public-api-paths.json"
 import type { WorkerRoute } from "./routes"
 import { runtime } from "./runtime"
+import { asNotConfigured } from "./settings"
 import { signedIn } from "./socket-session"
 
 // Server only, like socket-session.ts: a Worker route, never imported by the browser.
@@ -68,7 +69,8 @@ const isPublic = (pathname: string) =>
  * `public-api-paths.json` (Better Auth's own `/api/auth/`) answer without one. It is first in
  * `workerRoutes`, so nothing under `/api/` runs before it. Without a session: 401 with the same
  * `Unauthorized` tag a server function gives. Routes outside `/api/` check the session
- * themselves, as the realtime route does with `requireSocketSession`.
+ * themselves, as the realtime route does with `requireSocketSession`. When a setting the lookup
+ * needs is missing: 503 with `NotConfigured`, naming it.
  */
 export const requireApiSession: WorkerRoute = (request) => {
   const { pathname } = new URL(request.url)
@@ -80,4 +82,15 @@ export const requireApiSession: WorkerRoute = (request) => {
         ? undefined
         : Response.json({ _tag: "Unauthorized", message: "Not signed in" }, { status: 401 }),
     )
+    .catch((error: unknown) => {
+      // the session can't be looked up because a setting is missing: refused, saying which, as
+      // auth-route.ts says it (the RPC client shows it as NotConfigured)
+      const missing = asNotConfigured(error)
+      if (missing === undefined) throw error
+      const { setting, file, problem, message } = missing
+      return Response.json(
+        { _tag: "NotConfigured", setting, file, problem, message },
+        { status: 503 },
+      )
+    })
 }
