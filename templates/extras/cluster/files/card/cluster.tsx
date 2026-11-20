@@ -1,10 +1,4 @@
-import {
-  ClusterError,
-  InvalidCounterName,
-  MAX_COUNTER_NAME,
-  type ReviewState,
-  UnknownExecution,
-} from "@repo/core/cluster-errors"
+import { MAX_COUNTER_NAME, type ReviewState } from "@repo/core/cluster-errors"
 import { CircleCheck, CircleDashed, Hourglass } from "lucide-react"
 import { type SubmitEvent, useState } from "react"
 import { FailureNote, Pending } from "@/components/demo"
@@ -15,10 +9,15 @@ import type { Failure } from "@/lib/outcome"
 import { type CallResult, useServerCall } from "@/lib/use-server-call"
 import {
   approveReviewRun,
+  ApproveReviewRunErrors,
   incrementCounter,
+  IncrementCounterErrors,
   sendGreeting,
+  SendGreetingErrors,
   startReviewRun,
+  StartReviewRunErrors,
   watchReviewRun,
+  WatchReviewRunErrors,
 } from "@/server/cluster-demo"
 import program from "../../../../packages/core/src/cluster.ts?region=card"
 import handlers from "../../../../packages/core/src/cluster-handlers.ts?region=card"
@@ -29,7 +28,7 @@ import type { Capability } from "./types"
 /** An entity: one Durable Object per counter name, holding its count in SQLite. */
 function CounterRow() {
   const [name, setName] = useState("visits")
-  const call = useServerCall(incrementCounter, InvalidCounterName, ClusterError)
+  const call = useServerCall(incrementCounter, ...IncrementCounterErrors)
   const submit = (event: SubmitEvent) => {
     event.preventDefault()
     void call.run({ data: { name } })
@@ -92,9 +91,9 @@ function ReviewRow() {
   const [failure, setFailure] = useState<
     { readonly error: Failure; readonly rejected: boolean } | undefined
   >(undefined)
-  const start = useServerCall(startReviewRun, ClusterError)
-  const watch = useServerCall(watchReviewRun, UnknownExecution, ClusterError)
-  const approve = useServerCall(approveReviewRun, UnknownExecution, ClusterError)
+  const start = useServerCall(startReviewRun, ...StartReviewRunErrors)
+  const watch = useServerCall(watchReviewRun, ...WatchReviewRunErrors)
+  const approve = useServerCall(approveReviewRun, ...ApproveReviewRunErrors)
   const busy = [start, watch, approve].some((c) => c.state.status === "running")
 
   const settle = (outcome: CallResult<ReviewState, Failure>) => {
@@ -206,7 +205,7 @@ function Greeting({ greeting, ms }: { greeting: string | undefined; ms: number }
 /** A durable queue: the request that offers an item runs the worker. */
 function QueueRow() {
   const [name, setName] = useState("Ada")
-  const call = useServerCall(sendGreeting, ClusterError)
+  const call = useServerCall(sendGreeting, ...SendGreetingErrors)
   const submit = (event: SubmitEvent) => {
     event.preventDefault()
     void call.run({ data: { name } })
