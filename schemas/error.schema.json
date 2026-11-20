@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/create-efforge/schemas/error.schema.json",
+  "type": "object",
+  "properties": {
+    "efforge": {
+      "type": "string",
+      "description": "The CLI version that printed this."
+    },
+    "contract": {
+      "type": "number",
+      "enum": [
+        1
+      ],
+      "description": "The version of this contract. It changes only when a field is renamed, removed or changes meaning."
+    },
+    "ok": {
+      "type": "boolean",
+      "enum": [
+        false
+      ]
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "A stable identifier. Known codes: UnknownFlag, InvalidFlagValue, UnexpectedArgument, UnknownCommand, InsideProject, NeedsInput, UnknownValue, IncompatibleStack, InvalidProjectName, TargetNotEmpty, PnpmMissing, SetupIncomplete, Interrupted, WriteFailed, NotAnEfforgeProject, NoAddonIds, UnknownAddon, SlotAlreadySet, RemoveNotSupported, UpgradeFirst, OverlayConflict, TransformAnchorMissing, CommandFailed, LayersUnreadable, ReadmeUnwritable, ProjectNewerThanCli, UncommittedChanges, InternalError. New codes can appear within a contract version; treat an unknown one like any failure."
+        },
+        "message": {
+          "type": "string"
+        },
+        "fix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A command that does what you were trying to do, or null when there is none (then the other fields hold the facts, and `alternatives`, when present, the ways out to choose from)."
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "fix"
+      ],
+      "additionalProperties": true,
+      "description": "More fields depend on `code`; see docs/json.md."
+    }
+  },
+  "required": [
+    "efforge",
+    "contract",
+    "ok",
+    "error"
+  ],
+  "additionalProperties": true,
+  "title": "efforge --json error"
+}

@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/create-efforge/schemas/efforge.schema.json",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "The JSON Schema for this file, for editors."
+    },
+    "efforgeVersion": {
+      "type": "string",
+      "description": "The efforge version that created the project, or last upgraded it (`upgrade` sets it; `add` leaves it unchanged). An older efforge refuses to upgrade the project."
+    },
+    "stack": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "runtime": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "cloudflare"
+              ]
+            }
+          ]
+        },
+        "database": {
+          "type": "string",
+          "enum": [
+            "postgres",
+            "d1",
+            "none"
+          ]
+        },
+        "orm": {
+          "type": "string",
+          "enum": [
+            "drizzle",
+            "effect-sql",
+            "none"
+          ]
+        },
+        "auth": {
+          "type": "string",
+          "enum": [
+            "better-auth-orgs",
+            "better-auth",
+            "none"
+          ]
+        },
+        "infra": {
+          "type": "string",
+          "enum": [
+            "none",
+            "alchemy"
+          ]
+        },
+        "ai": {
+          "type": "string",
+          "enum": [
+            "none",
+            "effect-ai-byok"
+          ]
+        },
+        "extras": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "workflows",
+              "realtime",
+              "browser",
+              "storage",
+              "email",
+              "rpc",
+              "cluster"
+            ]
+          }
+        }
+      },
+      "required": [
+        "name",
+        "runtime",
+        "database",
+        "orm",
+        "auth",
+        "infra",
+        "ai",
+        "extras"
+      ],
+      "additionalProperties": true,
+      "description": "The stack choices. `efforge add` reads them and writes the new ones back. `npx -y create-efforge list --json` lists the ids."
+    },
+    "command": {
+      "type": "string",
+      "description": "A non-interactive command that creates this stack again."
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Template file -> hash of the content efforge wrote. `add` replaces a file only while its hash still matches. Internal: the hash format may change."
+    },
+    "held": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Files efforge edits in place that `upgrade` held back before writing them, because a file of yours needed something else first. The next `upgrade` adds them once nothing holds them, instead of taking them for files you removed. `upgrade` writes and clears it."
+    }
+  },
+  "required": [
+    "efforgeVersion",
+    "stack",
+    "command",
+    "files"
+  ],
+  "additionalProperties": true,
+  "title": "efforge.jsonc",
+  "description": "The stack of an efforge project, read and updated by `efforge add`."
+}

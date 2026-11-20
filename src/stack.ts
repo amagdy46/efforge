@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { BIN } from "./contract.ts"
 import { available, slots } from "./slots.ts"
 
 export const Runtime = Schema.Literals(["cloudflare"])
@@ -7,7 +8,15 @@ export const Orm = Schema.Literals(["drizzle", "effect-sql", "none"])
 export const Auth = Schema.Literals(["better-auth-orgs", "better-auth", "none"])
 export const Infra = Schema.Literals(["none", "alchemy"])
 export const Ai = Schema.Literals(["none", "effect-ai-byok"])
-export const Extra = Schema.Literals(["workflows", "realtime", "browser", "storage", "email"])
+export const Extra = Schema.Literals([
+  "workflows",
+  "realtime",
+  "browser",
+  "storage",
+  "email",
+  "rpc",
+  "cluster",
+])
 
 export const SlotId = Schema.Literals([
   "runtime",
@@ -60,7 +69,7 @@ export const withDefaults = (partial: Partial<StackConfig> & { name: string }): 
   return out as StackConfig
 }
 
-/** `npm create efforge <name> -- --yes --slot=value ...`, omitting values that equal what defaults would pick; `--yes` keeps the omitted slots from prompting. */
+/** `npx -y create-efforge create <name> --yes --slot=value ...`, omitting values that equal what defaults would pick; `--yes` keeps the omitted slots from prompting, and the explicit `create` keeps a name like `help` a name. */
 export const toCommand = (config: StackConfig): string => {
   const flags: string[] = []
   const so_far: Draft = { name: config.name }
@@ -73,5 +82,5 @@ export const toCommand = (config: StackConfig): string => {
       ;(so_far as Record<string, unknown>)[slot.id] = value
     }
   }
-  return ["npm create efforge", config.name, "--", "--yes", ...flags].join(" ")
+  return [BIN, "create", config.name, "--yes", ...flags].join(" ")
 }

@@ -1,8 +1,14 @@
 {
   "id": "ai/effect-ai-byok",
   "title": "Effect AI (bring your own key)",
-  "description": "An Llm service on Effect AI with Anthropic, OpenAI, OpenRouter and Ollama providers; keys come from the environment, or are saved encrypted per organization when auth has organizations.",
+  "description": "An Llm service on Effect AI with Anthropic, OpenAI, OpenRouter and Ollama providers; keys come from the environment, or are saved encrypted per organization when auth has organizations. A dashboard card streams an answer.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/ai-effect-ai-byok.md",
   "files": [
+    {
+      "path": "../../base/files/core/src/server-only.ts",
+      "target": "packages/core/src/server-only.ts",
+      "ifAbsent": true
+    },
     {
       "path": "files/core/llm.ts",
       "target": "packages/core/src/llm.ts"
@@ -14,6 +20,14 @@
     {
       "path": "files/server/ai.ts",
       "target": "apps/web/src/server/ai.ts"
+    },
+    {
+      "path": "files/core/llm-fixed.ts",
+      "target": "packages/core/test/llm-fixed.ts"
+    },
+    {
+      "path": "files/core/llm.test.ts",
+      "target": "packages/core/test/llm.test.ts"
     },
     {
       "path": "files/server/llm-env.ts",
@@ -242,6 +256,19 @@
       }
     }
   ],
+  "card": {
+    "export": "ai",
+    "files": [
+      {
+        "path": "files/card/ai.tsx",
+        "target": "apps/web/src/capabilities/ai.tsx"
+      },
+      {
+        "path": "files/card/ai-demo.ts",
+        "target": "apps/web/src/server/ai-demo.ts"
+      }
+    ]
+  },
   "dependencies": {
     "apps/web": [
       "@effect/ai-anthropic",
@@ -253,7 +280,9 @@
   "envVars": [
     {
       "name": "LLM_ENCRYPTION_KEY",
+      "secret": true,
       "example": "openssl rand -base64 32",
+      "dev": "ZGV2LW9ubHktbGxtLWtleS1yZXBsYWNlLW1lLTMyISE=",
       "description": "AES-GCM key (32 random bytes, base64) that encrypts each organization's saved API key; the app refuses to start without a valid one",
       "when": {
         "auth": [
@@ -264,6 +293,7 @@
     {
       "name": "LLM_PROVIDER",
       "example": "anthropic",
+      "dev": "anthropic",
       "description": "anthropic | openai | openrouter | ollama",
       "when": {
         "auth": [
@@ -275,6 +305,7 @@
     {
       "name": "LLM_MODEL",
       "example": "claude-sonnet-5-5",
+      "dev": "claude-sonnet-5-5",
       "description": "Model id for the provider",
       "when": {
         "auth": [
@@ -285,6 +316,7 @@
     },
     {
       "name": "LLM_API_KEY",
+      "secret": true,
       "example": "sk-...",
       "description": "Provider API key (not needed for a local Ollama); a Worker secret in production",
       "when": {
@@ -297,6 +329,7 @@
     {
       "name": "LLM_BASE_URL",
       "example": "",
+      "dev": "",
       "description": "Optional OpenAI-compatible endpoint (openai, ollama)",
       "when": {
         "auth": [
@@ -308,6 +341,20 @@
   ],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "Text generation through Effect AI. Call `generateText(prompt)` on the `Llm` service; the layer talks to Anthropic, OpenAI, OpenRouter or Ollama. Keys come from the environment, or, with organizations, each organization saves its own key, stored encrypted.",
+    "service": {
+      "name": "Llm",
+      "file": "packages/core/src/llm.ts",
+      "errors": [
+        "LlmError",
+        "LlmNotConfigured"
+      ]
+    },
+    "limits": [
+      "With `auth=none`, the demo server function in `apps/web/src/server/ai.ts` is not gated: anyone who can reach the app can spend the configured key. Add auth or remove the demo before deploying."
+    ]
+  },
   "transforms": [
     {
       "name": "addExport",
@@ -371,44 +418,6 @@
       }
     },
     {
-      "name": "addDevVar",
-      "args": {
-        "name": "LLM_ENCRYPTION_KEY",
-        "value": "ZGV2LW9ubHktbGxtLWtleS1yZXBsYWNlLW1lLTMyISE="
-      },
-      "when": {
-        "auth": [
-          "better-auth-orgs"
-        ]
-      }
-    },
-    {
-      "name": "addDevVar",
-      "args": {
-        "name": "LLM_PROVIDER",
-        "value": "anthropic"
-      },
-      "when": {
-        "auth": [
-          "none",
-          "better-auth"
-        ]
-      }
-    },
-    {
-      "name": "addDevVar",
-      "args": {
-        "name": "LLM_MODEL",
-        "value": "claude-sonnet-5-5"
-      },
-      "when": {
-        "auth": [
-          "none",
-          "better-auth"
-        ]
-      }
-    },
-    {
       "name": "addImport",
       "args": {
         "file": "infra/alchemy.run.ts",
@@ -418,6 +427,23 @@
       "when": {
         "infra": [
           "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "addImport",
+      "args": {
+        "file": "infra/alchemy.run.ts",
+        "import": "* as Redacted",
+        "from": "effect/Redacted"
+      },
+      "when": {
+        "infra": [
+          "alchemy"
+        ],
+        "auth": [
+          "none",
+          "better-auth"
         ]
       }
     },
@@ -489,7 +515,7 @@
       "name": "addAlchemyResource",
       "args": {
         "name": "llmApiKey",
-        "code": "const llmApiKey = yield* Config.Redacted(\"LLM_API_KEY\")",
+        "code": "// empty until you set it: the AI card then says LLM_API_KEY is not set\nconst llmApiKey = yield* Config.Redacted(\"LLM_API_KEY\").pipe(\n  Config.withDefault(Redacted.make(\"\")),\n)",
         "binding": "LLM_API_KEY"
       },
       "when": {
@@ -583,7 +609,7 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "ai",
-        "content": "## AI (Effect AI, bring your own key)\n\n- Use the `Llm` service from `@repo/core` (`generateText(prompt)`); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.\n- `apps/web/src/server/ai.ts` is a demo server function (`generateText`); it is NOT gated because this project has no auth: anyone who can reach the app can call it and spend the configured API key. Add auth (`efforge add auth/better-auth`) or remove the demo before deploying. Gate any server function you add that spends model tokens the same way.\n- Never log, return or store the API key in the clear."
+        "content": "## AI (Effect AI, bring your own key)\n\n- Use the `Llm` service from `@repo/core` (`generateText(prompt)`, or `streamText(prompt)` for the answer as it is written; `ask` in `packages/core/src/llm.ts` is the program the dashboard card runs); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.\n- `apps/web/src/server/ai.ts` (`generateText`) and the dashboard card's `askModel` in `apps/web/src/server/ai-demo.ts` (on a project with the dashboard) are demo server functions; they are NOT gated because this project has no auth: anyone who can reach the app can call them and spend the configured API key. Add auth (`efforge add auth/better-auth`) or remove the demo before deploying. Gate any server function you add that spends model tokens the same way.\n- Test code that calls a model with `LlmFixed(answer)` (a fixed answer, streamed a word at a time) or `LlmUnconfigured` from `packages/core/test/llm-fixed.ts`; see `llm.test.ts`. Tests never call a provider.\n- Never log, return or store the API key in the clear. Never commit a key: `LLM_API_KEY` goes in the settings file `pnpm dev` reads, and in a Worker secret in production."
       },
       "when": {
         "auth": [
@@ -595,7 +621,7 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "ai",
-        "content": "## AI (Effect AI, bring your own key)\n\n- Use the `Llm` service from `@repo/core` (`generateText(prompt)`); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.\n- `apps/web/src/server/ai.ts` is a demo server function (`generateText`); it is gated by `requireSession`. Gate any server function you add that spends model tokens the same way.\n- Never log, return or store the API key in the clear."
+        "content": "## AI (Effect AI, bring your own key)\n\n- Use the `Llm` service from `@repo/core` (`generateText(prompt)`, or `streamText(prompt)` for the answer as it is written; `ask` in `packages/core/src/llm.ts` is the program the dashboard card runs); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.\n- `apps/web/src/server/ai.ts` (`generateText`) and the dashboard card's `askModel` in `apps/web/src/server/ai-demo.ts` (on a project with the dashboard) are demo server functions that need a session: `sessionGate` (`apps/web/src/start.ts`) refuses any server function without one, yours included, and with `requireSession` chained the handler gets `context.session`. Sign-up is open, so any account can spend the key: see Auth.\n- Test code that calls a model with `LlmFixed(answer)` (a fixed answer, streamed a word at a time) or `LlmUnconfigured` from `packages/core/test/llm-fixed.ts`; see `llm.test.ts`. Tests never call a provider.\n- Never log, return or store the API key in the clear. Never commit a key: `LLM_API_KEY` goes in the settings file `pnpm dev` reads, and in a Worker secret in production."
       },
       "when": {
         "auth": [
@@ -607,7 +633,7 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "ai",
-        "content": "## AI (Effect AI, bring your own key)\n\n- Use the `Llm` service from `@repo/core` (`generateText(prompt)`); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.\n- Each organization saves its own key at `/app/settings/ai`, stored in the `llm_credential` table (`packages/db`), encrypted with AES-GCM (WebCrypto) using `LLM_ENCRYPTION_KEY` (32 random bytes, base64: `openssl rand -base64 32`; the app refuses to start without a valid one). Rotating that key makes saved keys unreadable, so organizations must enter theirs again.\n- The key never goes back to the browser (only its last four characters, to owners and admins). Only owners and admins can set, clear or test it; keep that check on the server.\n- `apps/web/src/server/ai.ts` is a demo server function (`generateText`) behind `requireSession`. Gate any server function you add that spends model tokens the same way.\n- Never log, return or store the API key in the clear."
+        "content": "## AI (Effect AI, bring your own key)\n\n- Use the `Llm` service from `@repo/core` (`generateText(prompt)`, or `streamText(prompt)` for the answer as it is written; `ask` in `packages/core/src/llm.ts` is the program the dashboard card runs); do not call a provider SDK from app code. `apps/web/src/server/llm-provider.ts` holds `makeLlmLayer({ provider, apiKey, model, baseUrl })`, which builds the Effect `LanguageModel` (`effect/ai`) for `anthropic`, `openai`, `openrouter` or `ollama` (OpenAI-compatible, set a base URL). `@effect/ai` 0.37 is Effect 3: do not add it.\n- Each organization saves its own key at `/app/settings/ai`, stored in the `llm_credential` table (`packages/db`), encrypted with AES-GCM (WebCrypto) using `LLM_ENCRYPTION_KEY` (32 random bytes, base64: `openssl rand -base64 32`; the app refuses to start without a valid one). Rotating that key makes saved keys unreadable, so organizations must enter theirs again.\n- The key never goes back to the browser (only its last four characters, to owners and admins). Only owners and admins can set, clear or test it; keep that check on the server.\n- `apps/web/src/server/ai.ts` (`generateText`) and the dashboard card's `askModel` in `apps/web/src/server/ai-demo.ts` (on a project with the dashboard) are demo server functions that need a session: `sessionGate` (`apps/web/src/start.ts`) refuses any server function without one, yours included, and with `requireSession` chained the handler gets `context.session`. Sign-up is open, so any account can spend the key: see Auth.\n- Test code that calls a model with `LlmFixed(answer)` (a fixed answer, streamed a word at a time) or `LlmUnconfigured` from `packages/core/test/llm-fixed.ts`; see `llm.test.ts`. Tests never call a provider.\n- Never log, return or store the API key in the clear."
       },
       "when": {
         "auth": [

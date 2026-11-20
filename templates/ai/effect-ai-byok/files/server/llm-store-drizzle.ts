@@ -22,6 +22,7 @@ export const LlmCredentialStoreLive = Layer.effect(
           .pipe(
             Effect.map((rows) => Option.fromNullishOr(rows[0])),
             Effect.mapError(fail("find credential")),
+            Effect.withSpan("LlmCredentialStore.find"),
           ),
       upsert: (row) =>
         db
@@ -37,12 +38,20 @@ export const LlmCredentialStoreLive = Layer.effect(
               updatedAt: new Date(),
             },
           })
-          .pipe(Effect.asVoid, Effect.mapError(fail("save credential"))),
+          .pipe(
+            Effect.asVoid,
+            Effect.mapError(fail("save credential")),
+            Effect.withSpan("LlmCredentialStore.upsert"),
+          ),
       remove: (orgId) =>
         db
           .delete(llmCredential)
           .where(eq(llmCredential.orgId, orgId))
-          .pipe(Effect.asVoid, Effect.mapError(fail("clear credential"))),
+          .pipe(
+            Effect.asVoid,
+            Effect.mapError(fail("clear credential")),
+            Effect.withSpan("LlmCredentialStore.remove"),
+          ),
     })
   }),
 )

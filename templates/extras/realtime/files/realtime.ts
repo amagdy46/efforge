@@ -4,30 +4,47 @@ import { Effect, Layer } from "effect"
 import { RoomNamespace } from "../realtime/Room"
 import { WorkerEnvLive } from "./cloudflare"
 
-const fail = (operation: string) => (cause: unknown) => new RealtimeError({ operation, cause })
+type Operation = RealtimeError["operation"]
+
+const failed: Record<Operation, string> = {
+  connect: "Could not connect to the room.",
+  broadcast: "Could not send to the room.",
+  connections: "Could not count the room's connections.",
+}
+const fail = (operation: Operation) => (cause: unknown) =>
+  new RealtimeError({ operation, message: failed[operation], cause })
 
 const make = Effect.gen(function* () {
   const namespace = yield* RoomNamespace
   // room ids reach here from URLs and server functions: only accept the documented shape
   const room = (
-    operation: string,
+    operation: Operation,
     roomId: string,
   ): Effect.Effect<ReturnType<typeof namespace.byName>, RealtimeError> =>
     isValidRoomId(roomId)
       ? Effect.succeed(namespace.byName(roomId))
-      : Effect.fail(new RealtimeError({ operation, cause: `invalid room id: ${roomId}` }))
+      : Effect.fail(
+          new RealtimeError({
+            operation,
+            message: `"${roomId}" is not a room id.`,
+            cause: `invalid room id: ${roomId}`,
+          }),
+        )
   return Realtime.of({
     connect: (roomId, request) =>
       room("connect", roomId).pipe(
         Effect.flatMap((stub) => stub.fetch(request).pipe(Effect.mapError(fail("connect")))),
+        Effect.withSpan("Realtime.connect"),
       ),
     broadcast: (roomId, message) =>
       room("broadcast", roomId).pipe(
         Effect.flatMap((stub) => stub.broadcast(message).pipe(Effect.mapError(fail("broadcast")))),
+        Effect.withSpan("Realtime.broadcast"),
       ),
     connections: (roomId) =>
       room("connections", roomId).pipe(
         Effect.flatMap((stub) => stub.connections().pipe(Effect.mapError(fail("connections")))),
+        Effect.withSpan("Realtime.connections"),
       ),
   })
 })

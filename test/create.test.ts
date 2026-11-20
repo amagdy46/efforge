@@ -53,17 +53,38 @@ const cli = (args: string[], answers: ReadonlyArray<Answer> = []) => {
 // the fixture templates cover postgres/d1, drizzle and the email extra only
 const stackFlags = ["--auth=none", "--infra=none", "--ai=none"]
 
-it("dry-run --json prints valid JSON {stack, command, files} and writes nothing", async () => {
+it("dry-run --json prints the contract's create document and writes nothing", async () => {
   await cli(["app", "--dry-run", "--json", ...stackFlags, "--extras=email"]).p
   const out = JSON.parse(logs.join("\n"))
-  expect(Object.keys(out).toSorted()).toEqual(["command", "files", "stack"])
+  expect(Object.keys(out).toSorted()).toEqual([
+    "command",
+    "contract",
+    "directory",
+    "dryRun",
+    "efforge",
+    "env",
+    "files",
+    "git",
+    "installed",
+    "nextSteps",
+    "ok",
+    "stack",
+    "warnings",
+  ])
+  expect(out).toMatchObject({
+    ok: true,
+    contract: 1,
+    dryRun: true,
+    installed: false,
+    git: "skipped",
+  })
   expect(out.stack).toMatchObject({
     name: "app",
     database: "postgres",
     orm: "drizzle",
     extras: ["email"],
   })
-  expect(out.command).toBe("npm create efforge app -- --yes --auth=none --extras=email")
+  expect(out.command).toBe("npx -y create-efforge create app --yes --auth=none --extras=email")
   expect(out.files).toContain("efforge.jsonc")
   expect(readdirSync(tmp)).toEqual([])
 })
@@ -73,7 +94,7 @@ it("the printed command replays the stack without prompting", async () => {
   const { command, stack } = JSON.parse(logs.join("\n"))
   logs = []
   const args = command
-    .replace(/^npm create efforge /, "")
+    .replace(/^npx -y create-efforge create /, "")
     .replace(" -- ", " ")
     .split(" ")
   // no --json here: it implies --yes and would hide a missing one
@@ -86,7 +107,17 @@ it("the printed command replays the stack without prompting", async () => {
 it("dry-run without json lists the paths and writes nothing", async () => {
   const { s, p } = cli(["app", "--dry-run", "-y", ...stackFlags])
   await p
-  expect(s.output.join("\n")).toContain("efforge.jsonc")
+  // a count per add-on, not 100 paths
+  const files = s.output.find((o) => o.startsWith("note Would write"))
+  expect(files).toMatch(/^note Would write \d+ files: base +\d+ /)
+  expect(files).not.toContain("efforge.jsonc")
+  expect(readdirSync(tmp)).toEqual([])
+  // --verbose lists every file, under the add-on it comes from
+  const verbose = cli(["app", "--dry-run", "-y", "--verbose", ...stackFlags])
+  await verbose.p
+  const all = verbose.s.output.find((o) => o.startsWith("note Would write")) ?? ""
+  expect(all).toContain("efforge.jsonc")
+  expect(all).toMatch(/base \(\d+\)/)
   expect(readdirSync(tmp)).toEqual([])
 })
 
@@ -97,9 +128,11 @@ it("writes the project with -y --no-install --no-git", async () => {
   expect(existsSync(join(tmp, "app", "efforge.jsonc"))).toBe(true)
   expect(existsSync(join(tmp, "app", ".git"))).toBe(false)
   expect(s.output.some((o) => o.startsWith("note Next steps:") && o.includes("cd app"))).toBe(true)
-  expect(s.output.some((o) => o.startsWith("outro:") && o.includes("npm create efforge app"))).toBe(
-    true,
-  )
+  expect(
+    s.output.some(
+      (o) => o.startsWith("outro:") && o.includes("npx -y create-efforge create app --yes"),
+    ),
+  ).toBe(true)
 })
 
 it("--install=false and --git=false are accepted too", async () => {
@@ -110,11 +143,12 @@ it("--install=false and --git=false are accepted too", async () => {
 it("interactive: answers drive the stack and confirm gates writing", async () => {
   const { s, p } = cli(
     ["--no-install", "--no-git"],
-    ["app", "postgres", "drizzle", "none", "none", "none", [], true],
+    ["app", "custom", "postgres", "drizzle", "none", "none", "none", [], true],
   )
   await p
   expect(s.shown.map((x) => x.id)).toEqual([
     "name",
+    "preset",
     "database",
     "orm",
     "auth",
@@ -129,7 +163,7 @@ it("interactive: answers drive the stack and confirm gates writing", async () =>
 it("declining the confirmation writes nothing", async () => {
   const { p } = cli(
     ["--no-install", "--no-git"],
-    ["app", "postgres", "drizzle", "none", "none", "none", [], false],
+    ["app", "custom", "postgres", "drizzle", "none", "none", "none", [], false],
   )
   await p
   expect(readdirSync(tmp)).toEqual([])
@@ -150,7 +184,10 @@ it("an existing non-empty target is refused", async () => {
   process.exitCode = undefined
   await cli(["app", "-y", "--no-install", "--no-git", ...stackFlags]).p
   expect(process.exitCode).toBe(1)
-  expect(String(err.mock.calls.at(-1)?.[0])).toContain("isn't empty")
+  // wrapped at 80 columns: read it as one line
+  expect(String(err.mock.calls.at(-1)?.[0]).replaceAll("\n", " ")).toContain(
+    "already holds an efforge project",
+  )
   expect(readFileSync(join(tmp, "app", "mine.txt"), "utf8")).toBe("keep")
 })
 
@@ -195,7 +232,23 @@ it("--json without --dry-run keeps stdout JSON-only and writes the project", asy
   const { s, p } = cli(["app", "--json", "--no-install", "--no-git", ...stackFlags])
   await p
   expect(s.output).toEqual([])
-  expect(Object.keys(JSON.parse(logs.join("\n"))).toSorted()).toEqual(["command", "files", "stack"])
+  const out = JSON.parse(logs.join("\n"))
+  expect(Object.keys(out).toSorted()).toEqual([
+    "command",
+    "contract",
+    "directory",
+    "dryRun",
+    "efforge",
+    "env",
+    "files",
+    "git",
+    "installed",
+    "nextSteps",
+    "ok",
+    "stack",
+    "warnings",
+  ])
+  expect(out).toMatchObject({ dryRun: false, installed: false, git: "skipped" })
   expect(existsSync(join(tmp, "app", "efforge.jsonc"))).toBe(true)
 })
 
@@ -223,7 +276,7 @@ it("git init runs before pnpm format, and the commit comes after it", async () =
     "pnpm --version",
     "git --version",
     "git init",
-    "pnpm install",
+    "pnpm install --no-frozen-lockfile",
     ROUTE_TREE_COMMAND,
     "pnpm format",
     "git add -A",

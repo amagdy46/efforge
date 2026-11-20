@@ -1,10 +1,11 @@
-import { Data, Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { LlmError } from "./llm"
 
 /** `LLM_ENCRYPTION_KEY` is missing or not 32 base64-encoded bytes, so the Llm layer can't be built. */
-export class LlmConfigError extends Data.TaggedError("LlmConfigError")<{
-  readonly message: string
-}> {}
+export class LlmConfigError extends Schema.TaggedError<
+  LlmConfigError,
+  { readonly brand: unique symbol }
+>()("LlmConfigError", { message: Schema.String }) {}
 
 const VERSION = "v1"
 const KEY_BYTES = 32
@@ -16,7 +17,7 @@ const fromBase64 = (text: string): Uint8Array<ArrayBuffer> =>
 
 const invalidKey = new LlmConfigError({
   message:
-    "LLM_ENCRYPTION_KEY must be 32 random bytes, base64 encoded. Generate one with `openssl rand -base64 32` and set it as a secret (.dev.vars locally).",
+    "LLM_ENCRYPTION_KEY must be 32 random bytes, base64 encoded. Generate one with `openssl rand -base64 32` and set it as a secret (.dev.vars locally, .env with Alchemy).",
 })
 
 /** Imports the AES-GCM key from `LLM_ENCRYPTION_KEY`; fails with a clear message when it is unusable. */

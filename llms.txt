@@ -1,0 +1,35 @@
+# efforge
+
+> efforge (`npm create efforge`) creates a full-stack TypeScript app on Cloudflare Workers: TanStack Start on the front, Effect on the server, with a database, auth, email, storage and AI already wired as Effect services. `efforge add` wires another capability into an existing project with AST edits, and refuses to overwrite files you changed.
+
+Coding agents: run the CLI with `--json` and no prompts. Needs create-efforge 0.3.0 or later: every document then carries `contract: 1`, and one without it comes from an older CLI that this contract doesn't describe (`npx -y create-efforge@latest --version --json` checks). Every run prints one JSON document; on failure, `error.fix` is either a command that does what you asked or `null`, never a different capability; when there are several ways out, `error.alternatives` lists them as complete commands to choose from.
+
+```sh
+npx -y create-efforge@latest --version --json
+npx -y create-efforge@latest create my-app --json --database=d1 --auth=better-auth
+npx -y create-efforge@latest create my-saas --json --preset=saas
+npx -y create-efforge@latest list --json --cwd my-app
+npx -y create-efforge@latest info email --json --cwd my-app
+npx -y create-efforge@latest add email --json --cwd my-app
+npx -y create-efforge@latest graph --json --cwd my-app
+npx -y create-efforge@latest doctor --json --cwd my-app
+npx -y create-efforge@latest upgrade --check --json --cwd my-app
+npx -y create-efforge@latest upgrade --json --cwd my-app
+```
+
+Check your own work with `doctor --json`: one check per line of trouble (install, one Effect version, env vars, bindings, layers), each with the reason and a `fix`. `upgrade --check --json` says whether something breaks a project made by an older efforge (`needs-action`) or efforge has newer pins and templates for it (`behind`); `upgrade --json` applies what is still efforge's and leaves the user's changes alone. Both commands exit `2` when something breaks the project, with `ok: true`.
+
+## Docs
+
+- [Agent skill](https://raw.githubusercontent.com/amagdy46/efforge/main/skills/efforge/SKILL.md): when to use efforge, the exact commands, what each error means, how to verify the result
+- [JSON contract](https://raw.githubusercontent.com/amagdy46/efforge/main/docs/json.md): every field of the `--json` output and every error code, with real examples
+- [CLI reference](https://raw.githubusercontent.com/amagdy46/efforge/main/docs/cli.md): every flag, compatibility rules, `add` in detail
+- [Keep a project current](https://raw.githubusercontent.com/amagdy46/efforge/main/docs/upgrading.md): `doctor` and `upgrade`, what each status and exit code means, the repair by hand for a 0.2.0 project
+- [Deploy](https://raw.githubusercontent.com/amagdy46/efforge/main/docs/deploy.md): the first deploy with wrangler or Alchemy, step by step
+- [Status and limits](https://raw.githubusercontent.com/amagdy46/efforge/main/docs/limits.md): what isn't supported yet, and what is stable
+
+## Optional
+
+- [README](https://raw.githubusercontent.com/amagdy46/efforge/main/README.md): what efforge is and what a generated project contains, for people
+- [Architecture](https://raw.githubusercontent.com/amagdy46/efforge/main/docs/architecture.md): services, layers, the one file that composes them
+- [Changelog](https://raw.githubusercontent.com/amagdy46/efforge/main/CHANGELOG.md)

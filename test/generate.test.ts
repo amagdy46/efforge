@@ -115,10 +115,15 @@ it("fails with missing-package-json when scripts target an absent package", asyn
 })
 
 it(".env.example is deduplicated and grouped by add-on title", async () => {
-  const env = (await gen(pg)).get(".env.example")
-  expect(env).toBe(
-    "# Postgres\nDATABASE_URL=postgres://localhost/app\n\n# Email\nMAIL_FROM=hi@example.com\n",
+  const tree = await gen(pg)
+  const env = tree.get(".env.example") as string
+  // the fixtures declare no local values: every variable is a secret to fill in, written empty
+  expect(env.slice(env.indexOf("\n\n") + 2)).toMatch(
+    /^# Postgres\n# Fill in: [^\n]+\nDATABASE_URL=\n\n# Email\n# Fill in: [^\n]+\nMAIL_FROM=\n$/,
   )
+  // the file pnpm dev reads has the same lines
+  const local = tree.get(".dev.vars") as string
+  expect(local.slice(local.indexOf("\n\n") + 2)).toBe(env.slice(env.indexOf("\n\n") + 2))
 })
 
 it("efforge.jsonc round-trips through EfforgeManifest and hashes match overlay targets", async () => {
@@ -127,7 +132,7 @@ it("efforge.jsonc round-trips through EfforgeManifest and hashes match overlay t
   expect(text.startsWith(manifestHeader)).toBe(true)
   const m = Schema.decodeUnknownSync(EfforgeManifest)(JSON.parse(text.slice(manifestHeader.length)))
   expect(m.stack).toEqual(pg)
-  expect(m.command).toBe("npm create efforge app -- --yes --auth=none --extras=email")
+  expect(m.command).toBe("npx -y create-efforge create app --yes --auth=none --extras=email")
   expect(Object.keys(m.files)).toEqual([
     "apps/web/src/db.ts",
     "apps/web/src/mailer.ts",

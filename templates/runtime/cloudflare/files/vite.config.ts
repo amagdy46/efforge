@@ -3,6 +3,7 @@ import tailwindcss from "@tailwindcss/vite"
 import { tanstackStart } from "@tanstack/react-start/plugin/vite"
 import viteReact from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
+import { clientGuard, regions } from "./regions.ts"
 
 export default defineConfig({
   resolve: { tsconfigPaths: true },
@@ -13,6 +14,8 @@ export default defineConfig({
       // the repo-root default of `wrangler d1 ... --local`, so migrations and dev share one state
       persistState: { path: "../../.wrangler/state" },
     }),
+    regions(),
+    clientGuard(),
     tanstackStart(),
     tailwindcss(),
     viteReact(),

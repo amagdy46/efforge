@@ -1,6 +1,6 @@
 import { createServer } from "node:http"
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Result, Schema } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { type Browser, chromium } from "playwright"
 import { checkUrl } from "./url-policy.ts"
@@ -25,9 +25,9 @@ const getBrowser = () => {
   return browser
 }
 
-/** Loads `url` in a fresh context and counts the requests the page made. */
+/** Loads `url` in a fresh context, counts the requests the page made and takes a screenshot. */
 const inspect = async (url: string) => {
-  const context = await (await getBrowser()).newContext()
+  const context = await (await getBrowser()).newContext({ viewport: { width: 1280, height: 800 } })
   try {
     await context.route("**/*", (route) => {
       const target = route.request().url()
@@ -40,10 +40,19 @@ const inspect = async (url: string) => {
       requests += 1
     })
     await page.goto(url, { waitUntil: "load", timeout: 30_000 })
-    return { title: await page.title(), requests }
+    const screenshot = await page.screenshot({ type: "jpeg", quality: 60 })
+    return { title: await page.title(), requests, screenshot: screenshot.toString("base64") }
   } finally {
     await context.close()
   }
+}
+
+/** Why a page did not load, for the 502 body. */
+const loadFailure = (error: unknown): string => {
+  if (!(error instanceof Error)) return String(error)
+  if (error.name === "TimeoutError")
+    return "the page did not load in 30 seconds: it is slow, or this container cannot reach it"
+  return error.message
 }
 
 const run = HttpRouter.add(
@@ -52,14 +61,17 @@ const run = HttpRouter.add(
   Effect.gen(function* () {
     const { url: raw } = yield* HttpServerRequest.schemaBodyJson(RunRequest)
     const checked = checkUrl(raw, ALLOW_PRIVATE_NETWORKS)
+    // 403: the URL policy refused it; 502: the page could not be loaded; 400: a bad request
     if (!checked.ok)
-      return yield* HttpServerResponse.json({ error: checked.reason }, { status: 400 })
+      return yield* HttpServerResponse.json({ error: checked.reason }, { status: 403 })
     const url = checked.url.href
     const result = yield* Effect.tryPromise({
       try: () => inspect(url),
-      catch: (error) => (error instanceof Error ? error.message : String(error)),
-    })
-    return yield* HttpServerResponse.json(result)
+      catch: loadFailure,
+    }).pipe(Effect.result)
+    if (Result.isFailure(result))
+      return yield* HttpServerResponse.json({ error: result.failure }, { status: 502 })
+    return yield* HttpServerResponse.json(result.success)
   }).pipe(
     Effect.catch((error) =>
       HttpServerResponse.json({ error: String(error) }, { status: 400 }).pipe(Effect.orDie),

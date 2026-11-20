@@ -3,7 +3,7 @@ import { type BetterAuthOptions, betterAuth } from "better-auth"
 export interface AuthSettings {
   readonly database: NonNullable<BetterAuthOptions["database"]>
   readonly secret: string
-  readonly baseURL: string | undefined
+  readonly baseURL: BetterAuthOptions["baseURL"]
 }
 
 /**

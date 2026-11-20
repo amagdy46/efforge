@@ -1,0 +1,25 @@
+{
+  "name": "@repo/db",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node scripts/migrate.ts"
+  },
+  "dependencies": {
+    "@effect/sql-d1": "catalog:",
+    "@repo/core": "workspace:*",
+    "effect": "catalog:",
+    "effect-cf": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

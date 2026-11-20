@@ -7,5 +7,6 @@ routeTree.gen.ts
 .dev.vars
 .env
 .env.local
+.env.production
 *.log
 .DS_Store

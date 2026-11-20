@@ -2,6 +2,7 @@
   "id": "database/postgres",
   "title": "Postgres",
   "description": "Postgres reached through a Hyperdrive binding on Workers, with a local docker-compose database and the `@repo/db` package.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/database-postgres.md",
   "files": [
     {
       "path": "files/docker-compose.yml",
@@ -18,6 +19,16 @@
     {
       "path": "files/runtime.ts",
       "target": "apps/web/src/server/runtime.ts"
+    },
+    {
+      "path": "../../base/files/web/src/server/settings.ts",
+      "target": "apps/web/src/server/settings.ts",
+      "ifAbsent": true
+    },
+    {
+      "path": "../../base/files/web/src/server/manifest.ts",
+      "target": "apps/web/src/server/manifest.ts",
+      "ifAbsent": true
     }
   ],
   "dependencies": {
@@ -51,12 +62,18 @@
   "envVars": [
     {
       "name": "DATABASE_URL",
+      "secret": true,
       "example": "postgres://postgres:postgres@localhost:5432/app",
-      "description": "Used by `pnpm db:migrate` and drizzle-kit; the running app connects through the HYPERDRIVE binding."
+
+      "dev": "postgres://postgres:postgres@localhost:5432/app",
+      "description": "Used by `pnpm db:migrate` and drizzle-kit, read from the shell; unset, they use the docker-compose database. The running app connects through the HYPERDRIVE binding."
     }
   ],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "Postgres for the app's data. On Workers the app connects through a Hyperdrive binding (`HYPERDRIVE`), which pools the connections; in development `docker compose up -d` starts Postgres and wrangler points Hyperdrive at it. It also replaces `apps/web/src/server/runtime.ts` with one that builds the layers for each call, because a Worker must not reuse a Postgres socket across requests. The ORM add-on fills the `@repo/db` package it creates."
+  },
   "transforms": [
     {
       "name": "addWranglerBinding",
@@ -100,7 +117,7 @@
       "name": "addAlchemyResource",
       "args": {
         "name": "hyperdrive",
-        "code": "const databaseUrl = new URL(Redacted.value(yield* Config.Redacted(\"DATABASE_URL\")))\nconst hyperdrive = yield* Cloudflare.Hyperdrive.Connection(\"Hyperdrive\", {\n  origin: {\n    scheme: \"postgres\",\n    host: databaseUrl.hostname,\n    port: Number(databaseUrl.port || 5432),\n    database: databaseUrl.pathname.slice(1),\n    user: decodeURIComponent(databaseUrl.username),\n    password: Redacted.make(decodeURIComponent(databaseUrl.password)),\n  },\n  // writes must be visible to the next read, so only pool connections, don't cache queries\n  caching: { disabled: true },\n})",
+        "code": "// every stage reads DATABASE_URL: `pnpm dev` from .env (the docker-compose database)\nconst databaseUrl = new URL(Redacted.value(yield* Config.Redacted(\"DATABASE_URL\")))\n// a database on this machine has no TLS; any other keeps it, under `pnpm dev` too\nconst local = [\"localhost\", \"127.0.0.1\", \"[::1]\"].includes(databaseUrl.hostname)\nconst origin = {\n  scheme: \"postgres\" as const,\n  host: databaseUrl.hostname,\n  port: Number(databaseUrl.port || 5432),\n  database: databaseUrl.pathname.slice(1),\n  user: decodeURIComponent(databaseUrl.username),\n  password: Redacted.make(decodeURIComponent(databaseUrl.password)),\n}\nconst hyperdrive = yield* Cloudflare.Hyperdrive.Connection(\"Hyperdrive\", {\n  origin,\n  // `alchemy dev` connects to `dev` from this machine\n  dev: { ...origin, sslmode: local ? \"disable\" : \"require\" },\n  // writes must be visible to the next read, so only pool connections, don't cache queries\n  caching: { disabled: true },\n})",
         "binding": "HYPERDRIVE"
       },
       "when": {
@@ -113,23 +130,30 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "database",
-        "content": "## Database (Postgres, Drizzle)\n\n- Tables live in `packages/db/src/schema.ts`; queries go through the `Database` service from `@repo/core`.\n- Change the schema, then run `pnpm --filter @repo/db db:generate` to write a migration to `packages/db/drizzle/`, then `pnpm db:migrate`.\n- Never edit files under `packages/db/drizzle/` by hand; they are generated.\n- Start the local database with `docker compose up -d`."
+        "content": "## Database (Postgres)\n\n- Locally, `docker compose up -d --wait` starts Postgres on port 5432 (`docker-compose.yml`), and `pnpm db:migrate` applies the migrations to `DATABASE_URL`, which defaults to that database.\n- The Worker reaches Postgres only through the `HYPERDRIVE` binding (`packages/db/src/layer.ts`, through effect-cf). `DATABASE_URL` is for migrations and drizzle-kit; app code never reads it.\n- Migrate production before you deploy code that needs the change: `DATABASE_URL=<production url> pnpm db:migrate`. The README's Deploy section has the first deploy."
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "database-wrangler",
+        "content": "- `HYPERDRIVE` is declared in `wrangler.jsonc`: `pnpm dev` connects to its `localConnectionString`, production to the Hyperdrive config named by its `id`."
       },
       "when": {
-        "orm": [
-          "drizzle"
+        "infra": [
+          "none"
         ]
       }
     },
     {
       "name": "appendAgentsSection",
       "args": {
-        "id": "database",
-        "content": "## Database (Postgres, effect-sql)\n\n- Migrations are plain SQL files in `packages/db/migrations/`, named `NNNN_name.sql` and applied in order by `pnpm db:migrate`.\n- Add a new file for every schema change; never edit one that has already been applied.\n- Put one statement per `;` and keep string literals free of `;` (the runner splits on it).\n- Queries go through the `Database` service from `@repo/core`. Start the local database with `docker compose up -d`."
+        "id": "database-alchemy",
+        "content": "- `infra/alchemy.run.ts` creates the Hyperdrive config from `DATABASE_URL`: under `pnpm dev` the one in `.env` (the docker-compose database), and every deployed stage must set it. `pnpm dev` connects without TLS only to a database on this machine (`localhost`, `127.0.0.1`, `::1`)."
       },
       "when": {
-        "orm": [
-          "effect-sql"
+        "infra": [
+          "alchemy"
         ]
       }
     }

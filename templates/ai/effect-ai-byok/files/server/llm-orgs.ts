@@ -3,11 +3,11 @@ import { Llm, LlmError, LlmNotConfigured, type LlmProvider, llmProviders } from 
 import { decryptSecret, encryptSecret, loadEncryptionKey } from "@repo/core/llm-crypto"
 import { LlmCredentialStore } from "@repo/core/llm-store"
 import { DatabaseLayer } from "@repo/db"
-import { Config, Context, Effect, Layer, Option, Redacted } from "effect"
+import { Config, Context, Effect, Layer, Option, Redacted, Stream } from "effect"
 import { WorkerConfig } from "effect-cf"
 import { AuthLive } from "./auth-live"
 import { WorkerEnvLive } from "./cloudflare"
-import { generateWith, type LlmSettings } from "./llm-provider"
+import { generateWith, type LlmSettings, streamWith } from "./llm-provider"
 import { LlmCredentialStoreLive } from "./llm-store"
 
 /** What the settings page may see: never the key, only its last four characters. */
@@ -78,7 +78,7 @@ const LlmCredentialsLive = Layer.effect(
             baseUrl: found.value.baseUrl,
             last4: apiKey.slice(-4),
           })
-        }),
+        }).pipe(Effect.withSpan("LlmCredentials.summary")),
       save: (orgId, input) =>
         Effect.gen(function* () {
           const existing = yield* store.find(orgId)
@@ -99,8 +99,8 @@ const LlmCredentialsLive = Layer.effect(
             encryptedKey,
             baseUrl: input.baseUrl,
           })
-        }),
-      clear: (orgId) => store.remove(orgId),
+        }).pipe(Effect.withSpan("LlmCredentials.save")),
+      clear: (orgId) => store.remove(orgId).pipe(Effect.withSpan("LlmCredentials.clear")),
       resolve: (orgId) =>
         Effect.gen(function* () {
           const found = yield* store.find(orgId)
@@ -112,7 +112,7 @@ const LlmCredentialsLive = Layer.effect(
             apiKey: apiKey === "" ? undefined : Redacted.make(apiKey),
             baseUrl: found.value.baseUrl ?? undefined,
           }
-        }),
+        }).pipe(Effect.withSpan("LlmCredentials.resolve")),
     })
   }),
 ).pipe(
@@ -130,17 +130,28 @@ export const LlmLive = Layer.effect(
   Effect.gen(function* () {
     const auth = yield* Auth
     const credentials = yield* LlmCredentials
+    /** The current organization's saved settings. */
+    const settings = Effect.gen(function* () {
+      const session = yield* auth.currentSession.pipe(
+        Effect.mapError(() => new LlmNotConfigured({ message: "Sign in to use AI." })),
+      )
+      if (session.activeOrganizationId === null)
+        return yield* new LlmNotConfigured({ message: "Select an organization first." })
+      return yield* credentials.resolve(session.activeOrganizationId)
+    })
     return Llm.of({
       generateText: (prompt) =>
-        Effect.gen(function* () {
-          const session = yield* auth.currentSession.pipe(
-            Effect.mapError(() => new LlmNotConfigured({ message: "Sign in to use AI." })),
-          )
-          if (session.activeOrganizationId === null)
-            return yield* new LlmNotConfigured({ message: "Select an organization first." })
-          const settings = yield* credentials.resolve(session.activeOrganizationId)
-          return yield* generateWith(settings, prompt)
-        }),
+        settings.pipe(
+          Effect.flatMap((resolved) => generateWith(resolved, prompt)),
+          Effect.withSpan("Llm.generateText"),
+        ),
+      streamText: (prompt) =>
+        settings.pipe(
+          // a stored key that cannot be read is a failure of the stream, not a missing setting
+          Effect.map((resolved) => streamWith(resolved, prompt)),
+          Effect.catchTag("LlmError", (error) => Effect.succeed(Stream.fail(error))),
+          Effect.withSpan("Llm.streamText"),
+        ),
     })
   }),
 ).pipe(Layer.provideMerge(LlmCredentialsLive), Layer.provide(AuthLive))

@@ -1,18 +1,20 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { NodeFileSystem, NodeServices } from "@effect/platform-node"
 import { expect, it } from "@effect/vitest"
 import { Effect, type FileSystem, Path } from "effect"
 import { loadAddons } from "../src/addon.ts"
+import { CARDS_DIR, REGISTRY_FILE } from "../src/cards.ts"
 import { addAddons } from "../src/commands/add.ts"
 import { generate } from "../src/generate.ts"
 import { validate } from "../src/rules.ts"
 import { type StackConfig, withDefaults } from "../src/stack.ts"
+import type { Tree } from "../src/tree.ts"
 import { writeTree } from "../src/write.ts"
 
-// Add-on demos (realtime today) land in components/widgets.tsx, so every page that replaces the
-// dashboard has to keep rendering that list, or the demos silently disappear.
+// Add-ons contribute a card to apps/web/src/capabilities/registry.ts (docs/capability-cards.md).
+// Every dashboard page has to render that list, or the cards silently disappear.
 
 const templates = new URL("../templates", import.meta.url).pathname
 const DASHBOARD = "apps/web/src/routes/app/index.tsx"
@@ -20,31 +22,61 @@ const DASHBOARD = "apps/web/src/routes/app/index.tsx"
 const run = <A, E>(eff: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
   Effect.runPromise(eff.pipe(Effect.provide(NodeFileSystem.layer), Effect.provide(Path.layer)))
 
-const rendersWidgets = (source: string) =>
-  /import \{ widgets \} from "@\/components\/widgets"/.test(source) && source.includes("{widgets}")
+const rendersRegistry = (source: string) =>
+  /import \{ capabilities \} from "@\/capabilities\/registry"/.test(source) &&
+  /capabilities\.map\(/.test(source)
 
-it("every add-on file that replaces the dashboard renders the widgets", async () => {
+/** The names in `capabilities = [...]`, in order. */
+const registered = (tree: ReadonlyMap<string, string>): string[] => {
+  const list = /capabilities: ReadonlyArray<Capability> = \[([^\]]*)\]/.exec(
+    tree.get(REGISTRY_FILE) ?? "",
+  )?.[1]
+  return (list ?? "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+/** Each registered name is imported from a card module that exists and exports it. */
+const expectModules = (tree: Tree, where: string) => {
+  const registry = tree.get(REGISTRY_FILE) ?? ""
+  for (const name of registered(tree)) {
+    const from = new RegExp(`import \\{ ${name} \\} from "\\./([\\w-]+)"`).exec(registry)?.[1]
+    expect(from, `${where}: import of ${name}`).toBeDefined()
+    const module = tree.get(`${CARDS_DIR}${from}.tsx`) ?? ""
+    expect(module, `${where}: ${from}.tsx`).toContain(`export const ${name}: Capability`)
+  }
+}
+
+it("every add-on file that replaces the dashboard renders the card registry", async () => {
   const addons = await run(loadAddons(templates))
   const dashboards = [...addons.values()].flatMap(({ manifest, dir }) =>
-    manifest.files
+    [...manifest.files, ...(manifest.card?.files ?? [])]
       .filter((f) => f.target === DASHBOARD)
       .map((f) => ({ id: manifest.id, path: join(dir, f.path) })),
   )
-  // base, both ORMs and both auth options (orgs reuses the better-auth page)
-  expect(dashboards.length).toBeGreaterThanOrEqual(5)
+  expect(dashboards.map((d) => d.id)).toContain("base")
   for (const d of dashboards)
-    expect(rendersWidgets(readFileSync(d.path, "utf8")), `${d.id}: ${d.path}`).toBe(true)
+    expect(rendersRegistry(readFileSync(d.path, "utf8")), `${d.id}: ${d.path}`).toBe(true)
 })
 
 const combos: StackConfig[] = (["none", "postgres", "d1"] as const).flatMap((database) =>
   (["none", "drizzle", "effect-sql"] as const).flatMap((orm) =>
     (["none", "better-auth", "better-auth-orgs"] as const).map((auth) =>
-      withDefaults({ name: "app", database, orm, auth, extras: ["realtime"] }),
+      withDefaults({
+        name: "app",
+        database,
+        orm,
+        auth,
+        ai: "effect-ai-byok",
+        extras: ["realtime", "workflows", "browser"],
+      }),
     ),
   ),
 )
 
-it("the realtime demo reaches the dashboard on every database, ORM and auth", async () => {
+it("every database, ORM and auth registers its cards, and the dashboard renders them", async () => {
   const addons = await run(loadAddons(templates))
   let checked = 0
   for (const config of combos) {
@@ -52,74 +84,209 @@ it("the realtime demo reaches the dashboard on every database, ORM and auth", as
     if (valid._tag === "Failure") continue
     const tree = await run(generate(config, addons))
     const where = `${config.database}/${config.orm}/${config.auth}`
-    expect(tree.get("apps/web/src/components/widgets.tsx"), where).toContain("<RealtimeDemo")
-    expect(rendersWidgets(tree.get(DASHBOARD) ?? ""), where).toBe(true)
+    expect(registered(tree), where).toEqual([
+      "runtime",
+      ...(config.orm === "none" ? [] : ["database"]),
+      ...(config.auth === "none" ? [] : ["auth"]),
+      "ai",
+      "workflows",
+      "realtime",
+      "browser",
+    ])
+    expectModules(tree, where)
+    expect(rendersRegistry(tree.get(DASHBOARD) ?? ""), where).toBe(true)
     checked++
   }
   expect(checked).toBeGreaterThanOrEqual(5)
 })
 
-it("adding realtime later shows it on an auth + database dashboard", async () => {
+const d1Auth = withDefaults({
+  name: "app",
+  database: "d1",
+  orm: "effect-sql",
+  auth: "better-auth",
+  extras: [],
+})
+
+/** Generates `config` into a temp dir, lets `prepare` change it, then adds `ids`. */
+const addLater = (
+  config: StackConfig,
+  ids: string[],
+  prepare: (dir: string) => void = () => {},
+) => {
   const tmp = mkdtempSync(join(tmpdir(), "efforge-dashboard-"))
   const dir = join(tmp, "app")
-  try {
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const config = withDefaults({
-          name: "app",
-          database: "d1",
-          orm: "effect-sql",
-          auth: "better-auth",
-          extras: [],
-        })
-        yield* writeTree(dir, yield* generate(config, yield* loadAddons(templates)))
-        yield* addAddons(dir, ["realtime"], { overwrite: false, dryRun: false, install: false })
-      }).pipe(Effect.provide(NodeServices.layer)),
-    )
-    expect(rendersWidgets(readFileSync(join(dir, DASHBOARD), "utf8"))).toBe(true)
-    expect(readFileSync(join(dir, "apps/web/src/components/widgets.tsx"), "utf8")).toContain(
-      "<RealtimeDemo",
-    )
-  } finally {
-    rmSync(tmp, { recursive: true, force: true })
-  }
-})
-
-// A 0.2.0 dashboard with a database or auth doesn't render the widgets (test/fixtures/v0.2.0).
-const v020 = new URL("fixtures/v0.2.0/d1-effect-sql-auth", import.meta.url).pathname
-
-const addRealtimeTo020 = async (edit?: (dashboard: string) => string) => {
-  const tmp = mkdtempSync(join(tmpdir(), "efforge-dashboard-"))
-  const dir = join(tmp, "old")
-  cpSync(v020, dir, { recursive: true })
-  if (edit !== undefined)
-    writeFileSync(join(dir, DASHBOARD), edit(readFileSync(join(dir, DASHBOARD), "utf8")))
-  try {
-    const result = await Effect.runPromise(
-      addAddons(dir, ["realtime"], { overwrite: false, dryRun: false, install: false }).pipe(
-        Effect.provide(NodeServices.layer),
-      ),
-    )
-    return { result, dashboard: readFileSync(join(dir, DASHBOARD), "utf8") }
-  } finally {
-    rmSync(tmp, { recursive: true, force: true })
-  }
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      yield* writeTree(dir, yield* generate(config, yield* loadAddons(templates)))
+      prepare(dir)
+      const result = yield* addAddons(dir, ids, { overwrite: false, dryRun: false, install: false })
+      return { tmp, dir, result }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  )
 }
 
-it("add realtime on a 0.2.0 project replaces a dashboard that is still what efforge generated", async () => {
-  expect(rendersWidgets(readFileSync(join(v020, DASHBOARD), "utf8"))).toBe(false)
-  const { result, dashboard } = await addRealtimeTo020()
-  expect(rendersWidgets(dashboard)).toBe(true)
-  expect(result.written).toContain(DASHBOARD)
-  expect(result.notes).toEqual([])
+it("adding realtime later adds its card to the dashboard", async () => {
+  const { tmp, dir, result } = await addLater(d1Auth, ["realtime"])
+  try {
+    const read = (file: string) => readFileSync(join(dir, file), "utf8")
+    const tree: Tree = new Map(
+      ["registry.ts", "runtime.tsx", "database.tsx", "auth.tsx", "realtime.tsx"]
+        .map((f) => `${CARDS_DIR}${f}`)
+        .filter((f) => existsSync(join(dir, f)))
+        .map((f) => [f, read(f)]),
+    )
+    expect(registered(tree)).toEqual(["runtime", "database", "auth", "realtime"])
+    expectModules(tree, "after add")
+    expect(existsSync(join(dir, "apps/web/src/server/realtime-demo.ts"))).toBe(true)
+    expect(rendersRegistry(read(DASHBOARD))).toBe(true)
+    expect(result.notes).toEqual([])
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
+  }
 })
 
-it("add realtime on a 0.2.0 project leaves an edited dashboard alone and says what to add", async () => {
-  const mine = (s: string) => s.replace("Dashboard</h1>", "My dashboard</h1>")
-  const { result, dashboard } = await addRealtimeTo020(mine)
-  expect(dashboard).toBe(mine(readFileSync(join(v020, DASHBOARD), "utf8")))
-  expect(result.written).not.toContain(DASHBOARD)
-  expect(result.notes).toHaveLength(1)
-  expect(result.notes[0]).toContain(DASHBOARD)
-  expect(result.notes[0]).toContain('import { widgets } from "@/components/widgets"')
+// add-on, its card's export, and the server file only the card uses
+const laterCards: ReadonlyArray<readonly [string, string, string]> = [
+  ["workflows", "workflows", "apps/web/src/server/workflows-demo.ts"],
+  ["ai/effect-ai-byok", "ai", "apps/web/src/server/ai-demo.ts"],
+  ["browser", "browser", "apps/web/src/server/browser-demo.ts"],
+]
+
+for (const [addon, card, server] of laterCards)
+  it(`adding ${addon} later adds its card to the dashboard`, async () => {
+    const { tmp, dir, result } = await addLater(d1Auth, [addon])
+    try {
+      const read = (file: string) => readFileSync(join(dir, file), "utf8")
+      const tree: Tree = new Map(
+        ["registry.ts", "runtime.tsx", "database.tsx", "auth.tsx", `${card}.tsx`]
+          .map((f) => `${CARDS_DIR}${f}`)
+          .map((f) => [f, read(f)]),
+      )
+      expect(registered(tree)).toEqual(["runtime", "database", "auth", card])
+      expectModules(tree, `after add ${addon}`)
+      expect(read(server)).toContain(".middleware([requireSession])")
+      expect(result.notes).toEqual([])
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
+it("a project whose card registry was removed gets the add-on without its card", async () => {
+  const { tmp, dir, result } = await addLater(d1Auth, ["realtime"], (d) =>
+    rmSync(join(d, REGISTRY_FILE)),
+  )
+  try {
+    expect(result.notes).toEqual([expect.stringMatching(/^No dashboard card for Realtime: /)])
+    // the service, its layer and its test are there; the card and what only the card uses are not
+    expect(existsSync(join(dir, "packages/core/src/realtime.ts"))).toBe(true)
+    expect(readFileSync(join(dir, "apps/web/src/server/layers.ts"), "utf8")).toContain(
+      "RealtimeLive",
+    )
+    expect(existsSync(join(dir, `${CARDS_DIR}realtime.tsx`))).toBe(false)
+    expect(existsSync(join(dir, "apps/web/src/server/realtime-demo.ts"))).toBe(false)
+    expect(existsSync(join(dir, REGISTRY_FILE))).toBe(false)
+    expect(result.written).not.toContain(REGISTRY_FILE)
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+it("storage and email register their cards on every auth option, with and without Alchemy", async () => {
+  const addons = await run(loadAddons(templates))
+  for (const auth of ["none", "better-auth", "better-auth-orgs"] as const)
+    for (const infra of ["none", "alchemy"] as const) {
+      const config = withDefaults({
+        name: "app",
+        database: "d1",
+        orm: "effect-sql",
+        auth,
+        infra,
+        extras: ["storage", "email"],
+      })
+      const tree = await run(generate(config, addons))
+      const where = `${auth}/${infra}`
+      expect(registered(tree).slice(-2), where).toEqual(["storage", "email"])
+      expectModules(tree, where)
+      for (const file of ["storage-demo.ts", "email-demo.ts"])
+        expect(tree.has(`apps/web/src/server/${file}`), `${where}: ${file}`).toBe(true)
+      for (const file of ["storage.test.ts", "storage-in-memory.ts", "mailer.test.ts"])
+        expect(tree.has(`packages/core/test/${file}`), `${where}: ${file}`).toBe(true)
+      // the card says nothing about wrangler.jsonc on an Alchemy stack
+      if (infra === "alchemy")
+        for (const card of ["storage.tsx", "email.tsx"])
+          expect(tree.get(`${CARDS_DIR}${card}`), `${where}: ${card}`).not.toContain("wrangler")
+    }
+})
+
+it("adding storage and email later adds their cards to the dashboard", async () => {
+  const { tmp, dir, result } = await addLater(d1Auth, ["storage", "email"])
+  try {
+    const read = (file: string) => readFileSync(join(dir, file), "utf8")
+    const tree: Tree = new Map(
+      ["registry.ts", "runtime.tsx", "database.tsx", "auth.tsx", "storage.tsx", "email.tsx"]
+        .map((f) => `${CARDS_DIR}${f}`)
+        .filter((f) => existsSync(join(dir, f)))
+        .map((f) => [f, read(f)]),
+    )
+    expect(registered(tree)).toEqual(["runtime", "database", "auth", "storage", "email"])
+    expectModules(tree, "after add")
+    for (const file of ["storage-demo.ts", "email-demo.ts"])
+      expect(read(`apps/web/src/server/${file}`), file).toContain(".middleware([requireSession])")
+    expect(result.notes).toEqual([])
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+/** The card module a registry entry imports: `import { ai } from "./ai"` -> capabilities/ai.tsx. */
+const cardModule = (tree: ReadonlyMap<string, string>, name: string): string | undefined => {
+  const from = new RegExp(`import \\{ ${name} \\} from "\\./([\\w-]+)"`).exec(
+    tree.get(REGISTRY_FILE) ?? "",
+  )?.[1]
+  return from === undefined ? undefined : `${CARDS_DIR}${from}.tsx`
+}
+
+/** The `@/server/*` files a card module imports its server functions from. */
+const serverFiles = (source: string): string[] =>
+  [...source.matchAll(/from "@\/server\/([\w-]+)"/g)].map((m) => `apps/web/src/server/${m[1]}.ts`)
+
+it("every registered card that writes or spends says who may use it, on stacks with and without auth", async () => {
+  const addons = await run(loadAddons(templates))
+  let cards = 0
+  for (const auth of ["none", "better-auth", "better-auth-orgs"] as const) {
+    const config = withDefaults({
+      name: "app",
+      database: "d1",
+      orm: "effect-sql",
+      auth,
+      ai: "effect-ai-byok",
+      extras: ["workflows", "realtime", "browser", "storage", "email"],
+    })
+    const tree = await run(generate(config, addons))
+    for (const name of registered(tree)) {
+      const where = `${auth} ${name}`
+      const module = cardModule(tree, name)
+      const source = tree.get(module ?? "") ?? ""
+      const effect = /access: \{\s*effect: "(\w+)"/.exec(source)?.[1]
+      expect(effect, `${where}: access.effect`).toBeDefined()
+      // a POST server function changes something: the card may not say it only reads
+      const posts = serverFiles(source).some((f) =>
+        /createServerFn\(\{ method: "POST" \}\)/.test(tree.get(f) ?? ""),
+      )
+      if (posts) expect(effect, `${where}: has a POST server function`).not.toBe("reads")
+      if (effect !== "reads") {
+        expect(source, where).toMatch(/\bopen: "This project has no auth, so /)
+        expect(source, where).toMatch(/\bsignedIn:\s*"/)
+      }
+      cards++
+    }
+  }
+  // the frame shows the notice for every such card: no card has to remember it
+  const frame = readFileSync(
+    join(templates, "base/files/web/src/components/capability-card.tsx"),
+    "utf8",
+  )
+  expect(frame).toContain("<Access access={access} />")
+  expect(cards).toBeGreaterThanOrEqual(25)
 })

@@ -1,13 +1,16 @@
 {
   "name": "create-efforge",
-  "version": "0.2.1",
-  "description": "Start an Effect app with database, auth, and Cloudflare services already wired together",
+  "version": "0.3.0",
+  "description": "The maintained way to start a full-stack Effect app on Cloudflare: TanStack Start on Workers, where every capability is a layer you can add, see, test and upgrade",
   "keywords": [
+    "alchemy",
     "cloudflare",
     "cloudflare-workers",
     "create",
     "effect",
+    "effect-ts",
     "scaffold",
+    "scaffolder",
     "tanstack-start",
     "template",
     "typescript"
@@ -25,6 +28,7 @@
   },
   "files": [
     "dist",
+    "schemas",
     "templates"
   ],
   "type": "module",
@@ -38,15 +42,25 @@
     "lint": "vp lint",
     "format": "vp fmt",
     "check": "vp check",
-    "smoke:pack": "node scripts/smoke-pack.ts"
+    "smoke:pack": "node scripts/smoke-pack.ts",
+    "schemas": "node scripts/schemas.ts",
+    "brand": "node scripts/brand/build.ts",
+    "brand:outline": "node scripts/brand/outline.ts",
+    "docs:addons": "node scripts/docs/addons.ts",
+    "docs:diagram": "node scripts/docs/diagram.ts",
+    "readme:screenshots": "node scripts/readme-screenshots.ts",
+    "readme:demo": "vhs .github/assets/demo.tape"
   },
   "devDependencies": {
     "@clack/prompts": "1.9.0",
     "@effect/platform-node": "4.1.4",
     "@effect/vitest": "4.1.4",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@fontsource/saira-semi-condensed": "5.3.0",
     "@types/node": "26.6.6",
     "effect": "4.1.4",
     "jsonc-parser": "3.3.1",
+    "opentype.js": "2.0.0",
     "oxlint": "1.94.0",
     "oxlint-tsgolint": "7.0.2007",
     "picocolors": "1.1.1",

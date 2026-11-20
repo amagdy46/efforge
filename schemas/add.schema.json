@@ -1,0 +1,309 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/create-efforge/schemas/add.schema.json",
+  "type": "object",
+  "properties": {
+    "efforge": {
+      "type": "string",
+      "description": "The CLI version that printed this."
+    },
+    "contract": {
+      "type": "number",
+      "enum": [
+        1
+      ],
+      "description": "The version of this contract. It changes only when a field is renamed, removed or changes meaning."
+    },
+    "ok": {
+      "type": "boolean",
+      "enum": [
+        true
+      ]
+    },
+    "dryRun": {
+      "type": "boolean"
+    },
+    "directory": {
+      "type": "string"
+    },
+    "stack": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "runtime": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "cloudflare"
+              ]
+            }
+          ]
+        },
+        "database": {
+          "type": "string",
+          "enum": [
+            "postgres",
+            "d1",
+            "none"
+          ]
+        },
+        "orm": {
+          "type": "string",
+          "enum": [
+            "drizzle",
+            "effect-sql",
+            "none"
+          ]
+        },
+        "auth": {
+          "type": "string",
+          "enum": [
+            "better-auth-orgs",
+            "better-auth",
+            "none"
+          ]
+        },
+        "infra": {
+          "type": "string",
+          "enum": [
+            "none",
+            "alchemy"
+          ]
+        },
+        "ai": {
+          "type": "string",
+          "enum": [
+            "none",
+            "effect-ai-byok"
+          ]
+        },
+        "extras": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "workflows",
+              "realtime",
+              "browser",
+              "storage",
+              "email",
+              "rpc",
+              "cluster"
+            ]
+          }
+        }
+      },
+      "required": [
+        "name",
+        "runtime",
+        "database",
+        "orm",
+        "auth",
+        "infra",
+        "ai",
+        "extras"
+      ],
+      "additionalProperties": true,
+      "description": "The stack after this run."
+    },
+    "added": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "docs": {
+            "type": "string",
+            "description": "Its page in efforge's docs."
+          },
+          "card": {
+            "type": "string",
+            "description": "Its dashboard card module, when the project has one."
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Headings of the AGENTS.md sections this run added for it."
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "skipped": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Ids already in the stack, and files already as efforge would write them."
+    },
+    "created": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "changed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Existing files that were changed."
+    },
+    "removed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "replacedScripts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "`<package.json>: <script>` entries an add-on replaced."
+    },
+    "packageManager": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The root packageManager, when this run raised it so pnpm honours the Effect overrides (0.2.0 projects); else null."
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Things left to do by hand, one line each."
+    },
+    "installed": {
+      "type": "boolean",
+      "description": "pnpm install ran in this run."
+    },
+    "env": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string",
+            "description": "Where the local value is read from (.dev.vars, or .env with Alchemy)."
+          },
+          "set": {
+            "type": "boolean",
+            "description": "efforge already wrote a working local value; false means fill it in."
+          },
+          "secret": {
+            "type": "boolean",
+            "description": "The value is a secret: the deployed one is never printed or committed."
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "file",
+          "set",
+          "secret"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "nextSteps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "A shell command."
+          },
+          "cwd": {
+            "type": "string",
+            "description": "The absolute directory to run it in."
+          },
+          "note": {
+            "type": "string"
+          },
+          "longRunning": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Runs until stopped (a dev server): start it in the background."
+          }
+        },
+        "required": [
+          "command",
+          "cwd"
+        ],
+        "additionalProperties": true,
+        "description": "One step still to run, in order."
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "efforge",
+    "contract",
+    "ok",
+    "dryRun",
+    "directory",
+    "stack",
+    "added",
+    "skipped",
+    "created",
+    "changed",
+    "removed",
+    "replacedScripts",
+    "packageManager",
+    "notes",
+    "installed",
+    "env",
+    "nextSteps",
+    "warnings"
+  ],
+  "additionalProperties": true,
+  "title": "efforge add --json"
+}

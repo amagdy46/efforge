@@ -86,13 +86,13 @@ it("ProjectName rejects bad names", () => {
 })
 
 it("toCommand omits defaults", () => {
-  expect(toCommand(withDefaults({ name: "a" }))).toBe("npm create efforge a -- --yes")
+  expect(toCommand(withDefaults({ name: "a" }))).toBe("npx -y create-efforge create a --yes")
 })
 
 it("toCommand includes non-defaults", () => {
   expect(
     toCommand(withDefaults({ name: "a", database: "none", extras: ["storage", "email"] })),
-  ).toBe("npm create efforge a -- --yes --database=none --extras=storage,email")
+  ).toBe("npx -y create-efforge create a --yes --database=none --extras=storage,email")
 })
 
 it("ProjectName rejects unscoped slash and empty, accepts scoped", () => {
@@ -102,10 +102,10 @@ it("ProjectName rejects unscoped slash and empty, accepts scoped", () => {
   expect(Option.isSome(dec("@scope/name"))).toBe(true)
 })
 
-it("d1, workflows, realtime and browser require cloudflare", () => {
+it("d1, workflows, realtime, browser and cluster require cloudflare", () => {
   const other = { runtime: "other" } as unknown as Parameters<typeof available>[1]
   expect(ids(available("database", other))).toEqual(["postgres", "none"])
-  expect(ids(available("extras", other))).toEqual(["storage", "email"])
+  expect(ids(available("extras", other))).toEqual(["storage", "email", "rpc"])
   const cf = { runtime: "cloudflare" } as const
   expect(ids(available("database", cf))).toContain("d1")
   expect(ids(available("extras", cf))).toEqual([
@@ -114,6 +114,8 @@ it("d1, workflows, realtime and browser require cloudflare", () => {
     "browser",
     "storage",
     "email",
+    "rpc",
+    "cluster",
   ])
 })
 
@@ -144,7 +146,7 @@ it("toCommand output round-trips through withDefaults", () => {
   ]
   for (const c of cfgs) {
     const flags = Object.fromEntries(
-      (toCommand(c).split(" -- ")[1] ?? "")
+      toCommand(c)
         .split(" ")
         .filter((f) => f.includes("="))
         .map((f) => f.slice(2).split("=") as [string, string]),

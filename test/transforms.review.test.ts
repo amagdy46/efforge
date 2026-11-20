@@ -31,9 +31,12 @@ it("addLayer: wrapped args with comments", async () => {
   expect(t2.get(F)).toContain("Db")
 })
 
-it("addLayer: pipe-wrapped mergeAll fails clearly", async () => {
-  const src = `export const AppLayer = Layer.mergeAll(A, B).pipe(Layer.provide(X))\n`
-  const e = await fail(new Map([[F, src]]), addLayer)
+it("addLayer: appends inside a pipe-wrapped mergeAll (the telemetry slot), other shapes fail clearly", async () => {
+  const src = `export const AppLayer = Layer.mergeAll(A, B).pipe(Layer.provideMerge(T))\n`
+  const t = await once({ [F]: src }, addLayer)
+  expect(t.get(F)).toContain("Layer.mergeAll(A, B, Db).pipe(Layer.provideMerge(T))")
+  const other = `export const AppLayer = Layer.merge(A, B).pipe(Layer.provide(X))\n`
+  const e = await fail(new Map([[F, other]]), addLayer)
   expect(e).toBeInstanceOf(TransformAnchorMissing)
   expect(e.snippet).toContain("Db")
 })

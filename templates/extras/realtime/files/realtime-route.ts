@@ -6,6 +6,14 @@ import { runtime } from "./runtime"
 
 const pattern = /^\/ws\/rooms\/([^/]+)$/
 
+/**
+ * Checks an upgrade passes before it reaches the room; one that answers turns the socket away.
+ * On a stack with auth, efforge adds `requireSocketSession` (socket-session.ts), so a socket
+ * without a session is closed with 4401 "Not signed in"; without auth the list is empty and any
+ * client that can reach the app can join a room.
+ */
+const upgradeGuards: ReadonlyArray<WorkerRoute> = [/* efforge:upgrade-guards */]
+
 const decodeRoomId = (encoded: string) => {
   try {
     return decodeURIComponent(encoded)
@@ -24,6 +32,10 @@ export const realtimeRoute: WorkerRoute = async (request) => {
   const roomId = decodeRoomId(match[1])
   if (roomId === undefined || !isValidRoomId(roomId))
     return new Response("Invalid room id", { status: 400 })
+  const refused = (await Promise.all(upgradeGuards.map((guard) => guard(request)))).find(
+    (answer) => answer !== undefined,
+  )
+  if (refused !== undefined) return refused
   return runtime
     .runPromise(
       Effect.gen(function* () {

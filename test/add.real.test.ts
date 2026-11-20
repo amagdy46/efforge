@@ -60,6 +60,7 @@ const cases: Array<[string, Partial<StackConfig>]> = [
   ["browser", { extras: ["browser"] }],
   ["storage", { extras: ["storage"] }],
   ["email", { extras: ["email"] }],
+  ["rpc", { extras: ["rpc"] }],
   ["ai/effect-ai-byok", { ai: "effect-ai-byok" }],
   ["infra/alchemy", { infra: "alchemy" }],
 ]
@@ -83,9 +84,6 @@ for (const [id, change] of cases) {
     expect([...actual.keys()].toSorted()).toEqual([...expected.keys()].toSorted())
     for (const [file, content] of expected) {
       if (file === "efforge.jsonc") continue
-      // AGENTS.md sections are written once (marker per id), so wording that depends on infra
-      // keeps the text of the stack it was first generated for.
-      if (file === "AGENTS.md" && id === "infra/alchemy") continue
       expect(actual.get(file), file).toBe(content)
     }
 
@@ -131,4 +129,45 @@ it("add infra/alchemy after earlier adds: wrangler.jsonc they edited is not a us
   const { existsSync } = await import("node:fs")
   expect(existsSync(join(dir, "wrangler.jsonc"))).toBe(false)
   expect(existsSync(join(dir, "infra/alchemy.run.ts"))).toBe(true)
+})
+
+it("rpc on a project without a database, then a database and auth: the same project as created with all three", async () => {
+  const minimal = {
+    name: "app",
+    database: "none",
+    orm: "none",
+    auth: "none",
+    infra: "none",
+  } as const
+  await run(writeTree(dir, await generated(withDefaults({ ...minimal, extras: ["rpc"] }))))
+  await run(addAddons(dir, ["database/d1", "orm/effect-sql"], opts))
+  await run(addAddons(dir, ["auth/better-auth"], opts))
+  const expected = await generated(
+    withDefaults({
+      ...minimal,
+      database: "d1",
+      orm: "effect-sql",
+      auth: "better-auth",
+      extras: ["rpc"],
+    }),
+  )
+  const actual = snapshot(dir)
+  for (const file of [
+    "packages/core/src/rpc.ts",
+    "packages/core/src/rpc-handlers.ts",
+    "packages/core/src/rpc-session.ts",
+    "apps/web/src/server/rpc.ts",
+    "apps/web/src/lib/rpc-client.ts",
+    "apps/web/src/capabilities/rpc.tsx",
+    "packages/core/test/rpc.test.ts",
+    "packages/core/test/rpc-session.test.ts",
+    "AGENTS.md",
+  ])
+    expect(actual.get(file), file).toBe(expected.get(file))
+  // the layers are the same; their order is the order they were added in
+  const layers = (text = "") => [...text.matchAll(/^ {2}(\w+(?:\.\w+)*)[,(]/gm)].map((m) => m[1])
+  const byName = (a = "", b = "") => a.localeCompare(b)
+  expect(layers(actual.get("apps/web/src/server/layers.ts")).toSorted(byName)).toEqual(
+    layers(expected.get("apps/web/src/server/layers.ts")).toSorted(byName),
+  )
 })

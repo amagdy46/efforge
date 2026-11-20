@@ -7,6 +7,7 @@ import {
   TransformAnchorMissing,
   type TransformCall,
   UnknownTransform,
+  unguardedServerFns,
 } from "../src/transforms/index.ts"
 import type { Tree } from "../src/tree.ts"
 
@@ -355,6 +356,17 @@ it("addExport treats type-only re-exports as distinct from value re-exports", as
   expect(done.get("w.ts")).toBe('export * from "./room"\n')
 })
 
+it("addExport writes a re-export wider than 100 characters one name per line, as vp fmt does", async () => {
+  const names = "ClusterDurableQueue, ClusterEntity, ClusterSingleton, ClusterWorkflow"
+  const wide = await once({ "w.ts": "export default {}\n" }, exp(names, "./cluster/objects"))
+  const written =
+    'export default {}\nexport {\n  ClusterDurableQueue,\n  ClusterEntity,\n  ClusterSingleton,\n  ClusterWorkflow,\n} from "./cluster/objects"\n'
+  expect(wide.get("w.ts")).toBe(written)
+  expect((await once({ "w.ts": written }, exp(names, "./cluster/objects"))).get("w.ts")).toBe(
+    written,
+  )
+})
+
 it("addExport fails on a missing file", async () => {
   const e = await fail(new Map(), exp("Room", "./room", "nope.ts"))
   expect(e).toBeInstanceOf(TransformAnchorMissing)
@@ -384,6 +396,24 @@ it("addArrayItem keeps user formatting in multi-line arrays", async () => {
   const src = routesSrc("\n  mine,\n  other(),\n")
   const t = await once({ "r.ts": src }, arr())
   expect(t.get("r.ts")).toContain("  other(),\n  storageRoute,\n]")
+})
+
+it("addArrayItem with at: start puts the item first, after the marker, in either layout", async () => {
+  const one = await once(
+    { "r.ts": routesSrc("/* efforge:routes */ authRoute") },
+    arr("gate", { at: "start" }),
+  )
+  expect(one.get("r.ts")).toContain("[/* efforge:routes */ gate, authRoute]")
+  const multi = await once(
+    { "r.ts": routesSrc("\n  /* efforge:routes */ authRoute,\n  roomRoute,\n") },
+    arr("gate", { at: "start" }),
+  )
+  expect(multi.get("r.ts")).toContain(
+    "[\n  /* efforge:routes */ gate,\n  authRoute,\n  roomRoute,\n]",
+  )
+  // an empty list takes it as any other item; a second run changes nothing
+  const empty = await once({ "r.ts": routesSrc() }, arr("gate", { at: "start" }))
+  expect(empty.get("r.ts")).toContain("[/* efforge:routes */ gate]")
 })
 
 it("addArrayItem fails when the array is missing", async () => {
@@ -427,22 +457,47 @@ const section = (id: string, content: string): TransformCall => ({
   args: { id, content },
 })
 
-it("appendAgentsSection inserts before the footer, once per id, in order", async () => {
+it("appendAgentsSection inserts before the footer between markers, and rewrites its own section", async () => {
   const a = await once({ "AGENTS.md": AGENTS }, section("db", "## Database\nUse migrations.\n"))
   expect(a.get("AGENTS.md")).toBe(
-    "# Agents\n\nBody\n\n<!-- efforge:section:db -->\n\n## Database\nUse migrations.\n\n<!-- efforge:agents -->\n",
+    "# Agents\n\nBody\n\n<!-- efforge:section:db -->\n\n## Database\nUse migrations.\n\n<!-- /efforge:section:db -->\n\n<!-- efforge:agents -->\n",
   )
   const b = await once(Object.fromEntries(a), section("rt", "## Realtime"))
   expect(b.get("AGENTS.md")).toBe(
-    "# Agents\n\nBody\n\n<!-- efforge:section:db -->\n\n## Database\nUse migrations.\n\n<!-- efforge:section:rt -->\n\n## Realtime\n\n<!-- efforge:agents -->\n",
+    "# Agents\n\nBody\n\n<!-- efforge:section:db -->\n\n## Database\nUse migrations.\n\n<!-- /efforge:section:db -->\n\n<!-- efforge:section:rt -->\n\n## Realtime\n\n<!-- /efforge:section:rt -->\n\n<!-- efforge:agents -->\n",
   )
-  const c = await run(b, section("db", "## Changed"))
-  expect(c).toBe(b)
+  expect(await run(b, section("rt", "## Realtime"))).toBe(b)
+  const c = await once(Object.fromEntries(b), section("db", "## Changed"))
+  expect(c.get("AGENTS.md")).toBe(
+    (b.get("AGENTS.md") as string).replace("## Database\nUse migrations.", "## Changed"),
+  )
+})
+
+it("appendAgentsSection keeps the old format (no closing markers) and leaves broken markers alone", async () => {
+  const old =
+    "# Agents\n\n<!-- efforge:section:db -->\n\n## Database\n\nmine\n\n<!-- efforge:agents -->\n"
+  const t = await once({ "AGENTS.md": old }, section("rt", "## Realtime"))
+  expect(t.get("AGENTS.md")).toBe(
+    old.replace(
+      "<!-- efforge:agents -->",
+      "<!-- efforge:section:rt -->\n\n## Realtime\n\n<!-- efforge:agents -->",
+    ),
+  )
+  expect(await run(new Map([["AGENTS.md", old]]), section("db", "## Changed"))).toEqual(
+    new Map([["AGENTS.md", old]]),
+  )
+  const broken =
+    "# A\n\n<!-- efforge:section:db -->\nx\n<!-- /efforge:section:db -->\n<!-- /efforge:section:db -->\n"
+  expect(await run(new Map([["AGENTS.md", broken]]), section("rt", "## R"))).toEqual(
+    new Map([["AGENTS.md", broken]]),
+  )
 })
 
 it("appendAgentsSection appends when the footer is gone and fails without AGENTS.md", async () => {
   const t = await once({ "AGENTS.md": "# Agents\n" }, section("x", "## X"))
-  expect(t.get("AGENTS.md")).toBe("# Agents\n\n<!-- efforge:section:x -->\n\n## X\n")
+  expect(t.get("AGENTS.md")).toBe(
+    "# Agents\n\n<!-- efforge:section:x -->\n\n## X\n\n<!-- /efforge:section:x -->\n",
+  )
   const e = await fail(new Map(), section("x", "## X"))
   expect(e).toBeInstanceOf(TransformAnchorMissing)
 })
@@ -525,23 +580,64 @@ it("addServerFnMiddleware gates every server fn once and adds the import", async
   expect(text).toContain('import { requireSession } from "./rs"')
 })
 
-it("addServerFnMiddleware leaves an already gated server fn alone and reports missing anchors", async () => {
-  const gated = "export const a = createServerFn().middleware([mine]).handler(() => 1)\n"
-  const t = await once({ "f.ts": gated }, gate)
-  expect(t.get("f.ts")).not.toContain("requireSession]")
-  const e = await fail(new Map([["f.ts", "export const x = 1\n"]]), gate)
-  expect(e).toBeInstanceOf(TransformAnchorMissing)
+it("addServerFnMiddleware adds the middleware first to a chain's existing list, once", async () => {
+  const source = [
+    "export const a = createServerFn().middleware([timing]).handler(() => 1)",
+    "export const b = createServerFn().middleware([]).handler(() => 2)",
+    "export const c = createServerFn().middleware([requireSession, timing]).handler(() => 3)",
+    "",
+  ].join("\n")
+  const t = await once({ "f.ts": source }, gate)
+  expect(t.get("f.ts")).toBe(
+    [
+      'import { requireSession } from "./rs"',
+      "export const a = createServerFn().middleware([requireSession, timing]).handler(() => 1)",
+      "export const b = createServerFn().middleware([requireSession]).handler(() => 2)",
+      "export const c = createServerFn().middleware([requireSession, timing]).handler(() => 3)",
+      "",
+    ].join("\n"),
+  )
+  expect(unguardedServerFns("f.ts", t.get("f.ts") ?? "", "requireSession")).toEqual([])
 })
 
-// ---- addDevVar
-it("addDevVar creates .dev.vars, appends, and never overwrites", async () => {
-  const dv = (name: string, value: string): TransformCall => ({
-    name: "addDevVar",
-    args: { name, value },
-  })
-  const t1 = await once({}, dv("A", "1"))
-  expect(t1.get(".dev.vars")).toMatch(/^# Local development secrets[\s\S]*\nA=1\n$/)
-  const t2 = await run(t1, dv("B", "2"))
-  const t3 = await run(t2, dv("A", "other"))
-  expect(t3.get(".dev.vars")).toMatch(/A=1\nB=2\n$/)
+it("addServerFnMiddleware leaves a middleware it cannot edit, and unguardedServerFns names it", async () => {
+  const source = "export const send = createServerFn().middleware(shared).handler(() => 1)\n"
+  const t = await once({ "f.ts": source }, gate)
+  expect(t.get("f.ts")).toBe(source)
+  expect(unguardedServerFns("f.ts", source, "requireSession")).toEqual(["send"])
+})
+
+it("addServerFnMiddleware fails on a file without a server function, unless ifAny", async () => {
+  const e = await fail(new Map([["f.ts", "export const x = 1\n"]]), gate)
+  expect(e).toBeInstanceOf(TransformAnchorMissing)
+  const plain = new Map([["f.ts", "export const x = 1\n"]])
+  const t = await run(plain, { ...gate, args: { ...gate.args, ifAny: "true" } })
+  expect(t.get("f.ts")).toBe("export const x = 1\n")
+})
+
+it("addServerFnMiddleware puts a one-line chain one call per line, as the formatter would", async () => {
+  const source = `import { createServerFn } from "@tanstack/react-start"
+
+export const listNotes = createServerFn({ method: "GET" }).handler(() =>
+  runOutcome(Notes.use((notes) => notes.list)),
+)
+
+export const long = createServerFn({ method: "GET" }).handler(() =>
+  runOutcome(Notes.use((notes) => notes.list.filter((note) => note.title.startsWith("a")))),
+)
+`
+  const t = await once({ "f.ts": source }, gate)
+  expect(t.get("f.ts")).toBe(`import { createServerFn } from "@tanstack/react-start"
+import { requireSession } from "./rs"
+
+export const listNotes = createServerFn({ method: "GET" })
+  .middleware([requireSession])
+  .handler(() => runOutcome(Notes.use((notes) => notes.list)))
+
+export const long = createServerFn({ method: "GET" })
+  .middleware([requireSession])
+  .handler(() =>
+    runOutcome(Notes.use((notes) => notes.list.filter((note) => note.title.startsWith("a")))),
+  )
+`)
 })

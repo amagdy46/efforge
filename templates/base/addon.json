@@ -24,10 +24,6 @@
       "target": "packages/core/src/index.ts"
     },
     {
-      "path": "files/core/test/core.test.ts",
-      "target": "packages/core/test/core.test.ts"
-    },
-    {
       "path": "files/core/tsconfig.json",
       "target": "packages/core/tsconfig.json"
     },
@@ -60,12 +56,20 @@
       "target": "lint/effect-tests.js"
     },
     {
+      "path": "files/root/lint/efforge.js",
+      "target": "lint/efforge.js"
+    },
+    {
       "path": "files/web/components.json",
       "target": "apps/web/components.json"
     },
     {
       "path": "files/web/package.json",
       "target": "apps/web/package.json"
+    },
+    {
+      "path": "files/web/public/favicon.svg",
+      "target": "apps/web/public/favicon.svg"
     },
     {
       "path": "files/web/src/components/theme-provider.tsx",
@@ -108,10 +112,6 @@
       "target": "apps/web/src/components/ui/sonner.tsx"
     },
     {
-      "path": "files/web/src/components/widgets.tsx",
-      "target": "apps/web/src/components/widgets.tsx"
-    },
-    {
       "path": "files/web/src/lib/utils.ts",
       "target": "apps/web/src/lib/utils.ts"
     },
@@ -140,10 +140,6 @@
       "target": "apps/web/src/routes/index.tsx"
     },
     {
-      "path": "files/web/src/server/greeting.ts",
-      "target": "apps/web/src/server/greeting.ts"
-    },
-    {
       "path": "files/web/src/server/layers.ts",
       "target": "apps/web/src/server/layers.ts"
     },
@@ -162,8 +158,137 @@
     {
       "path": "files/web/vite.config.ts",
       "target": "apps/web/vite.config.ts"
+    },
+    {
+      "path": "files/nvmrc",
+      "target": ".nvmrc"
+    },
+    {
+      "path": "files/core/src/greeting.ts",
+      "target": "packages/core/src/greeting.ts"
+    },
+    {
+      "path": "files/core/src/server-only.ts",
+      "target": "packages/core/src/server-only.ts"
+    },
+    {
+      "path": "files/core/test/greeting.test.ts",
+      "target": "packages/core/test/greeting.test.ts"
+    },
+    {
+      "path": "files/web/src/components/demo.tsx",
+      "target": "apps/web/src/components/demo.tsx"
+    },
+    {
+      "path": "files/web/src/components/code-block.tsx",
+      "target": "apps/web/src/components/code-block.tsx"
+    },
+    {
+      "path": "files/web/src/components/capability-card.tsx",
+      "target": "apps/web/src/components/capability-card.tsx"
+    },
+    {
+      "path": "files/web/src/components/layer-graph.tsx",
+      "target": "apps/web/src/components/layer-graph.tsx"
+    },
+    {
+      "path": "files/web/src/components/app-shell.tsx",
+      "target": "apps/web/src/components/app-shell.tsx"
+    },
+    {
+      "path": "files/web/src/lib/project.ts",
+      "target": "apps/web/src/lib/project.ts"
+    },
+    {
+      "path": "files/web/src/lib/highlight.ts",
+      "target": "apps/web/src/lib/highlight.ts"
+    },
+    {
+      "path": "files/web/src/lib/stack.ts",
+      "target": "apps/web/src/lib/stack.ts"
+    },
+    {
+      "path": "files/web/src/lib/use-server-call.ts",
+      "target": "apps/web/src/lib/use-server-call.ts"
+    },
+    {
+      "path": "files/web/src/lib/use-stack.ts",
+      "target": "apps/web/src/lib/use-stack.ts"
+    },
+    {
+      "path": "files/web/src/lib/layer-graph.ts",
+      "target": "apps/web/src/lib/layer-graph.ts"
+    },
+    {
+      "path": "files/web/src/server/outcome.ts",
+      "target": "apps/web/src/server/outcome.ts"
+    },
+    {
+      "path": "files/web/src/server/name-call.ts",
+      "target": "apps/web/src/server/name-call.ts"
+    },
+    {
+      "path": "files/web/src/server/owner.ts",
+      "target": "apps/web/src/server/owner.ts"
+    },
+    {
+      "path": "files/web/src/server/stack.ts",
+      "target": "apps/web/src/server/stack.ts"
+    },
+    {
+      "path": "files/web/src/capabilities/types.ts",
+      "target": "apps/web/src/capabilities/types.ts"
+    },
+    {
+      "path": "files/web/src/capabilities/registry.ts",
+      "target": "apps/web/src/capabilities/registry.ts"
+    },
+    {
+      "path": "files/web/src/server/manifest.ts",
+      "target": "apps/web/src/server/manifest.ts"
+    },
+    {
+      "path": "files/web/src/server/settings.ts",
+      "target": "apps/web/src/server/settings.ts"
+    },
+    {
+      "path": "files/web/src/components/error-page.tsx",
+      "target": "apps/web/src/components/error-page.tsx"
+    },
+    {
+      "path": "files/web/src/start.ts",
+      "target": "apps/web/src/start.ts"
+    },
+    {
+      "path": "files/web/src/lib/failure.ts",
+      "target": "apps/web/src/lib/failure.ts"
+    },
+    {
+      "path": "files/web/src/lib/outcome.ts",
+      "target": "apps/web/src/lib/outcome.ts"
+    },
+    {
+      "path": "files/web/regions.ts",
+      "target": "apps/web/regions.ts"
+    },
+    {
+      "path": "files/web/src/regions.d.ts",
+      "target": "apps/web/src/regions.d.ts"
     }
   ],
+  "card": {
+    "export": "runtime",
+    "files": [
+      {
+        "path": "files/web/src/capabilities/runtime.tsx",
+        "target": "apps/web/src/capabilities/runtime.tsx"
+      },
+      {
+        "path": "files/web/src/server/greeting.ts",
+        "target": "apps/web/src/server/greeting.ts"
+      }
+    ]
+  },
   "dependencies": {
     "apps/web": [
       "@tanstack/react-router",

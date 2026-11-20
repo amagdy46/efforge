@@ -3,50 +3,105 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * The default theme is efforge's palette: Paper and Iron, Blued steel for actions, and the
+ * tempering colours (Straw, Bronze, Temper purple, Blued steel, then five more) for the layer graph. Change the
+ * values here to make it yours; every component reads these tokens.
+ */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --radius: 0.5rem;
+  --background: #f6f5f1;
+  --foreground: #1c1d20;
+  --card: #fcfbf8;
+  --card-foreground: #1c1d20;
+  --popover: #fcfbf8;
+  --popover-foreground: #1c1d20;
+  --primary: #2f5aa8;
+  --primary-foreground: #f6f5f1;
+  --secondary: #ecebe5;
+  --secondary-foreground: #1c1d20;
+  --muted: #ecebe5;
+  --muted-foreground: #5d6066;
+  --accent: #e7e5de;
+  --accent-foreground: #1c1d20;
+  --destructive: #b8322a;
+  --border: #dcd9d1;
+  --input: #d3d0c7;
+  --ring: #2f5aa8;
+
+  /* code */
+  --code: #efede7;
+  --code-foreground: #1c1d20;
+  --code-comment: #62656b;
+  --code-keyword: #6c4e96;
+  --code-string: #8a5430;
+  --code-function: #2f5aa8;
+  --code-number: #8a5430;
+  --code-punctuation: #5d6066;
+
+  /* tempering colours, one per layer, always in this order */
+  --temper-1: #9a8c33;
+  --temper-2: #a8683a;
+  --temper-3: #774990;
+  --temper-4: #2f5aa8;
+  --temper-5: #3496b4;
+  --temper-6: #b38323;
+  --temper-7: #8a4f6e;
+  --temper-8: #6b7078;
+  --temper-9: #3d7f73;
+  --temper-10: #5045b8;
+  --temper-11: #5e7a2a;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --background: #1c1d20;
+  --foreground: #f6f5f1;
+  --card: #222327;
+  --card-foreground: #f6f5f1;
+  --popover: #222327;
+  --popover-foreground: #f6f5f1;
+  --primary: #7da2e3;
+  --primary-foreground: #1c1d20;
+  --secondary: #2a2c31;
+  --secondary-foreground: #f6f5f1;
+  --muted: #2a2c31;
+  --muted-foreground: #a3a7ae;
+  --accent: #2e3036;
+  --accent-foreground: #f6f5f1;
+  --destructive: #e8786e;
+  --border: #33363c;
+  --input: #3a3d44;
+  --ring: #7da2e3;
+
+  --code: #17181b;
+  --code-foreground: #f6f5f1;
+  --code-comment: #9ca0a8;
+  --code-keyword: #ad8fdb;
+  --code-string: #e2c275;
+  --code-function: #7da2e3;
+  --code-number: #e0a577;
+  --code-punctuation: #a3a7ae;
+
+  --temper-1: #e2c275;
+  --temper-2: #c98a58;
+  --temper-3: #bc8bd5;
+  --temper-4: #7da2e3;
+  --temper-5: #a9c9e6;
+  --temper-6: #bf8d2e;
+  --temper-7: #c58aa8;
+  --temper-8: #a3a7ae;
+  --temper-9: #7fbfb2;
+  --temper-10: #8574e6;
+  --temper-11: #a9c774;
 }
 
 @theme inline {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Inter", "Adwaita Sans", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", "Fira Code", "Adwaita Mono", Menlo,
+    Consolas, "DejaVu Sans Mono", monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -69,13 +124,58 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-code: var(--code);
+  --color-code-foreground: var(--code-foreground);
+  --color-temper-1: var(--temper-1);
+  --color-temper-2: var(--temper-2);
+  --color-temper-3: var(--temper-3);
+  --color-temper-4: var(--temper-4);
+  --color-temper-5: var(--temper-5);
+  --color-temper-6: var(--temper-6);
+  --color-temper-7: var(--temper-7);
+  --color-temper-8: var(--temper-8);
+  --color-temper-9: var(--temper-9);
+  --color-temper-10: var(--temper-10);
+  --color-temper-11: var(--temper-11);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    @apply antialiased;
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+}
+
+/* syntax colours for <CodeBlock>, set by lib/highlight.ts */
+@layer components {
+  .tok-comment {
+    color: var(--code-comment);
+    font-style: italic;
+  }
+  .tok-keyword {
+    color: var(--code-keyword);
+  }
+  .tok-string {
+    color: var(--code-string);
+  }
+  .tok-function {
+    color: var(--code-function);
+  }
+  .tok-number {
+    color: var(--code-number);
+  }
+  .tok-type {
+    font-weight: 600;
+  }
+  .tok-punctuation {
+    color: var(--code-punctuation);
   }
 }

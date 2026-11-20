@@ -1,4 +1,6 @@
 import { Effect, FileSystem, Path, Schema } from "effect"
+import { CARDS_DIR, needsGuard, SERVER_DIR, sessionGuard } from "./cards.ts"
+import { transformTargets } from "./transforms/index.ts"
 import { slots } from "./slots.ts"
 import { SlotId, type StackConfig } from "./stack.ts"
 
@@ -21,7 +23,54 @@ export const AddonFile = Schema.Struct({
   /** relative to the project root */
   target: Schema.String,
   when: Schema.optionalKey(When),
+  /**
+   * Written only where the project has no such file: a base file the add-on needs that an older
+   * project lacks. The add-on never replaces it, so it never conflicts with the user's edits.
+   */
+  ifAbsent: Schema.optionalKey(Schema.Boolean),
 })
+export type AddonFile = typeof AddonFile.Type
+
+export const AddonTransform = Schema.Struct({
+  name: Schema.String,
+  args: Schema.Record(Schema.String, Schema.String),
+  when: Schema.optionalKey(When),
+})
+export type AddonTransform = typeof AddonTransform.Type
+
+/**
+ * The add-on's capability card on the dashboard (docs/capability-cards.md). `files[0]` is the card
+ * module, under apps/web/src/capabilities/, and exports `export` (a `Capability`); a later file with
+ * the same target and its own `when` is a variant of it for other stacks; the other files
+ * are what only the card uses (its server functions, under apps/web/src/server/). `transforms`
+ * edit only those files. The files, the transforms, the session guard efforge adds to the server
+ * functions on auth stacks and the registration in apps/web/src/capabilities/registry.ts are one
+ * unit: written together, or (in a project without a registry) skipped together.
+ */
+export const AddonCard = Schema.Struct({
+  export: Schema.String.check(Schema.isPattern(/^[A-Za-z_$][\w$]*$/)),
+  files: Schema.Array(AddonFile).check(Schema.isMinLength(1)),
+  transforms: Schema.optionalKey(Schema.Array(AddonTransform)),
+})
+export type AddonCard = typeof AddonCard.Type
+
+/**
+ * Prose for the add-on's page in docs/addons (`pnpm docs:addons`). Everything else on the page
+ * comes from the rest of the manifest; this holds only what the manifest cannot say.
+ */
+export const AddonGuide = Schema.Struct({
+  /** What the add-on is for, in a short paragraph. */
+  purpose: Schema.String,
+  /** The service it adds: class name, the project file that declares it, its tagged errors. */
+  service: Schema.optionalKey(
+    Schema.Struct({ name: Schema.String, file: Schema.String, errors: Strings }),
+  ),
+  /** Anything to know before swapping the layer, beyond the standard steps. */
+  swap: Schema.optionalKey(Schema.String),
+  /** Known gaps, one sentence each. */
+  limits: Schema.optionalKey(Strings),
+})
+export type AddonGuide = typeof AddonGuide.Type
 
 /** workspace package dir (e.g. `apps/web`) -> package names; versions come from `versions.ts`. */
 const PackagesByDir = Schema.Record(Schema.String, Strings)
@@ -32,6 +81,7 @@ export const AddonManifest = Schema.Struct({
   description: Schema.String,
   docs: Schema.optionalKey(Schema.String),
   files: Schema.Array(AddonFile),
+  card: Schema.optionalKey(AddonCard),
   dependencies: PackagesByDir,
   devDependencies: PackagesByDir,
   /** workspace package dir (`.` for the root) -> script name -> command; an add-on's script replaces one of the same name */
@@ -41,20 +91,27 @@ export const AddonManifest = Schema.Struct({
   envVars: Schema.Array(
     Schema.Struct({
       name: Schema.String,
+      /** A production-style example, for the docs. */
       example: Schema.String,
+      /**
+       * Its value is a secret (a key, a password, a signing secret): the deployed value is set
+       * with `wrangler secret put` or the deploy env, and is never printed or committed.
+       */
+      secret: Schema.optionalKey(Schema.Boolean),
+      /**
+       * The value that works for local development, written to `.env.example` and to the local
+       * settings file (`.dev.vars`, `.env` with Alchemy). Absent: there is none, so it is written
+       * empty for the user to fill in.
+       */
+      dev: Schema.optionalKey(Schema.String),
       description: Schema.String,
       when: Schema.optionalKey(When),
     }),
   ),
   requires: Strings,
   conflicts: Strings,
-  transforms: Schema.Array(
-    Schema.Struct({
-      name: Schema.String,
-      args: Schema.Record(Schema.String, Schema.String),
-      when: Schema.optionalKey(When),
-    }),
-  ),
+  guide: Schema.optionalKey(AddonGuide),
+  transforms: Schema.Array(AddonTransform),
 })
 export type AddonManifest = typeof AddonManifest.Type
 
@@ -72,6 +129,7 @@ export class AddonLoadError extends Schema.TaggedError<AddonLoadError>()("AddonL
     "missing-file",
     "unknown-reference",
     "no-base",
+    "invalid-card",
   ]),
   message: Schema.String,
 }) {}
@@ -130,15 +188,73 @@ export const loadAddons = (
       for (const ref of [...manifest.requires, ...manifest.conflicts])
         if (!addons.has(ref))
           return yield* fail(manifest.id, "unknown-reference", `references unknown add-on "${ref}"`)
-      for (const f of manifest.files)
+      const card = manifest.card
+      for (const f of [...manifest.files, ...(card?.files ?? [])])
         if (!(yield* io(manifest.id, fs.exists(path.join(dir, f.path)))))
           return yield* fail(
             manifest.id,
             "missing-file",
             `file "${f.path}" does not exist in ${dir}`,
           )
+      if (card !== undefined) {
+        const message = yield* cardProblem(card, (f) =>
+          io(manifest.id, fs.readFileString(path.join(dir, f.path))),
+        )
+        if (message !== undefined) return yield* fail(manifest.id, "invalid-card", message)
+      }
+      // every server function an add-on writes requires a session on auth stacks, wherever the
+      // add-on lists its file: the guard is derived here, so an add-on never has to declare it
+      const guarded = new Set(
+        manifest.transforms
+          .filter((t) => t.name === "addServerFnMiddleware")
+          .map((t) => t.args.file),
+      )
+      const guards: AddonTransform[] = []
+      for (const f of manifest.files)
+        if (
+          !guarded.has(f.target) &&
+          needsGuard(f.target, yield* io(manifest.id, fs.readFileString(path.join(dir, f.path))))
+        ) {
+          guarded.add(f.target)
+          guards.push(sessionGuard(f))
+        }
+      if (guards.length > 0)
+        addons.set(manifest.id, {
+          manifest: { ...manifest, transforms: [...manifest.transforms, ...guards] },
+          dir,
+        })
     }
     return addons
+  })
+
+/**
+ * Why `card` breaks the contract in docs/capability-cards.md, or undefined. The module comes first
+ * and lives under apps/web/src/capabilities/; server functions (`createServerFn`) live only in the
+ * card's files under apps/web/src/server/, so efforge can guard every one of them on auth stacks;
+ * and the card's transforms edit only the card's own files.
+ */
+const cardProblem = <E>(
+  card: AddonCard,
+  read: (file: AddonFile) => Effect.Effect<string, E>,
+): Effect.Effect<string | undefined, E> =>
+  Effect.gen(function* () {
+    const module = card.files[0] as AddonFile
+    if (!module.target.startsWith(CARDS_DIR))
+      return `the card module (card.files[0]) must be under ${CARDS_DIR}`
+    for (const f of card.files) {
+      const serverFns = /\bcreateServerFn\s*\(/.test(yield* read(f))
+      const inServer = f.target !== module.target && f.target.startsWith(SERVER_DIR)
+      if (serverFns && !inServer)
+        return `${f.target} calls createServerFn: a card's server functions go in its own files under ${SERVER_DIR}, so efforge can guard them on auth stacks`
+      if (inServer && !serverFns)
+        return `${f.target} is a card file under ${SERVER_DIR} without a createServerFn: put helpers elsewhere`
+    }
+    const own = new Set(card.files.map((f) => f.target))
+    for (const t of card.transforms ?? [])
+      for (const file of transformTargets(t))
+        if (!own.has(file))
+          return `card transform ${t.name} edits ${file}, which is not one of the card's files: put it under transforms`
+    return undefined
   })
 
 /** `base`, then one id per slot whose value isn't `none`, then the extras, all in slot order (later overlays win). */

@@ -1,27 +1,102 @@
-import { Console, Effect, FileSystem, Path, Schema } from "effect"
+import { relative, resolve } from "node:path"
+import { Effect, Exit, FileSystem, Path, Schema } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import type { ChildProcessSpawner } from "effect/process"
 import { type ParseError, parse } from "jsonc-parser"
+import { sameJsonc } from "../structure.ts"
 import pc from "picocolors"
 import { parseDocument } from "yaml"
-import { type AddonLoadError, addonIdsFor, loadAddons } from "../addon.ts"
+import {
+  type AddonLoadError,
+  type AddonManifest,
+  addonIdsFor,
+  type LoadedAddon,
+  loadAddons,
+} from "../addon.ts"
+import {
+  CARDS_DIR,
+  cardModuleFor,
+  cardTransforms,
+  PUBLIC_LIST_FILE,
+  presentCardTransforms,
+  REGISTRY_FILE,
+  START_FILE,
+} from "../cards.ts"
+import {
+  cardSources,
+  GRAPH_REGION,
+  graphRegion,
+  LAYERS_FILE,
+  layerGraph,
+  parseLayers,
+  projectCards,
+} from "../graph.ts"
+import { type Failure, internal, Invocation, printSuccess, report } from "../contract.ts"
 import { unifiedDiff } from "../diff.ts"
-import { type CommandFailed, exec, has } from "../exec.ts"
-import { GenerateError, generate, isComputed, matches } from "../generate.ts"
+import { type CommandFailed, exec, has, INSTALL, INSTALL_ARGS } from "../exec.ts"
+import {
+  addonSuggestions,
+  alternative,
+  commandLine,
+  finish,
+  fix,
+  type Intent,
+  intentOf,
+  nearbyProject,
+  render,
+  withFlag,
+} from "../fix.ts"
+import { GenerateError, generate, isComputed, matches, rootScripts } from "../generate.ts"
+import { installOwed } from "../installed.ts"
+import { introLine } from "../intro.ts"
 import { EfforgeManifest, hash, renderManifest } from "../manifest.ts"
 import { applyProjectName } from "../projectName.ts"
+import {
+  fillReadme,
+  README_FILE,
+  readmeNote,
+  readmeRegions,
+  setupSteps,
+  type Step,
+} from "../readme.ts"
 import { generateRouteTree } from "../routeTree.ts"
 import { IncompatibleStack, validate } from "../rules.ts"
 import { type SlotDef, slots } from "../slots.ts"
 import { type StackConfig, toCommand } from "../stack.ts"
+import { AGENTS_FILE } from "../transforms/appendAgentsSection.ts"
+import { agentsNote, syncAgents } from "../agents.ts"
+import {
+  appendBlock,
+  assignments,
+  assigns,
+  assignsValue,
+  DEV_VARS,
+  ENV_EXAMPLE,
+  envGroups,
+  exampleHeader,
+  LOCAL_HEADER,
+  localEnvFile,
+  nameOf,
+  renderGroups,
+} from "../env.ts"
+import { migrateOwed } from "../migrations.ts"
+import { publicList, sessionNote, unguardedIn } from "../session-note.ts"
 import { WRANGLER_FILE } from "../transforms/addWranglerBinding.ts"
 import {
   runTransform,
+  unguardedServerFns,
   transformTargets,
   type TransformAnchorMissing,
   type UnknownTransform,
 } from "../transforms/index.ts"
-import { PromptIO, type PromptIOShape } from "../prompts/navigable.ts"
+import {
+  canPrompt,
+  cancelled,
+  type Choice,
+  GoBack,
+  PromptIO,
+  type PromptIOShape,
+} from "../prompts/navigable.ts"
 import {
   effectOverrides,
   effectVersion,
@@ -31,22 +106,38 @@ import {
   pnpmWildcardOverrides,
   versions,
 } from "../versions.ts"
-import { PnpmMissing, TemplatesDir } from "./create.ts"
+import { addFloor, tooOldToAdd } from "../history.ts"
+import { elapsed, type EnvVar, origins, PnpmMissing, TemplatesDir, whereIn } from "./create.ts"
 
 export class NotAnEfforgeProject extends Schema.TaggedError<NotAnEfforgeProject>()(
   "NotAnEfforgeProject",
   { dir: Schema.String, reason: Schema.String },
 ) {}
 
-/** An id that names no add-on (typo, removal via `none`, or ambiguous). */
+/** An id that names no add-on (a typo), or more than one (`auth`): `suggestions` are full ids. */
 export class UnknownAddon extends Schema.TaggedError<UnknownAddon>()("UnknownAddon", {
   id: Schema.String,
   message: Schema.String,
+  suggestions: Schema.Array(Schema.String),
+}) {}
+
+/** `ai/none` and friends: removing an add-on isn't supported yet. */
+export class RemoveNotSupported extends Schema.TaggedError<RemoveNotSupported>()(
+  "RemoveNotSupported",
+  { id: Schema.String },
+) {}
+
+/** A single-choice slot already holds another value; `add` only moves a slot from `none`. */
+export class SlotAlreadySet extends Schema.TaggedError<SlotAlreadySet>()("SlotAlreadySet", {
+  slot: Schema.String,
+  current: Schema.String,
+  value: Schema.String,
 }) {}
 
 /** A target file that exists, differs from what efforge generated, and `--overwrite` wasn't given. */
 export class OverlayConflict extends Schema.TaggedError<OverlayConflict>()("OverlayConflict", {
   file: Schema.String,
+  files: Schema.Array(Schema.String),
   diff: Schema.String,
 }) {}
 
@@ -69,33 +160,37 @@ export interface AddResult {
   /** Generated files the add-on replaces (e.g. wrangler.jsonc for infra/alchemy). */
   readonly removed: string[]
   /** Add-ons this run added, for the summary and next steps. */
-  readonly added: ReadonlyArray<{
-    readonly id: string
-    readonly title: string
-    readonly docs?: string
-  }>
-  /** Env vars this run added to `.env.example`. */
-  readonly envVars: ReadonlyArray<{ readonly name: string; readonly description: string }>
+  readonly added: ReadonlyArray<AddedAddon>
+  /** Env vars this run added to `.env.example`, and where their local values live. */
+  readonly envVars: ReadonlyArray<EnvVar>
   /** `<package.json>: <script>` entries whose existing command an add-on replaced. */
   readonly replacedScripts: string[]
+  /** The project's stack after this run. */
+  readonly stack: StackConfig
   /** The root `packageManager`, when this run raised it so pnpm honours the Effect overrides. */
   readonly packageManager: { readonly from: string; readonly to: string } | null
   /** Things left for you to do by hand, one line each. */
   readonly notes: string[]
 }
 
-/**
- * `add` has just changed dependencies, so the lockfile must be rewritten. With `CI` set (CI, and many
- * agent sandboxes) pnpm installs with a frozen lockfile by default and fails with OUTDATED_LOCKFILE.
- */
-const INSTALL_ARGS = ["install", "--no-frozen-lockfile"]
-
-const DASHBOARD = "apps/web/src/routes/app/index.tsx"
-const WIDGETS = "apps/web/src/components/widgets.tsx"
+/** An add-on this run added, and where to read about it. */
+export interface AddedAddon {
+  readonly id: string
+  readonly title: string
+  /** Its page in efforge's docs. */
+  readonly docs?: string
+  /** Its dashboard card module, when the project has it. */
+  readonly card?: string
+  /** Headings of the AGENTS.md sections this run added for it. */
+  readonly agents?: ReadonlyArray<string>
+}
 
 export type AddError =
   | NotAnEfforgeProject
+  | UpgradeFirst
   | UnknownAddon
+  | RemoveNotSupported
+  | SlotAlreadySet
   | IncompatibleStack
   | OverlayConflict
   | TransformAnchorMissing
@@ -104,116 +199,110 @@ export type AddError =
   | AddonLoadError
   | CommandFailed
 
-const incompatible = (
-  slot: IncompatibleStack["slot"],
-  value: string,
-  allowed: string[],
-  reason: string,
-) => new IncompatibleStack({ slot, value, allowed, reason })
-
 const allIds = slots.flatMap((s) =>
   s.options.filter((o) => o.id !== "none").map((o) => `${s.id}/${o.id}`),
 )
 
-/** Edit distance, for "did you mean". */
-const distance = (a: string, b: string): number => {
-  const row = Array.from({ length: b.length + 1 }, (_, i) => i)
-  for (let i = 1; i <= a.length; i++) {
-    let prev = row[0] as number
-    row[0] = i
-    for (let j = 1; j <= b.length; j++) {
-      const tmp = row[j] as number
-      row[j] = Math.min(
-        (row[j] as number) + 1,
-        (row[j - 1] as number) + 1,
-        prev + (a[i - 1] === b[j - 1] ? 0 : 1),
-      )
-      prev = tmp
-    }
-  }
-  return row[b.length] as number
-}
+const combinations = <A>(xs: ReadonlyArray<A>, k: number): A[][] =>
+  k === 0
+    ? [[]]
+    : xs.flatMap((x, i) => combinations(xs.slice(i + 1), k - 1).map((rest) => [x].concat(rest)))
 
-const suggest = (id: string): string | undefined => {
-  // a slot name or a fragment ("ai", "auth", "better") before edit distance, which favours short ids
-  const partial = allIds.filter((full) => full.split("/").some((part) => part.startsWith(id)))
-  if (partial.length > 0) return partial.join(", ")
-  const best = allIds
-    .flatMap((full) => [full, full.split("/")[1] as string])
-    .map((c) => [c, distance(id, c)] as const)
-    .toSorted((a, b) => a[1] - b[1])[0]
-  return best !== undefined && best[1] <= 3 ? best[0] : undefined
-}
+const product = <A>(lists: ReadonlyArray<ReadonlyArray<A>>): A[][] =>
+  lists.reduce<A[][]>((acc, list) => acc.flatMap((xs) => list.map((x) => [...xs, x])), [[]])
 
-/** Same JSONC data and comments, ignoring formatting, key order and array order (earlier `add`s reorder bindings). */
-const sameJsonc = (a: string, b: string | undefined): boolean => {
-  if (b === undefined) return false
-  const canon = (v: unknown): unknown =>
-    Array.isArray(v)
-      ? v.map(canon).toSorted((x, y) => byName(JSON.stringify(x), JSON.stringify(y)))
-      : v !== null && typeof v === "object"
-        ? Object.fromEntries(
-            Object.entries(v as Record<string, unknown>)
-              .toSorted(([x], [y]) => byName(x, y))
-              .map(([k, x]) => [k, canon(x)]),
-          )
-        : v
-  const read = (t: string) => {
-    const errors: ParseError[] = []
-    const v = parse(t, errors, { allowTrailingComma: true }) as unknown
-    return errors.length > 0 ? undefined : JSON.stringify(canon(v))
+/**
+ * The smallest sets of ids that make `stack` valid when added with the caller's: each fills a
+ * slot that is `none` and that the caller didn't name. Every set found is one way out; choosing
+ * between them (D1 or Postgres, Drizzle or Effect SQL) is the caller's, since a slot can't be
+ * swapped later.
+ */
+export const waysOut = (stack: StackConfig, named: ReadonlySet<string>): string[][] => {
+  const open = slots.filter(
+    (s) => !s.multi && s.options.length > 1 && stack[s.id] === "none" && !named.has(s.id),
+  )
+  for (let k = 1; k <= 2; k++) {
+    const found: string[][] = []
+    for (const combo of combinations(open, k))
+      for (const choice of product(
+        combo.map((s) => s.options.filter((o) => o.id !== "none").map((o) => [s.id, o.id])),
+      )) {
+        const next = { ...stack, ...Object.fromEntries(choice) } as StackConfig
+        if (Exit.isSuccess(Effect.runSyncExit(validate(next))))
+          found.push(choice.map(([slot, option]) => `${slot}/${option}`))
+      }
+    if (found.length > 0) return found
   }
-  // comments are user content too, and the parser drops them
-  const comments = (t: string) =>
-    (t.match(/\/\/.*$|\/\*[\s\S]*?\*\//gm) ?? [])
-      .map((c) => c.trim())
-      .toSorted()
-      .join("\n")
-  const x = read(a)
-  return x !== undefined && x === read(b) && comments(a) === comments(b)
+  return []
 }
 
 const isNewPackageJson = (target: string) => target.endsWith("/package.json")
 
 const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
-/** `email`, `extras/email`, `ai/effect-ai-byok`, `ai=effect-ai-byok` -> slot + option. */
-const parseId = (raw: string): Effect.Effect<{ slot: SlotDef; option: string }, UnknownAddon> => {
+/** The web app's sources, where a project's own server functions are. */
+const WEB_SRC = "apps/web/src/"
+
+/** `email`, `extras/email`, `ai/effect-ai-byok`, `ai=effect-ai-byok`, `ai` (a slot with one option) -> slot + option. */
+export const parseId = (
+  raw: string,
+): Effect.Effect<{ slot: SlotDef; option: string }, UnknownAddon | RemoveNotSupported> => {
   const id = raw.trim().toLowerCase()
   const [slotPart, option = ""] = id.includes("=")
     ? id.split("=", 2)
     : id.includes("/")
       ? id.split("/", 2)
       : [undefined, id]
-  const unknown = (message: string) => Effect.fail(new UnknownAddon({ id: raw, message }))
-  if (option === "none") return unknown(`Removing an add-on isn't supported yet ("${raw}").`)
+  if (option === "none") return Effect.fail(new RemoveNotSupported({ id: raw }))
+  // a bare slot name with exactly one add-on to add: `ai`, `infra`
+  if (slotPart === undefined) {
+    const named = slots.find((s) => s.id === option)
+    const choices = named?.options.filter((o) => o.id !== "none") ?? []
+    if (named !== undefined && choices.length === 1 && named.options.length > 1)
+      return Effect.succeed({ slot: named, option: (choices[0] as { id: string }).id })
+  }
   const candidates = slots.filter(
     (s) => (slotPart === undefined || s.id === slotPart) && s.options.some((o) => o.id === option),
   )
   const [first] = candidates
   if (first === undefined) {
-    const guess = suggest(id)
-    return unknown(
-      `"${raw}" is not an add-on.${guess === undefined ? "" : ` Did you mean ${guess}?`} Run efforge list to see them all.`,
+    const suggestions = addonSuggestions(id)
+    return Effect.fail(
+      new UnknownAddon({
+        id: raw,
+        suggestions,
+        message: `"${raw}" is not an add-on.${suggestions.length === 0 ? "" : ` Did you mean ${suggestions.join(" or ")}?`}`,
+      }),
     )
   }
-  if (candidates.length > 1)
-    return unknown(
-      `"${id}" is ambiguous; write it as ${candidates.map((s) => `${s.id}/${id}`).join(" or ")}.`,
+  if (candidates.length > 1) {
+    const suggestions = candidates.map((s) => `${s.id}/${option}`)
+    return Effect.fail(
+      new UnknownAddon({
+        id: raw,
+        suggestions,
+        message: `"${raw}" is ambiguous; write it as ${suggestions.join(" or ")}.`,
+      }),
     )
+  }
   return Effect.succeed({ slot: first, option })
 }
 
 /** Applies `ids` to `stack`. Single-select slots may only go from `none` to a value. */
-const applyIds = (
+export const applyIds = (
   stack: StackConfig,
   ids: ReadonlyArray<string>,
-): Effect.Effect<{ stack: StackConfig; skipped: string[] }, IncompatibleStack | UnknownAddon> =>
+): Effect.Effect<
+  { stack: StackConfig; skipped: string[] },
+  IncompatibleStack | UnknownAddon | RemoveNotSupported | SlotAlreadySet
+> =>
   Effect.gen(function* () {
     let next = stack
     const skipped: string[] = []
+    const named = new Set<string>()
     for (const id of ids) {
       const { slot, option } = yield* parseId(id)
+      named.add(slot.id)
       if (slot.id === "extras") {
         if (next.extras.includes(option as never)) skipped.push(`extras/${option}`)
         else {
@@ -228,36 +317,25 @@ const applyIds = (
       const current = next[slot.id]
       if (current === option) skipped.push(`${slot.id}/${option}`)
       else if (current === "none") next = { ...next, [slot.id]: option }
-      else
-        return yield* incompatible(
-          slot.id,
-          option,
-          [current],
-          `${slot.id} is already "${current}"; swapping an existing choice isn't supported yet. Create a new project to use a different ${slot.id}.`,
-        )
+      else return yield* new SlotAlreadySet({ slot: slot.id, current, value: option })
     }
     const valid = yield* validate(next).pipe(
       Effect.mapError((e) => {
-        // the stack rules hold across slots: say which ids to add together
-        const typed = ids.map((x) => x.trim().toLowerCase())
-        const hasOrm = typed.some(
-          (x) => x.startsWith("orm/") || x === "drizzle" || x === "effect-sql",
-        )
-        if (next.database === "none" && (e.slot === "orm" || e.slot === "auth"))
-          return incompatible(
-            e.slot,
-            e.value,
-            [...e.allowed],
-            `${e.slot === "auth" ? "auth" : "an ORM"} needs a database, and this project has none. Add one in the same command: efforge add database/d1 ${[...(hasOrm ? [] : ["orm/effect-sql"]), ...typed].join(" ")}`,
-          )
-        if (e.slot === "orm" && next.orm === "none")
-          return incompatible(
-            "database",
-            next.database,
-            [...e.allowed],
-            `a database needs an ORM. Add one with it: efforge add ${typed.join(" ")} orm/drizzle (or orm/effect-sql)`,
-          )
-        return e
+        // the stack rules hold across slots: say which ids could be added together
+        const ways = waysOut(next, named)
+        const reason =
+          next.database === "none" && (e.slot === "orm" || e.slot === "auth")
+            ? `${e.slot === "auth" ? "auth" : "an ORM"} needs a database, and this project has none. Add one in the same command (alternatives lists the ways)`
+            : e.slot === "orm" && next.orm === "none"
+              ? "a database needs an ORM. Add one in the same command (alternatives lists the ways)"
+              : e.reason
+        return new IncompatibleStack({
+          slot: e.slot,
+          value: e.value,
+          allowed: [...e.allowed],
+          ...(reason === undefined ? {} : { reason }),
+          ways,
+        })
       }),
     )
     return { stack: valid, skipped }
@@ -270,8 +348,9 @@ export const readManifest = (
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const fail = (reason: string) => new NotAnEfforgeProject({ dir, reason })
-    if (!(yield* fs.exists(dir).pipe(Effect.orElseSucceed(() => false))))
-      return yield* fail("the directory does not exist")
+    const info = yield* fs.stat(dir).pipe(Effect.orElseSucceed(() => undefined))
+    if (info === undefined) return yield* fail("the directory does not exist")
+    if (info.type !== "Directory") return yield* fail("not a directory")
     const text = yield* fs
       .readFileString(path.join(dir, "efforge.jsonc"))
       .pipe(Effect.mapError(() => fail("efforge.jsonc not found")))
@@ -322,6 +401,13 @@ export const addAddons = (
     const { stack, skipped: alreadyThere } = yield* applyIds(manifest.stack, ids)
     const before = new Set(addonIdsFor(manifest.stack))
     const newIds = addonIdsFor(stack).filter((id) => !before.has(id))
+    // add-ons are written against this CLI's release line; an older project upgrades first
+    if (tooOldToAdd(manifest.efforgeVersion))
+      return yield* new UpgradeFirst({
+        version: manifest.efforgeVersion,
+        needs: addFloor(),
+        addons: newIds,
+      })
     const addons = yield* loadAddons(templatesDir)
     const fresh = []
     // every add-on of the new stack, in generate order: new ones apply fully, existing ones only
@@ -346,13 +432,34 @@ export const addAddons = (
     const written = new Set<string>()
     const hashes: Record<string, string> = {}
 
+    // a project whose dashboard was removed (or is held back by upgrade) has no registry: its
+    // add-ons come without their card, and the card's transforms are skipped with it
+    const hasRegistry = (yield* read(REGISTRY_FILE)) !== undefined
+    const notes: string[] = []
+    const cardsSkipped: string[] = []
+    const demosSkipped: string[] = []
+    const cardFiles = (m: AddonManifest) => {
+      const files = (m.card?.files ?? []).filter((f) => switchedOn(m.id, f.when))
+      if (files.length > 0 && !hasRegistry) {
+        cardsSkipped.push(m.title)
+        demosSkipped.push(...files.slice(1).map((f) => f.target))
+      }
+      return hasRegistry ? files : []
+    }
+
     // 2. overlays: write if absent, replace if still what efforge generated, else conflict
     const overlays = new Map<string, string>()
     for (const { manifest: m, dir: addonDir } of scope)
-      for (const f of m.files) {
+      for (const f of [...m.files, ...cardFiles(m)]) {
         if (!switchedOn(m.id, f.when)) continue
         // package.json files are merged, not replaced: only a new workspace package's is created
         if (isComputed(f.target) && !(isNewPackageJson(f.target) && !(yield* read(f.target))))
+          continue
+        // a base file the add-on brings only to a project without it (one made before efforge had it)
+        if (
+          f.ifAbsent === true &&
+          (overlays.has(f.target) || (yield* read(f.target)) !== undefined)
+        )
           continue
         overlays.set(
           f.target,
@@ -396,9 +503,14 @@ export const addAddons = (
       if (!isComputed(target)) hashes[target] = hash(content)
       tree.set(target, content)
     }
+    if (cardsSkipped.length > 0)
+      notes.push(
+        `No dashboard card for ${cardsSkipped.join(", ")}: this project has no ${REGISTRY_FILE} (its dashboard was removed, or upgrade is holding it back). Each add-on's service, layer and tests are written; its card${demosSkipped.length > 0 ? ` and the card's server functions (${demosSkipped.join(", ")})` : ""} are not. Nothing else is needed: call the service from your own server functions.`,
+      )
     if (conflicts.length > 0)
       return yield* new OverlayConflict({
         file: conflicts.map((c) => c.file).join(", "),
+        files: conflicts.map((c) => c.file),
         diff: conflicts.map((c) => c.diff).join("\n"),
       })
 
@@ -420,13 +532,27 @@ export const addAddons = (
       else
         return yield* new OverlayConflict({
           file: WRANGLER_FILE,
+          files: [WRANGLER_FILE],
           diff: unifiedDiff(WRANGLER_FILE, existing, generated ?? ""),
         })
     }
 
-    // 3. transforms, against the current disk content of the seam files
+    // 3. transforms, against the current disk content of the seam files. A card's transforms
+    // apply where its files are: written by this run, or already on disk
+    const present = new Set<string>(tree.keys())
+    for (const { manifest: m } of scope)
+      for (const file of [
+        ...(m.card?.files ?? []).map((f) => f.target),
+        ...cardTransforms(m).flatMap(transformTargets),
+      ])
+        if (!present.has(file) && safe(file) && (yield* read(file)) !== undefined) present.add(file)
+    // AGENTS.md's sections are placed by syncAgents below, in the add-ons' order; the section
+    // transforms only run on a project without AGENTS.md, where they say what to add by hand
+    const hasAgents = (yield* read(AGENTS_FILE)) !== undefined
     const active = scope.flatMap(({ manifest: m }) =>
-      m.transforms.filter((t) => switchedOn(m.id, t.when)),
+      [...m.transforms, ...presentCardTransforms(m, (file) => present.has(file))].filter(
+        (t) => switchedOn(m.id, t.when) && !(hasAgents && t.name === "appendAgentsSection"),
+      ),
     )
     const wanted = new Set<string>()
     for (const t of active)
@@ -447,7 +573,20 @@ export const addAddons = (
     const seams = new Set<string>()
     for (const t of active) {
       const prev = current
-      current = yield* runTransform(prev, t)
+      // a transform with `ifMissing` is a hardening of a file the user may have from an older
+      // efforge: without its anchor, the add goes on and says what to change by hand
+      const ifMissing = t.args.ifMissing
+      if (ifMissing === undefined) current = yield* runTransform(prev, t)
+      else {
+        const ran = yield* runTransform(prev, t).pipe(
+          Effect.catchTag("TransformAnchorMissing", () => Effect.succeed(undefined)),
+        )
+        if (ran === undefined) {
+          notes.push(ifMissing)
+          continue
+        }
+        current = ran
+      }
       for (const [file, content] of current)
         if (prev.get(file) !== content) {
           seams.add(file)
@@ -455,26 +594,59 @@ export const addAddons = (
           else out.delete(file)
         }
     }
-    // 3b. dashboards from efforge 0.2.0 with a database or auth don't render the add-on widgets:
-    // replace one that is still what efforge generated, else say what to add
-    const notes: string[] = []
-    if (seams.has(WIDGETS)) {
-      const existing = yield* read(DASHBOARD)
-      if (existing !== undefined && !existing.includes("widgets") && !out.has(DASHBOARD)) {
-        const generated = (yield* generate(stack, addons)).get(DASHBOARD)
-        if (generated?.includes("{widgets}")) {
-          if (opts.overwrite || manifest.files[DASHBOARD] === hash(existing)) {
-            out.set(DASHBOARD, generated)
-            written.add(DASHBOARD)
-            hashes[DASHBOARD] = hash(generated)
-          } else
-            notes.push(
-              `${DASHBOARD} doesn't render the add-on widgets, so their demo won't show on /app. Add \`import { widgets } from "@/components/widgets"\` and put {widgets} in the page.`,
-            )
+    // AGENTS.md's sections follow the new stack: rewritten in order, stale ones dropped
+    if (newIds.length > 0) {
+      const agents = current.get(AGENTS_FILE) ?? (yield* read(AGENTS_FILE))
+      if (agents !== undefined) {
+        const synced = syncAgents(agents, stack, addons)
+        if (synced.kind === "malformed") notes.push(agentsNote(synced.problems))
+        else if (synced.text !== agents) {
+          seams.add(AGENTS_FILE)
+          if (synced.text !== disk.get(AGENTS_FILE)) out.set(AGENTS_FILE, synced.text)
+          else out.delete(AGENTS_FILE)
         }
       }
     }
-
+    // with sessionGate in start.ts, every server function requires a session at runtime
+    const gated = /\bsessionGate\b/.test(current.get(START_FILE) ?? (yield* read(START_FILE)) ?? "")
+    // a server function the guard could not reach (its `.middleware(...)` is not a written-out
+    // list) is named, with the fix; the project's own lint rule fails on it until then
+    const namedAlready = new Set<string>()
+    for (const t of active) {
+      if (t.name !== "addServerFnMiddleware" || t.args.file === undefined) continue
+      const text = current.get(t.args.file)
+      if (text === undefined) continue
+      const middleware = t.args.middleware ?? "requireSession"
+      for (const fn of unguardedServerFns(t.args.file, text, middleware)) {
+        namedAlready.add(`${t.args.file}#${fn}`)
+        notes.push(
+          `${fn} in ${t.args.file} has no ${middleware}: its .middleware(...) is not a list efforge can add to. Put ${middleware} first in it, as .middleware([${middleware}, ...]), and import it from "${t.args.from ?? "./require-session"}". ${gated ? "sessionGate still refuses a signed-out call at runtime, but" : "Until then it answers signed-out requests, and"} pnpm check fails on it (efforge/server-fn-session).`,
+        )
+      }
+    }
+    // auth added now: say what changed for server functions and routes, and name every server
+    // function pnpm check now fails on (the owner's own, exported or not, in a route file too)
+    if (gated && newIds.some((id) => id.startsWith("auth/"))) {
+      const names = yield* fs
+        .readDirectory(path.join(dir, WEB_SRC), { recursive: true })
+        .pipe(Effect.orElseSucceed(() => [] as string[]))
+      const files = new Set([
+        ...names.map((n) => `${WEB_SRC}${n.split(path.sep).join("/")}`),
+        ...[...current.keys()].filter((f) => f.startsWith(WEB_SRC)),
+      ])
+      const texts: Array<[string, string]> = []
+      for (const file of [...files].toSorted(byName)) {
+        if (!/\.tsx?$/.test(file)) continue
+        const text = current.get(file) ?? (yield* read(file))
+        if (text !== undefined) texts.push([file, text])
+      }
+      const list = publicList(current.get(PUBLIC_LIST_FILE) ?? (yield* read(PUBLIC_LIST_FILE)))
+      notes.push(
+        sessionNote(
+          unguardedIn(texts, list).filter((f) => !namedAlready.has(`${f.file}#${f.name}`)),
+        ),
+      )
+    }
     const transformed = new Set<string>()
     for (const file of seams) {
       // seam files are re-edited by transforms on every add, never hash-checked
@@ -619,24 +791,115 @@ export const addAddons = (
       }
     }
 
-    // 6. env vars
-    const envText = (yield* read(".env.example")) ?? ""
+    // 6. env vars: new ones go to .env.example and to the file `pnpm dev` reads (.dev.vars, or
+    // .env with Alchemy), with the values that work locally
+    const envText = (yield* read(ENV_EXAMPLE)) ?? ""
     const have = new Set(envText.split("\n").map((l) => l.split("=")[0]?.trim()))
-    const groups: string[] = []
-    const envVars: Array<{ name: string; description: string }> = []
-    for (const { manifest: m } of scope) {
-      const vars = m.envVars.filter((v) => switchedOn(m.id, v.when) && !have.has(v.name))
-      for (const v of vars) {
-        have.add(v.name)
-        envVars.push({ name: v.name, description: v.description })
-      }
-      if (vars.length > 0)
-        groups.push(`# ${m.title}\n${vars.map((v) => `${v.name}=${v.example}`).join("\n")}`)
+    const envFile = localEnvFile(stack)
+    const newEnv = envGroups(stack, addons)
+      .map((g) => ({
+        id: g.id,
+        title: g.title,
+        vars: g.vars.filter((v) => switchedOn(g.id, v.when) && !have.has(v.name)),
+      }))
+      .filter((g) => g.vars.length > 0)
+    if (newEnv.length > 0) {
+      const base = envText.replace(exampleHeader(manifest.stack), exampleHeader(stack))
+      out.set(
+        ENV_EXAMPLE,
+        appendBlock(base === "" ? exampleHeader(stack) : base, renderGroups(newEnv)),
+      )
+      written.add(ENV_EXAMPLE)
+    } else if (
+      stack.infra !== manifest.stack.infra &&
+      envText.includes(exampleHeader(manifest.stack))
+    ) {
+      out.set(ENV_EXAMPLE, envText.replace(exampleHeader(manifest.stack), exampleHeader(stack)))
+      written.add(ENV_EXAMPLE)
     }
-    if (groups.length > 0) {
-      const base = envText === "" || envText.endsWith("\n") ? envText : `${envText}\n`
-      out.set(".env.example", `${base}${base === "" ? "" : "\n"}${groups.join("\n\n")}\n`)
-      written.add(".env.example")
+    const localBefore = yield* read(envFile)
+    let local = localBefore ?? LOCAL_HEADER
+    // Alchemy reads .env: what .dev.vars held moves there, and .dev.vars goes
+    if (envFile !== DEV_VARS) {
+      const devVars = yield* read(DEV_VARS)
+      if (devVars !== undefined && localBefore === undefined) {
+        // .env doesn't exist yet: .dev.vars becomes it, as it is
+        local = devVars
+        removed.add(DEV_VARS)
+      } else if (devVars !== undefined) {
+        const moved = assignments(devVars).filter((l) => !assigns(local, nameOf(l)))
+        if (moved.length > 0)
+          local = appendBlock(
+            local,
+            `# From .dev.vars (efforge add ${newIds.join(" ")})\n${moved.join("\n")}`,
+          )
+        removed.add(DEV_VARS)
+      }
+    }
+    // a project without any local settings (a fresh clone) gets every setting, else the new ones
+    const toWrite = (local === LOCAL_HEADER ? envGroups(stack, addons) : newEnv)
+      .map((g) => ({
+        id: g.id,
+        title: g.title,
+        vars: g.vars.filter((v) => !assigns(local, v.name)),
+      }))
+      .filter((g) => g.vars.length > 0)
+    if (toWrite.length > 0) local = appendBlock(local, renderGroups(toWrite))
+    if (local !== (localBefore ?? LOCAL_HEADER)) {
+      out.set(envFile, local)
+      written.add(envFile)
+    }
+    const envVars: EnvVar[] = newEnv.flatMap((g) =>
+      g.vars.map((v) => ({
+        name: v.name,
+        description: v.description,
+        file: envFile,
+        set: v.dev !== undefined || assignsValue(local, v.name),
+        secret: v.secret === true,
+      })),
+    )
+
+    // 6b. the README's marked regions describe the new stack; a README without them is the user's
+    if (newIds.length > 0) {
+      const readme = out.get(README_FILE) ?? (yield* read(README_FILE))
+      if (readme !== undefined) {
+        // the layer graph, when the README has its region (`graph --write`), follows the layers
+        const layersText = out.get(LAYERS_FILE) ?? (yield* read(LAYERS_FILE))
+        const layers = layersText === undefined ? undefined : parseLayers(layersText)
+        const withGraph =
+          layers !== undefined && readme.includes(`efforge:readme:${GRAPH_REGION} -->`)
+        const graph = withGraph
+          ? layerGraph({
+              layers,
+              stack,
+              addons,
+              cards: yield* cardSources(
+                stack,
+                addons,
+                new Map([
+                  ...(yield* projectCards(dir, (rel) =>
+                    read(rel).pipe(Effect.orElseSucceed(() => undefined)),
+                  )),
+                  ...[...out].filter(([f]) => f.startsWith(CARDS_DIR) && f.endsWith(".tsx")),
+                ]),
+              ),
+            })
+          : undefined
+        const filled = fillReadme(readme, {
+          ...readmeRegions({
+            stack,
+            addons,
+            scripts: rootScripts(out.get("package.json") ?? (yield* read("package.json"))),
+          }),
+          ...(graph === undefined ? {} : { [GRAPH_REGION]: graphRegion(graph) }),
+        })
+        if (filled.kind !== "filled") notes.push(readmeNote(filled))
+        else if (filled.text !== readme) {
+          out.set(README_FILE, filled.text)
+          if (!written.has(README_FILE)) transformed.add(README_FILE)
+        }
+        if (filled.kind !== "no-markers") seams.add(README_FILE)
+      }
     }
 
     // 7. efforge.jsonc
@@ -644,6 +907,7 @@ export const addAddons = (
       out.set(
         "efforge.jsonc",
         renderManifest({
+          ...(manifest.$schema === undefined ? {} : { $schema: manifest.$schema }),
           efforgeVersion: manifest.efforgeVersion,
           stack,
           command: toCommand(stack),
@@ -652,22 +916,44 @@ export const addAddons = (
               .filter(([file]) => !seams.has(file) && !removed.has(file))
               .toSorted(([a], [b]) => byName(a, b)),
           ),
+          // what upgrade held back before writing it; upgrade clears it
+          ...(manifest.held === undefined ? {} : { held: manifest.held }),
         }),
       )
       written.add("efforge.jsonc")
     }
 
+    // where to read about each new add-on: its card, the AGENTS.md sections this run added, its docs
+    const addedAddon = (m: AddonManifest): AddedAddon => {
+      const entry: { -readonly [K in keyof AddedAddon]: AddedAddon[K] } = {
+        id: m.id,
+        title: m.title,
+      }
+      if (m.docs !== undefined) entry.docs = m.docs
+      const card = cardModuleFor(m.card, (when) => switchedOn(m.id, when))
+      if (card !== undefined && (out.has(card.target) || disk.get(card.target) !== undefined))
+        entry.card = card.target
+      const agentsBefore = disk.get(AGENTS_FILE) ?? ""
+      const agentsAfter = out.get(AGENTS_FILE) ?? agentsBefore
+      const agents = m.transforms
+        .filter((t) => t.name === "appendAgentsSection" && switchedOn(m.id, t.when))
+        .filter((t) => {
+          const marker = `<!-- efforge:section:${t.args.id ?? ""} -->`
+          return !agentsBefore.includes(marker) && agentsAfter.includes(marker)
+        })
+        .flatMap((t) => /^#{2,3} (.+)$/m.exec(t.args.content ?? "")?.[1] ?? [])
+      if (agents.length > 0) entry.agents = agents
+      return entry
+    }
+
     const result: AddResult = {
+      stack,
       written: [...written].toSorted(),
       created: [...written].filter((f) => disk.has(f) && disk.get(f) === undefined).toSorted(),
       transformed: [...transformed].toSorted(),
       skipped: skipped.toSorted(),
       removed: [...removed].toSorted(),
-      added: fresh.map(({ manifest: m }) =>
-        m.docs === undefined
-          ? { id: m.id, title: m.title }
-          : { id: m.id, title: m.title, docs: m.docs },
-      ),
+      added: fresh.map(({ manifest: m }) => addedAddon(m)),
       envVars,
       replacedScripts,
       packageManager,
@@ -683,7 +969,7 @@ export const addAddons = (
       yield* fs.writeFileString(abs, content).pipe(io(rel))
     }
     if ((out.size > 0 || removed.size > 0) && opts.install !== false) {
-      yield* exec("pnpm", INSTALL_ARGS, dir)
+      yield* exec("pnpm", [...INSTALL_ARGS], dir)
       // add-ons may add or replace routes
       yield* generateRouteTree(dir)
     }
@@ -692,44 +978,351 @@ export const addAddons = (
 
 // --- CLI -----------------------------------------------------------------------
 
-const describe = (
+/** `add` wrote its files, then the install (or route tree) failed: `partial` is what it did. */
+export class AddIncomplete extends Schema.TaggedError<AddIncomplete>()("AddIncomplete", {
+  command: Schema.String,
+  output: Schema.String,
+  partial: Schema.Unknown,
+}) {}
+
+/** `add` was given no ids: `available` are the add-ons the project doesn't have yet. */
+/**
+ * The project was made (or last upgraded) by an efforge older than this CLI's release line
+ * (`needs`, from `addFloor`): this CLI's add-ons need files and pins it doesn't have. `upgrade`
+ * brings it to this line; then the same `add` runs.
+ */
+export class UpgradeFirst extends Schema.TaggedError<UpgradeFirst>()("UpgradeFirst", {
+  version: Schema.String,
+  needs: Schema.String,
+  addons: Schema.Array(Schema.String),
+}) {}
+
+export class NoAddonIds extends Schema.TaggedError<NoAddonIds>()("NoAddonIds", {
+  available: Schema.Array(Schema.String),
+}) {}
+
+/** Add-on ids the project doesn't have yet, in `list` order. */
+export const addable = (stack: StackConfig): string[] =>
+  slots
+    .filter((s) => s.options.length > 1)
+    .flatMap((s) =>
+      s.options
+        .filter((o) => o.id !== "none")
+        .filter((o) =>
+          s.id === "extras" ? !stack.extras.includes(o.id as never) : stack[s.id] === "none",
+        )
+        .map((o) => `${s.id}/${o.id}`),
+    )
+
+/**
+ * The picker `add` shows a person when it gets no ids: every add-on the project doesn't have, by
+ * slot, with its description; one in a slot the project already filled is shown disabled, with
+ * why. A pick the stack rules refuse (auth without a database) is said, and asked again.
+ */
+export const pickAddons = (
+  stack: StackConfig,
+  addons: ReadonlyMap<string, { readonly manifest: AddonManifest }>,
+  io: PromptIOShape,
+) =>
+  Effect.gen(function* () {
+    const choices: Choice[] = []
+    const width = Math.max(...slots.map((s) => s.id.length))
+    for (const s of slots) {
+      if (s.options.length <= 1) continue
+      const current = s.id === "extras" ? undefined : stack[s.id]
+      for (const o of s.options) {
+        if (o.id === "none") continue
+        const id = `${s.id}/${o.id}`
+        if (s.id === "extras" ? stack.extras.includes(o.id as never) : current === o.id) continue
+        const m = addons.get(id)?.manifest
+        const about = (m?.description ?? "").split(/[:;,]\s|\.(?:\s|$)/)[0] ?? ""
+        const blocked = current !== undefined && current !== "none"
+        const needs =
+          s.id === "auth" && stack.database === "none"
+            ? "needs a database too"
+            : s.id === "database"
+              ? "needs an ORM too"
+              : s.id === "orm" && stack.database === "none"
+                ? "needs a database too"
+                : undefined
+        // the hint shows beside the line under the cursor (always, for a disabled one), cut so
+        // the line fits 80 columns. clack wraps an option at 67 there (it counts the guide's
+        // colour codes as columns); "◻ " comes before the label, " (" and ")" around the hint
+        const label = `${s.id.padEnd(width)}  ${m?.title ?? o.label}`
+        const room = 67 - 2 - label.length - 3
+        const hint = blocked
+          ? `this project has ${current}; add can't swap it`
+          : needs === undefined
+            ? about
+            : `${needs}. ${about}`
+        choices.push({
+          value: id,
+          label,
+          hint: hint.length > room ? `${hint.slice(0, room - 1).trimEnd()}…` : hint,
+          ...(blocked ? { disabled: true } : {}),
+        })
+      }
+    }
+    let picked: ReadonlyArray<string> = []
+    for (;;) {
+      const answer = yield* io.multiselect({
+        id: "addons",
+        message: "Add which? (space picks, enter adds; none adds nothing)",
+        options: choices,
+        initial: picked,
+        canGoBack: false,
+      })
+      // in slot order, as `add` lists them
+      const order = choices.map((c) => c.value)
+      picked = (answer === GoBack ? [] : answer).toSorted(
+        (x, y) => order.indexOf(x) - order.indexOf(y),
+      )
+      if (picked.length === 0) return picked
+      const exit = Effect.runSyncExit(applyIds(stack, picked))
+      if (Exit.isSuccess(exit)) return picked
+      const e = exit.cause.reasons.find((r) => r._tag === "Fail")?.error as
+        | {
+            readonly _tag: string
+            readonly slot?: string
+            readonly value?: string
+            readonly current?: string
+            readonly reason?: string
+            readonly ways?: ReadonlyArray<ReadonlyArray<string>>
+          }
+        | undefined
+      if (e?._tag === "SlotAlreadySet") {
+        const both = picked.filter((id) => id.startsWith(`${e.slot ?? ""}/`))
+        yield* io.warn(`A project has one ${e.slot ?? ""}: pick one of ${both.join(", ")}.`)
+        continue
+      }
+      const needs = needsOf(e?.ways ?? [])
+        .map((n) => `one of ${n.options.join(", ")}`)
+        .join(" and ")
+      const why = (e?.reason ?? "it doesn't fit the stack").replace(
+        /\. Add (?:one|an ORM|one) in the same command.*$| \(alternatives lists the ways\)$/,
+        "",
+      )
+      yield* io.warn(
+        `Can't add ${e?.slot ?? ""}/${e?.value ?? ""} with that pick: ${why}.${needs === "" ? "" : ` Pick ${needs} with it.`}`,
+      )
+    }
+  })
+
+/** `--cwd` for `dir`, relative to where efforge runs. */
+const cwdArg = (dir: string) => relative(process.cwd(), dir) || "."
+
+/** `args` as a `list` of the same project, with the same --json. */
+const asList = (i: Intent): Intent => ({
+  verb: "list",
+  word: "list",
+  operands: [],
+  flags: i.flags.filter((f) => f.name === "json" || f.name === "cwd"),
+})
+
+/** The add-on slots `ways` fill, each with the ids that can fill it. */
+const needsOf = (ways: ReadonlyArray<ReadonlyArray<string>>) => {
+  const bySlot = new Map<string, string[]>()
+  for (const id of ways.flat()) {
+    const slot = id.split("/")[0] as string
+    const options = bySlot.get(slot) ?? []
+    if (!options.includes(id)) options.push(id)
+    bySlot.set(slot, options)
+  }
+  return [...bySlot].map(([slot, options]) => ({ slot, options }))
+}
+
+/** What went wrong in `add` (or `list --cwd`), as the contract reports it. */
+/** `upgrade` in the same project, keeping the caller's --cwd and --json. */
+const upgradeInstead = (args: ReadonlyArray<string>): string => {
+  const kept = intentOf(args).flags.filter((f) => f.name === "cwd" || f.name === "json")
+  return commandLine(render({ verb: "upgrade", word: "upgrade", operands: [], flags: kept }))
+}
+
+export const addFailure = (
   e: { readonly _tag: string; readonly message?: string } & Record<string, unknown>,
-): string => {
+  args: ReadonlyArray<string>,
+  projectDir: string = process.cwd(),
+): Failure => {
+  const seeList = () => {
+    const command = alternative(args, asList)
+    return command === null ? "" : ` See which ones this project can add: ${command}`
+  }
   switch (e._tag) {
-    case "NotAnEfforgeProject":
-      return `${String(e.dir)} is not an efforge project (${String(e.reason)}). Run this from the project root or pass --cwd.`
-    case "PnpmMissing":
-      return "efforge projects use pnpm, and it isn't on your PATH. Install it (corepack enable pnpm, or https://pnpm.io/installation) and re-run, or pass --no-install."
-    case "UnknownAddon":
-      return String(e.message)
-    case "IncompatibleStack":
-      return `Can't add ${String(e.slot)}/${String(e.value)}: ${typeof e.reason === "string" ? e.reason : "not compatible with the current stack."}`
-    case "OverlayConflict":
-      return `You've edited ${String(e.file)} since it was generated. Nothing was written. Re-run with --overwrite to replace it.\n\n${String(e.diff)}`
+    case "NotAnEfforgeProject": {
+      const dir = String(e.dir)
+      const near =
+        e.reason === "efforge.jsonc not found" || e.reason === "not a directory"
+          ? nearbyProject(dir)
+          : undefined
+      return {
+        code: "NotAnEfforgeProject",
+        message: `${dir} is not an efforge project (${String(e.reason)}). Run this from the project root or pass --cwd.`,
+        fix:
+          near === undefined
+            ? null
+            : fix(args, (i) => withFlag(i, "cwd", cwdArg(near)), { cwd: true }),
+        details: {
+          directory: dir,
+          reason: String(e.reason),
+          ...(near === undefined ? {} : { project: near }),
+        },
+      }
+    }
+    case "NoAddonIds": {
+      const available = e.available as string[]
+      return {
+        code: "NoAddonIds",
+        message: `Name the add-ons to add${available.length > 0 ? `: ${available.join(", ")}` : "; this project already has every add-on"}.${available.length > 0 ? seeList().replace("See which ones this project can add:", "What each one adds:") : ""}`,
+        // listing isn't adding: which add-on is the caller's choice (`available`)
+        fix: null,
+        details: { available },
+      }
+    }
+    case "UnknownAddon": {
+      const suggestions = e.suggestions as string[]
+      const [only] = suggestions
+      return {
+        code: "UnknownAddon",
+        message: `${String(e.message)}${seeList()}`,
+        // only a clear typo becomes a command; anything else is the caller's choice to make
+        fix:
+          suggestions.length === 1 && only !== undefined
+            ? fix(args, (i) => ({
+                ...i,
+                operands: i.operands.map((t) => (t === e.id ? only : t)),
+              }))
+            : null,
+        details: { id: String(e.id), suggestions, addons: allIds },
+      }
+    }
+    case "RemoveNotSupported":
+      return {
+        code: "RemoveNotSupported",
+        message: `Removing an add-on isn't supported yet ("${String(e.id)}").`,
+        fix: null,
+        details: { id: String(e.id) },
+      }
+    case "SlotAlreadySet":
+      return {
+        code: "SlotAlreadySet",
+        message: `Can't add ${String(e.slot)}/${String(e.value)}: ${String(e.slot)} is already "${String(e.current)}", and swapping an existing choice isn't supported yet. Create a new project to use a different ${String(e.slot)}.`,
+        fix: null,
+        details: { slot: String(e.slot), current: String(e.current), value: String(e.value) },
+      }
+    case "IncompatibleStack": {
+      // every way out picks a database or an ORM for good (a slot can't be swapped later), so
+      // the caller picks: no fix, the ways as complete commands
+      const ways = (e.ways as string[][] | undefined) ?? []
+      const alternatives = ways.flatMap((w) => {
+        const command = alternative(args, (i) => ({ ...i, operands: [...w, ...i.operands] }))
+        return command === null ? [] : [{ command, description: `Add ${w.join(" and ")} with it` }]
+      })
+      return {
+        code: "IncompatibleStack",
+        message: `Can't add ${String(e.slot)}/${String(e.value)}: ${typeof e.reason === "string" ? `${e.reason}.` : "not compatible with the current stack."}`,
+        fix: null,
+        details: {
+          slot: String(e.slot),
+          value: String(e.value),
+          allowed: e.allowed as string[],
+          needs: needsOf(ways),
+          alternatives,
+          ...(typeof e.reason === "string" ? { reason: e.reason } : {}),
+        },
+        more: alternatives.map((a) => `  ${a.command}  # ${a.description}`).join("\n"),
+      }
+    }
+    case "UpgradeFirst": {
+      const command = upgradeInstead(args)
+      return {
+        code: "UpgradeFirst",
+        message: `This project is from efforge ${String(e.version)}, and this efforge adds only to projects from ${String(e.needs)} on: its add-ons need files and pins older projects lack. Nothing was written. Run ${command} first, then this add again.`,
+        fix: command,
+        details: {
+          version: String(e.version),
+          needs: String(e.needs),
+          addons: e.addons,
+          after: commandLine(args),
+        },
+      }
+    }
+    case "OverlayConflict": {
+      const files = e.files as string[]
+      return {
+        code: "OverlayConflict",
+        message: `You've edited ${files.join(", ")} since ${files.length === 1 ? "it was" : "they were"} generated. Nothing was written. Re-run with --overwrite to replace ${files.length === 1 ? "it" : "them"} (your edits are lost), or commit first and merge by hand.`,
+        fix: fix(args, (i) => withFlag(i, "overwrite", true), { overwrite: true }),
+        details: { files, diff: String(e.diff) },
+        more: String(e.diff),
+      }
+    }
     case "TransformAnchorMissing":
-      return `Couldn't find ${String(e.anchor)} in ${String(e.file)}. Nothing was written. Add this by hand, then re-run:\n${String(e.snippet)}`
-    case "CommandFailed":
-      return `\`${String(e.command)}\` failed. The files were written; run it yourself.\n${String(e.output).trim()}`
+      return {
+        code: "TransformAnchorMissing",
+        message: `Couldn't find ${String(e.anchor)} in ${String(e.file)}. Nothing was written. Add the snippet by hand, then re-run.`,
+        fix: null,
+        details: { file: String(e.file), anchor: String(e.anchor), snippet: String(e.snippet) },
+        more: String(e.snippet),
+      }
+    case "AddIncomplete": {
+      const output = String(e.output).trim()
+      return {
+        code: "CommandFailed",
+        message: `\`${String(e.command)}\` failed. The files were written; run it yourself, then the rest of nextSteps.`,
+        fix: finish(args, projectDir, [String(e.command)]),
+        details: {
+          failed: String(e.command),
+          output: output.split("\n").slice(-15).join("\n"),
+          ...(e.partial as object),
+        },
+        more: output,
+      }
+    }
+    case "CommandFailed": {
+      const output = String(e.output).trim()
+      return {
+        code: "CommandFailed",
+        message: `\`${String(e.command)}\` failed. The files were written; run it yourself.`,
+        fix: finish(args, projectDir, [String(e.command)]),
+        details: { failed: String(e.command), output: output.split("\n").slice(-15).join("\n") },
+        more: output,
+      }
+    }
+    case "PnpmMissing": {
+      const again = fix(args, (i) => i, { again: true })
+      return {
+        code: "PnpmMissing",
+        message:
+          "efforge projects use pnpm, and it isn't on your PATH. Install it (npm install --global pnpm, or https://pnpm.io/installation) and re-run, or pass --no-install.",
+        fix: again === null ? null : `npm install --global pnpm && ${again}`,
+      }
+    }
     default:
-      return e.message ?? e._tag
+      return internal(e)
   }
 }
 
 export const addConfig = {
   ids: Argument.String("ids").pipe(
     Argument.withDescription("Add-ons to add: email, extras/email, ai/effect-ai-byok, ..."),
-    Argument.atLeast(1),
+    Argument.atLeast(0),
   ),
   overwrite: Flag.Boolean("overwrite").pipe(
     Flag.withDescription("Replace generated files you have edited"),
     Flag.withDefault(false),
   ),
   dryRun: Flag.Boolean("dry-run").pipe(
-    Flag.withDescription("Print what would change; write nothing"),
+    Flag.withDescription("Print what would change, by add-on; write nothing"),
+    Flag.withDefault(false),
+  ),
+  verbose: Flag.Boolean("verbose").pipe(
+    Flag.withDescription("With --dry-run, list every file"),
     Flag.withDefault(false),
   ),
   json: Flag.Boolean("json").pipe(
-    Flag.withDescription("Print the result as JSON on stdout"),
+    Flag.withDescription(
+      "Print one JSON document on stdout, nothing else (https://github.com/amagdy46/efforge/blob/main/docs/json.md)",
+    ),
     Flag.withDefault(false),
   ),
   cwd: Flag.String("cwd").pipe(
@@ -770,44 +1363,132 @@ const wrap = (text: string, width: number): string[] => {
 
 const list = (files: ReadonlyArray<string>, mark: string) => files.map((f) => `${mark} ${f}`)
 
+/**
+ * What an `add --dry-run` would do, as `create --dry-run` shows it: the new files by the add-on
+ * they come from (a count and the top-level directories), then the files it edits and removes.
+ */
+export const changesByOrigin = (
+  stack: StackConfig,
+  addons: ReadonlyMap<string, LoadedAddon>,
+  created: ReadonlyArray<string>,
+  changed: ReadonlyArray<string>,
+  removed: ReadonlyArray<string>,
+): string => {
+  const from = origins(stack, addons, created)
+  const group = (label: string, mark: string, files: ReadonlyArray<string>) =>
+    ({ label, mark, files }) as const
+  const rows = [
+    // `base` here is what no add-on's files list: settings and package files written for them
+    ...addonIdsFor(stack).map((id) =>
+      group(
+        id === "base" ? "settings" : id,
+        "+",
+        created.filter((f) => from.get(f) === id),
+      ),
+    ),
+    group("edited", "~", changed),
+    group("removed", "-", removed),
+  ].filter((r) => r.files.length > 0)
+  // three directories at most, so a row fits the box
+  const where = (files: ReadonlyArray<string>) => {
+    const all = whereIn(files).split(", ")
+    return all.length <= 3 ? all.join(", ") : `${all.slice(0, 3).join(", ")}, +${all.length - 3}`
+  }
+  const width = Math.max(...rows.map((r) => r.label.length))
+  const count = Math.max(...rows.map((r) => String(r.files.length).length)) + 1
+  return [
+    ...rows.map(
+      (r) =>
+        `${r.label.padEnd(width)}  ${`${r.mark}${r.files.length}`.padStart(count)}  ${pc.dim(where(r.files))}`,
+    ),
+    "",
+    pc.dim("Every file: add --verbose, or --json for the list as data."),
+  ].join("\n")
+}
+
+/** An added add-on's title, then where its card and AGENTS.md sections are. */
+const addedLines = (a: AddedAddon): string[] => {
+  const facts: Array<[string, string]> = []
+  if (a.card !== undefined) facts.push(["card", `${a.card} ${pc.dim("(on /app)")}`])
+  if (a.agents !== undefined) facts.push(["AGENTS.md", a.agents.map((h) => `"${h}"`).join(", ")])
+  if (facts.length === 0) return []
+  return [`\n${pc.bold(a.title)}`, ...facts.map(([k, v]) => `  ${pc.dim(k.padEnd(9))} ${v}`)]
+}
+
 export const addHandler = (input: {
   ids: ReadonlyArray<string>
   overwrite: boolean
   dryRun: boolean
+  verbose?: boolean
   json: boolean
   cwd: string
   install: boolean
-}) =>
-  Effect.gen(function* () {
+}) => {
+  const dir = resolve(input.cwd)
+  // how far the run got, for the document an interrupted --json run still prints
+  const progress: {
+    phase: "planning" | "writing" | "written"
+    pending: string[]
+    partial: object | undefined
+  } = { phase: "planning", pending: [], partial: undefined }
+  const start = performance.now()
+  return Effect.gen(function* () {
     const path = yield* Path.Path
     const fs = yield* FileSystem.FileSystem
     const live = yield* PromptIO
-    const dir = path.resolve(input.cwd)
-    // --json keeps stdout to the one JSON document: steps still run, silently
+    // --json keeps stdout to the one JSON document: steps still run, silently, and warnings are
+    // collected into the document
+    const warnings: string[] = []
     const io: PromptIOShape = input.json
       ? {
           ...live,
+          warn: (m) => Effect.sync(() => void warnings.push(m)),
+          info: (m) => Effect.sync(() => void warnings.push(m)),
           step: (_label, eff) => eff,
           task: (_label, eff) => eff(() => {}),
         }
       : live
-    if (!input.json)
-      yield* io.intro(
-        `${pc.bgCyan(pc.black(" efforge add "))}${pc.dim(`  ${input.ids.join(" ")}`)}`,
-      )
+    // without ids, a person at a terminal picks them; anyone else (no terminal, --json) is told
+    // what there is to add, as before
+    const picking = input.ids.length === 0 && !input.json
+    if (!input.json && (input.ids.length > 0 || canPrompt()))
+      yield* io.intro(introLine(`add ${input.ids.join(" ")}`.trimEnd()))
 
     const manifest = yield* readManifest(dir)
-    if (!input.json && newer(manifest.efforgeVersion, efforgeVersion))
+    let ids: ReadonlyArray<string> = input.ids
+    if (picking) {
+      const addons = yield* loadAddons(yield* TemplatesDir)
+      const picked = yield* pickAddons(manifest.stack, addons, io).pipe(
+        Effect.catchTag("NeedsInput", () => Effect.succeed(undefined)),
+      )
+      if (picked !== undefined && picked.length === 0)
+        return yield* io.outro("Nothing picked, nothing added.")
+      if (picked !== undefined) {
+        const args = yield* Invocation
+        const same = alternative(args, (i) => ({ ...i, operands: picked }))
+        if (same !== null) yield* io.info(`The same without the picker:\n${same}`)
+        ids = picked
+      }
+    }
+    if (ids.length === 0) return yield* new NoAddonIds({ available: addable(manifest.stack) })
+    if (newer(manifest.efforgeVersion, efforgeVersion))
       yield* io.warn(
-        `This project was made with efforge ${manifest.efforgeVersion}, newer than this CLI (${efforgeVersion}). Use npx create-efforge@latest add.`,
+        `This project was made with efforge ${manifest.efforgeVersion}, newer than this CLI (${efforgeVersion}). Use npx -y create-efforge@latest add.`,
+      )
+    // dependencies the package.json files declare but aren't installed (an earlier install
+    // failed, was stopped or skipped): this run owes the install
+    const owed = installOwed(dir)
+    if (owed)
+      yield* io.warn(
+        `The dependencies in package.json aren't all installed: an earlier install didn't finish. ${input.install && !input.dryRun ? "Running it now." : `Run ${INSTALL}.`}`,
       )
     const opts = { overwrite: input.overwrite, install: false }
     // checked before anything is written: install and the route tree both need pnpm
     if (input.install && !input.dryRun && !(yield* has("pnpm"))) return yield* new PnpmMissing()
     // plan first (in memory): the dirty-tree warning only matters when something will change
-    const plan = yield* addAddons(dir, input.ids, { ...opts, dryRun: true })
+    const plan = yield* addAddons(dir, ids, { ...opts, dryRun: true })
     const changes = plan.written.length + plan.transformed.length + plan.removed.length > 0
-    if (changes && !input.dryRun && !input.json) {
+    if (changes && !input.dryRun) {
       const dirty = yield* exec("git", ["status", "--porcelain"], dir).pipe(
         Effect.map((out) => out.trim() !== ""),
         Effect.catchTag("CommandFailed", () => Effect.succeed(false)),
@@ -817,84 +1498,162 @@ export const addHandler = (input: {
           "You have uncommitted changes, so git diff will mix them with efforge's edits. Commit or stash first to review them on their own.",
         )
     }
+    if (!input.dryRun && changes) progress.phase = "writing"
     const result =
-      input.dryRun || !changes ? plan : yield* addAddons(dir, input.ids, { ...opts, dryRun: false })
+      input.dryRun || !changes ? plan : yield* addAddons(dir, ids, { ...opts, dryRun: false })
+    if (progress.phase === "writing") progress.phase = "written"
     // only when dependencies changed: package.json files or the catalog
     const depsChanged = result.written.some(
       (f) => f.endsWith("package.json") || f === "pnpm-workspace.yaml",
     )
     // a project created with --no-install has no node_modules yet, so no route-tree generator
     const installed = yield* fs
-      .exists(path.join(dir, "node_modules"))
+      .exists(path.join(dir, "node_modules", ".modules.yaml"))
       .pipe(Effect.orElseSucceed(() => false))
-    const installs = input.install && changes && depsChanged
-    const finish = Effect.gen(function* () {
-      if (!input.install || input.dryRun || !changes) return
-      if (installs)
+    const installs = input.install && !input.dryRun && ((changes && depsChanged) || owed)
+    // a new database needs its tables before the app (or sign-up) can use it; when the last
+    // install never finished, neither did the steps after it, so count the ids already there too
+    const touched = [...result.added.map((a) => a.id), ...(owed ? result.skipped : [])]
+    // the same setup steps `create` and the README's "Run it" give for this stack: the database
+    // when one was added, and `pnpm db:migrate` whenever the local database lacks a migration (an
+    // earlier run that never migrated, or one this add brings), read as doctor reads it
+    const migrate = migrateOwed(dir, result.stack, [...result.created, ...result.written])
+    const newDatabase = touched.some((id) => id.startsWith("database/"))
+    const afterInstall: Step[] = setupSteps(result.stack).filter((s) =>
+      s.command === "pnpm db:migrate" ? migrate : newDatabase,
+    )
+    const steps: Step[] = [
+      ...(!installs && (owed || !installed || (changes && depsChanged))
+        ? [{ command: INSTALL }]
+        : []),
+      ...afterInstall,
+    ]
+    const changedFiles = [
+      ...result.written.filter((f) => !result.created.includes(f)),
+      ...result.transformed,
+    ].toSorted()
+    /** What a success would report about the files, for the documents of a run that stopped. */
+    const partial = (next: ReadonlyArray<Step>) => ({
+      directory: dir,
+      stack: result.stack,
+      added: result.added,
+      skipped: result.skipped,
+      created: result.created,
+      changed: changedFiles,
+      removed: result.removed,
+      replacedScripts: result.replacedScripts,
+      packageManager: result.packageManager,
+      notes: result.notes,
+      env: result.envVars,
+      nextSteps: [...next, ...afterInstall].map((x) => Object.assign({}, x, { cwd: dir })),
+      warnings,
+    })
+    if (installs) progress.pending = [INSTALL]
+    progress.partial = partial(progress.pending.map((command) => ({ command })))
+    const complete = Effect.gen(function* () {
+      if (!input.install || input.dryRun || (!changes && !installs)) return
+      if (installs) {
         yield* io.task("Installing dependencies (pnpm install)", (log) =>
-          exec("pnpm", INSTALL_ARGS, dir, log),
+          exec("pnpm", [...INSTALL_ARGS], dir, log),
         )
+        progress.pending = []
+        progress.partial = partial([])
+      }
       // add-ons may add or replace routes; without an install, `pnpm typecheck` regenerates it later
       if (installs || installed) yield* io.step("Generating the route tree", generateRouteTree(dir))
+    }).pipe(
+      // the files are written: say everything a success would have, starting with the failed command
+      Effect.catchTag("CommandFailed", (e) =>
+        Effect.fail(
+          new AddIncomplete({
+            command: e.command,
+            output: e.output,
+            partial: partial([{ command: e.command }]),
+          }),
+        ),
+      ),
+    )
+    const replacementWarnings = Effect.gen(function* () {
+      // .dev.vars is moved, not replaced: its settings are in .env, which alchemy dev reads
+      const replaced = result.removed.filter((f) => f !== DEV_VARS)
+      if (replaced.length > 0)
+        yield* io.warn(
+          `${input.dryRun ? "Would remove" : "Removed"} ${replaced.join(", ")}: the new add-ons replace ${replaced.length === 1 ? "it" : "them"}.`,
+        )
+      if (result.removed.includes(DEV_VARS))
+        yield* io.warn(
+          `${input.dryRun ? "Would move" : "Moved"} the settings in ${DEV_VARS} to ${localEnvFile(result.stack)}, which \`pnpm dev\` now reads.`,
+        )
+      if (result.replacedScripts.length > 0)
+        yield* io.warn(
+          `${input.dryRun ? "Would replace" : "Replaced"} existing package scripts:\n${result.replacedScripts.map((x) => `  ${x}`).join("\n")}`,
+        )
     })
-    // a new database needs its tables before the app (or sign-up) can use it
-    const database = result.added.find((a) => a.id.startsWith("database/"))?.id.split("/")[1]
-    const alchemy =
-      manifest.stack.infra === "alchemy" || result.added.some((a) => a.id === "infra/alchemy")
-    const commands = [
-      ...(changes && !installs && (depsChanged || !installed) ? ["pnpm install"] : []),
-      ...(database === "postgres" ? ["docker compose up -d --wait", "pnpm db:migrate"] : []),
-      ...(database === "d1" && !alchemy ? ["pnpm db:migrate"] : []),
-    ]
     if (input.json) {
-      yield* finish
-      return yield* Console.log(
-        JSON.stringify({ dryRun: input.dryRun, ...result, nextSteps: commands }, null, 2),
-      )
+      yield* replacementWarnings
+      yield* complete
+      return yield* printSuccess({
+        dryRun: input.dryRun,
+        directory: dir,
+        stack: result.stack,
+        added: result.added,
+        skipped: result.skipped,
+        created: result.created,
+        changed: changedFiles,
+        removed: result.removed,
+        replacedScripts: result.replacedScripts,
+        packageManager: result.packageManager,
+        notes: result.notes,
+        installed: installs,
+        env: result.envVars,
+        nextSteps: steps.map((s) => Object.assign({}, s, { cwd: dir })),
+        warnings,
+      })
     }
 
     const changed = result.written.length + result.transformed.length + result.removed.length > 0
     if (!changed) {
       yield* io.info(`Already there: ${result.skipped.join(", ")}`)
-      return yield* io.outro("Nothing to do.")
-    }
-    yield* io.note(
-      [
-        ...list(result.created, pc.green("+")),
-        ...list(
-          [
-            ...result.written.filter((f) => !result.created.includes(f)),
-            ...result.transformed,
-          ].toSorted(),
-          pc.yellow("~"),
+      if (!owed) return yield* io.outro("Nothing to do.")
+    } else if (input.dryRun && input.verbose !== true)
+      // as create --dry-run: the new files by the add-on they come from, then what is edited
+      yield* io.note(
+        changesByOrigin(
+          result.stack,
+          yield* loadAddons(yield* TemplatesDir),
+          result.created,
+          changedFiles,
+          result.removed,
         ),
-        ...list(result.removed, pc.red("-")),
-      ].join("\n"),
-      `${input.dryRun ? "Would change" : "Changed"}: ${result.added.map((a) => a.title).join(", ") || "stack"}`,
-    )
-    if (result.removed.length > 0)
-      yield* io.warn(
-        `${input.dryRun ? "Would remove" : "Removed"} ${result.removed.join(", ")}: the new add-ons replace it.`,
+        `Would change: ${result.added.map((a) => a.title).join(", ") || "stack"}`,
       )
-    if (result.replacedScripts.length > 0)
-      yield* io.warn(
-        `${input.dryRun ? "Would replace" : "Replaced"} existing package scripts:\n${result.replacedScripts.map((x) => `  ${x}`).join("\n")}`,
+    else
+      yield* io.note(
+        [
+          ...list(result.created, pc.green("+")),
+          ...list(changedFiles, pc.yellow("~")),
+          ...list(result.removed, pc.red("-")),
+        ].join("\n"),
+        `${input.dryRun ? "Would change" : "Changed"}: ${result.added.map((a) => a.title).join(", ") || "stack"}`,
       )
+    if (input.verbose === true && !input.dryRun && !input.json)
+      yield* io.warn("--verbose only changes what --dry-run prints, so it does nothing here.")
+    yield* replacementWarnings
     if (result.packageManager !== null)
       yield* io.info(
         `${input.dryRun ? "Would raise" : "Raised"} packageManager from ${result.packageManager.from} to ${result.packageManager.to}: older pnpm ignores the overrides that keep Effect's packages on one version.`,
       )
     for (const note of result.notes) yield* io.warn(note)
-    if (input.dryRun) return yield* io.outro(pc.dim("dry run: nothing written"))
+    if (input.dryRun) return yield* io.outro(pc.dim("Dry run: nothing written."))
 
-    yield* finish
+    yield* complete
     const width = Math.max(0, ...result.envVars.map((x) => x.name.length))
     const room = Math.max(30, (process.stdout.columns || 80) - 14)
-    const steps = [
-      ...commands.map((c) => `  ${pc.cyan(c)}`),
+    const lines = [
+      ...steps.map((s) => `  ${pc.cyan(s.command)}`),
       ...(result.envVars.length > 0
         ? [
-            `${commands.length > 0 ? "\n" : ""}${pc.bold("New env vars")} ${pc.dim("(in .env.example; local values in .dev.vars)")}`,
+            `${steps.length > 0 ? "\n" : ""}${pc.bold("New env vars")} ${pc.dim(`(in .env.example; local values in ${localEnvFile(result.stack)})`)}`,
             // full descriptions, wrapped under the name: the hint at the end is often the useful part
             ...result.envVars.map(
               (v) =>
@@ -904,37 +1663,88 @@ export const addHandler = (input: {
             ),
           ]
         : []),
-      ...result.added
-        .filter((a) => a.docs !== undefined)
-        .map((a) => `${a.title}: ${pc.dim(a.docs as string)}`),
+      ...result.added.flatMap(addedLines),
     ]
-    if (steps.length > 0) yield* io.note(steps.join("\n"), "Next steps")
-    yield* io.outro(`${pc.green("Done.")} ${pc.dim("Review the changes with")} git diff`)
+    if (lines.length > 0) yield* io.note(lines.join("\n").replace(/^\n/, ""), "Next steps")
+    // outside the box, so a narrow terminal does not break the links
+    const docs = result.added.flatMap((a) => (a.docs === undefined ? [] : [a.docs]))
+    if (docs.length > 0) yield* io.info(`Docs:\n${docs.join("\n")}`)
+    yield* io.outro(
+      `${pc.green("Done")} in ${elapsed(start)}. ${pc.dim("Review the changes with")} git diff`,
+    )
   }).pipe(
+    // under --json a stopped add still prints its one document (Ctrl-C, SIGTERM, a timeout)
+    Effect.onInterrupt(() =>
+      input.json
+        ? Effect.gen(function* () {
+            const args = yield* Invocation
+            yield* report(true, addInterrupted(args, dir, progress))
+            yield* Effect.sync(() => {
+              process.exitCode = 130
+            })
+          })
+        : Effect.void,
+    ),
     Effect.catch((e) =>
       Effect.gen(function* () {
-        yield* Effect.sync(() => {
-          process.exitCode = 1
-        })
-        if (input.json)
-          return yield* Console.log(
-            JSON.stringify({ error: { code: e._tag, message: describe(e as never) } }, null, 2),
-          )
-        yield* Console.error(pc.red(describe(e as never)))
+        // Ctrl-C or Escape in the picker
+        if (e._tag === "Cancelled") return yield* cancelled
+        const args = yield* Invocation
+        yield* report(input.json, addFailure(e as never, args, dir))
       }),
     ),
   )
+}
+
+/** The `Interrupted` document of an `add` that was stopped, by how far it got. */
+const addInterrupted = (
+  args: ReadonlyArray<string>,
+  dir: string,
+  progress: {
+    readonly phase: "planning" | "writing" | "written"
+    readonly pending: ReadonlyArray<string>
+    readonly partial: object | undefined
+  },
+): Failure => {
+  const rel = relative(process.cwd(), dir) || "."
+  switch (progress.phase) {
+    case "planning":
+      return {
+        code: "Interrupted",
+        message: "Stopped before anything was written. Run the same command again.",
+        fix: null,
+        details: { directory: dir, written: false, remaining: [] },
+      }
+    case "writing":
+      return {
+        code: "Interrupted",
+        message: `Stopped while writing files, so some of them may be written. See git status in ${rel}; running the same command again finishes what it can.`,
+        fix: null,
+        details: { directory: dir, written: true, remaining: [] },
+      }
+    case "written":
+      return {
+        code: "Interrupted",
+        message:
+          progress.pending.length === 0
+            ? `Stopped after the files were written; ${rel} has everything this add needed.`
+            : `Stopped. The files were written; to finish, run in ${rel}: ${progress.pending.join(", then ")}`,
+        fix: finish(args, dir, progress.pending),
+        details: { written: true, remaining: progress.pending, ...progress.partial },
+      }
+  }
+}
 
 export const addCommand = Command.make("add", addConfig, addHandler).pipe(
   Command.withDescription("Add an add-on to an existing efforge project"),
   Command.withExamples([
-    { command: "npx create-efforge add email", description: "Add the email add-on" },
+    { command: "npx -y create-efforge add email", description: "Add the email add-on" },
     {
-      command: "npx create-efforge add ai/effect-ai-byok extras/storage --dry-run",
+      command: "npx -y create-efforge add ai/effect-ai-byok extras/storage --dry-run",
       description: "Show what would change; write nothing",
     },
     {
-      command: "npx create-efforge add database/d1 orm/effect-sql auth/better-auth",
+      command: "npx -y create-efforge add database/d1 orm/effect-sql auth/better-auth",
       description: "Add a database, an ORM and auth together",
     },
   ]),

@@ -2,18 +2,28 @@
   "id": "orm/effect-sql",
   "title": "Effect SQL",
   "description": "Plain Effect SQL (tagged-template queries) behind the Database service; migrations are SQL files.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/orm-effect-sql.md",
   "files": [
+    {
+      "path": "../../base/files/core/src/server-only.ts",
+      "target": "packages/core/src/server-only.ts",
+      "ifAbsent": true
+    },
     {
       "path": "files/shared/index.ts",
       "target": "packages/db/src/index.ts"
     },
     {
-      "path": "files/shared/notes.ts",
-      "target": "apps/web/src/server/notes.ts"
+      "path": "../drizzle/files/core/notes.ts",
+      "target": "packages/core/src/notes.ts"
     },
     {
-      "path": "files/shared/page.tsx",
-      "target": "apps/web/src/routes/app/index.tsx"
+      "path": "../drizzle/files/core/notes.test.ts",
+      "target": "packages/core/test/notes.test.ts"
+    },
+    {
+      "path": "files/shared/db-notes.ts",
+      "target": "packages/db/src/notes.ts"
     },
     {
       "path": "files/pg/layer.ts",
@@ -92,6 +102,19 @@
       }
     }
   ],
+  "card": {
+    "export": "database",
+    "files": [
+      {
+        "path": "../drizzle/files/card/database.tsx",
+        "target": "apps/web/src/capabilities/database.tsx"
+      },
+      {
+        "path": "../drizzle/files/card/notes.ts",
+        "target": "apps/web/src/server/notes.ts"
+      }
+    ]
+  },
   "dependencies": {},
   "devDependencies": {
     "packages/db": [
@@ -102,6 +125,14 @@
   "envVars": [],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "Plain SQL through Effect SQL: the `Database` service hands you an `SqlClient`, and queries are tagged templates that return Effects. Migrations are numbered SQL files in `packages/db/migrations`. It comes with a `note` table and a notes demo on `/app`.",
+    "service": {
+      "name": "Database",
+      "file": "packages/core/src/Database.ts",
+      "errors": []
+    }
+  },
   "transforms": [
     {
       "name": "addImport",
@@ -118,6 +149,79 @@
         "import": "DatabaseLayer",
         "from": "@repo/db",
         "layer": "DatabaseLayer.pipe(Layer.provide(WorkerEnvLive))"
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "orm",
+        "content": "## Queries and migrations (Effect SQL)\n\n- `Database` (`packages/core/src/Database.ts`) holds an Effect SQL client: queries are tagged templates (`` sql`SELECT ...` ``) whose values are always parameters. `DatabaseLayer` (`packages/db/src/layer.ts`) provides it and the repositories built on it, such as `NotesLive` (`packages/db/src/notes.ts`, for the `Notes` service in `packages/core`). Add a repository the same way and merge it into `DatabaseLayer`.\n- Map a query's failure to the service's tagged error (`Effect.mapError(notesUnavailable)`), so callers get a typed error rather than a `SqlError`.\n- Migrations are plain SQL files in `packages/db/migrations/`, named `NNNN_name.sql` and applied in order. Add a new file for every schema change; never edit, rename or delete one that has been applied anywhere.\n- Test logic against a test layer, not a database: a program that needs `Notes` gets an in-memory `Notes` layer in `packages/core/test/notes.test.ts`; do the same for a repository you add. Check the queries themselves under `pnpm dev`."
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "orm-migrate",
+        "content": "- `pnpm db:migrate` applies the new files."
+      },
+      "when": {
+        "database": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "orm-migrate",
+        "content": "- `pnpm db:migrate` applies the new files."
+      },
+      "when": {
+        "database": [
+          "d1"
+        ],
+        "infra": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "orm-migrate",
+        "content": "- The next `pnpm dev` applies the new files to the local D1 and `pnpm run deploy` to the stage's; `pnpm db:migrate` is not used with Alchemy."
+      },
+      "when": {
+        "database": [
+          "d1"
+        ],
+        "infra": [
+          "alchemy"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "orm-pg-split",
+        "content": "- The Postgres runner sends one statement per `;` (outside `$$` bodies): keep string literals in migrations free of `;`."
+      },
+      "when": {
+        "database": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "orm-without-auth",
+        "content": "### Notes without auth\n\n- This project has no auth, so the database card's `addNote` in `apps/web/src/server/notes.ts` (on a project with the dashboard) is open: anyone who can reach the app can add notes, and every visitor reads them. Add auth (`efforge add auth/better-auth`, which guards it) or remove the demo before deploying."
+      },
+      "when": {
+        "auth": [
+          "none"
+        ]
       }
     }
   ]

@@ -1,0 +1,922 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/create-efforge/schemas/upgrade.schema.json",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "efforge": {
+          "type": "string",
+          "description": "The CLI version that printed this."
+        },
+        "contract": {
+          "type": "number",
+          "enum": [
+            1
+          ],
+          "description": "The version of this contract. It changes only when a field is renamed, removed or changes meaning."
+        },
+        "ok": {
+          "type": "boolean",
+          "enum": [
+            true
+          ]
+        },
+        "check": {
+          "type": "boolean",
+          "enum": [
+            true
+          ],
+          "description": "`--check`: a report; nothing was changed."
+        },
+        "directory": {
+          "type": "string"
+        },
+        "stack": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "runtime": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "cloudflare"
+                  ]
+                }
+              ]
+            },
+            "database": {
+              "type": "string",
+              "enum": [
+                "postgres",
+                "d1",
+                "none"
+              ]
+            },
+            "orm": {
+              "type": "string",
+              "enum": [
+                "drizzle",
+                "effect-sql",
+                "none"
+              ]
+            },
+            "auth": {
+              "type": "string",
+              "enum": [
+                "better-auth-orgs",
+                "better-auth",
+                "none"
+              ]
+            },
+            "infra": {
+              "type": "string",
+              "enum": [
+                "none",
+                "alchemy"
+              ]
+            },
+            "ai": {
+              "type": "string",
+              "enum": [
+                "none",
+                "effect-ai-byok"
+              ]
+            },
+            "extras": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "workflows",
+                  "realtime",
+                  "browser",
+                  "storage",
+                  "email",
+                  "rpc",
+                  "cluster"
+                ]
+              }
+            }
+          },
+          "required": [
+            "name",
+            "runtime",
+            "database",
+            "orm",
+            "auth",
+            "infra",
+            "ai",
+            "extras"
+          ],
+          "additionalProperties": true
+        },
+        "efforgeVersion": {
+          "type": "object",
+          "properties": {
+            "project": {
+              "type": "string",
+              "description": "The efforge version that made the project, or last upgraded it."
+            },
+            "cli": {
+              "type": "string",
+              "description": "This CLI's version, the one compared against."
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "same",
+                "behind",
+                "ahead"
+              ]
+            }
+          },
+          "required": [
+            "project",
+            "cli",
+            "status"
+          ],
+          "additionalProperties": true
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "needs-action",
+            "behind",
+            "current"
+          ],
+          "description": "needs-action: something breaks the project (exit code 2); behind: nothing breaks, and upgrade has something to apply (exit code 3 with --strict, else 0); current: nothing to apply."
+        },
+        "needsAction": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "enum": [
+                  "effect-overrides",
+                  "package-manager",
+                  "split-set",
+                  "missing-seam",
+                  "install"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "fix": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "A command after which this is fixed, or null (then `message` and `lines` say what to change)."
+              },
+              "lines": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "message",
+              "fix"
+            ],
+            "additionalProperties": true
+          },
+          "description": "What breaks the project now. Not empty: exit code 2."
+        },
+        "pins": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "efforge": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "This efforge's pin, or null when it doesn't manage the package."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "same",
+                  "behind",
+                  "yours",
+                  "unmanaged"
+                ],
+                "description": "behind: an efforge release pinned this version and this one pins another (upgrade moves it); yours: no release pinned it (never moved)."
+              },
+              "where": {
+                "type": "string",
+                "description": "`catalog`, `packageManager`, or the package.json that pins it exactly."
+              },
+              "set": {
+                "type": "string",
+                "description": "The set it moves with (see `sets`)."
+              },
+              "held": {
+                "type": "boolean",
+                "description": "Behind, but kept: a pin of its set is yours, and moving this one would split the set."
+              }
+            },
+            "required": [
+              "name",
+              "project",
+              "efforge",
+              "status",
+              "where"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "sets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "why": {
+                "type": "string"
+              },
+              "packages": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "split": {
+                "type": "boolean",
+                "description": "efforge's pins in the set aren't ones a release pinned together: half moved."
+              }
+            },
+            "required": [
+              "id",
+              "why",
+              "packages",
+              "split"
+            ],
+            "additionalProperties": true
+          },
+          "description": "Sets of pins that move together, when one of them differs."
+        },
+        "guards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "enum": [
+                  "effect-overrides",
+                  "package-manager"
+                ]
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "message": {
+                "type": "string"
+              },
+              "missing": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "ok",
+              "message"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "current",
+                  "refresh",
+                  "review",
+                  "yours",
+                  "deleted",
+                  "dropped",
+                  "new"
+                ]
+              },
+              "inPlace": {
+                "type": "boolean",
+                "description": "A file efforge edits in place (layers.ts, AGENTS.md), judged by the record of what releases wrote."
+              },
+              "held": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  },
+                  "lines": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": true,
+                "description": "efforge would apply this file and holds it back to keep the project consistent."
+              },
+              "why": {
+                "type": "string",
+                "description": "What efforge's change is for."
+              },
+              "diff": {
+                "type": "string",
+                "description": "With --diff: a git diff, yours -> efforge's today."
+              }
+            },
+            "required": [
+              "path",
+              "status"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "seams": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "missing": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "diff": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "file",
+              "missing",
+              "diff"
+            ],
+            "additionalProperties": true
+          },
+          "description": "Files upgrade edits in place, and what it adds to each."
+        },
+        "scripts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "yours": {
+                "type": "string"
+              },
+              "efforge": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "behind",
+                  "yours"
+                ]
+              }
+            },
+            "required": [
+              "file",
+              "name",
+              "yours",
+              "efforge",
+              "status"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "env": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string",
+                "description": "Where the local value is read from (.dev.vars, or .env with Alchemy)."
+              },
+              "set": {
+                "type": "boolean",
+                "description": "efforge already wrote a working local value; false means fill it in."
+              },
+              "secret": {
+                "type": "boolean",
+                "description": "The value is a secret: the deployed one is never printed or committed."
+              }
+            },
+            "required": [
+              "name",
+              "description",
+              "file",
+              "set",
+              "secret"
+            ],
+            "additionalProperties": true
+          },
+          "description": "Env vars the stack reads that .env.example lacks: upgrade appends them there, and to the local settings file when there is one, changing no line already there."
+        },
+        "kept": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "review",
+                  "held",
+                  "dropped"
+                ],
+                "description": "review: you changed it and so did efforge's template; held: efforge's, held back to keep the project consistent; dropped: efforge no longer generates it, and you changed it."
+              },
+              "reason": {
+                "type": "string"
+              },
+              "lines": {
+                "type": "string",
+                "description": "The exact lines that would let efforge apply it."
+              }
+            },
+            "required": [
+              "path",
+              "status",
+              "reason"
+            ],
+            "additionalProperties": true
+          },
+          "description": "Files upgrade won't change for you, each with why."
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "command": {
+                "type": "string"
+              },
+              "cwd": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string"
+              },
+              "lines": {
+                "type": "string"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "covers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "The `upgrade` step: what it applies, by kind."
+              }
+            },
+            "required": [
+              "id",
+              "description"
+            ],
+            "additionalProperties": true
+          },
+          "description": "What to do, in order, ending with the project's gate."
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Things to know after the upgrade, one line each, as add gives them (when it brings the session gates: what they change and what pnpm check fails on)."
+        }
+      },
+      "required": [
+        "efforge",
+        "contract",
+        "ok",
+        "check",
+        "directory",
+        "stack",
+        "efforgeVersion",
+        "status",
+        "needsAction",
+        "pins",
+        "sets",
+        "guards",
+        "files",
+        "seams",
+        "scripts",
+        "env",
+        "kept",
+        "steps",
+        "warnings",
+        "notes"
+      ],
+      "additionalProperties": true,
+      "title": "efforge upgrade --check --json"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "efforge": {
+          "type": "string",
+          "description": "The CLI version that printed this."
+        },
+        "contract": {
+          "type": "number",
+          "enum": [
+            1
+          ],
+          "description": "The version of this contract. It changes only when a field is renamed, removed or changes meaning."
+        },
+        "ok": {
+          "type": "boolean",
+          "enum": [
+            true
+          ]
+        },
+        "check": {
+          "type": "boolean",
+          "enum": [
+            false
+          ],
+          "description": "`upgrade`: it applied (or, with --dry-run, would apply)."
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "directory": {
+          "type": "string"
+        },
+        "stack": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "runtime": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "cloudflare"
+                  ]
+                }
+              ]
+            },
+            "database": {
+              "type": "string",
+              "enum": [
+                "postgres",
+                "d1",
+                "none"
+              ]
+            },
+            "orm": {
+              "type": "string",
+              "enum": [
+                "drizzle",
+                "effect-sql",
+                "none"
+              ]
+            },
+            "auth": {
+              "type": "string",
+              "enum": [
+                "better-auth-orgs",
+                "better-auth",
+                "none"
+              ]
+            },
+            "infra": {
+              "type": "string",
+              "enum": [
+                "none",
+                "alchemy"
+              ]
+            },
+            "ai": {
+              "type": "string",
+              "enum": [
+                "none",
+                "effect-ai-byok"
+              ]
+            },
+            "extras": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "workflows",
+                  "realtime",
+                  "browser",
+                  "storage",
+                  "email",
+                  "rpc",
+                  "cluster"
+                ]
+              }
+            }
+          },
+          "required": [
+            "name",
+            "runtime",
+            "database",
+            "orm",
+            "auth",
+            "infra",
+            "ai",
+            "extras"
+          ],
+          "additionalProperties": true
+        },
+        "efforgeVersion": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string",
+              "description": "What efforge.jsonc records now."
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "additionalProperties": true
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "needs-action",
+            "current"
+          ],
+          "description": "After applying: needs-action when something efforge can't fix still breaks the project (exit code 2)."
+        },
+        "created": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "changed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "removed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "installed": {
+          "type": "boolean",
+          "description": "pnpm install ran."
+        },
+        "env": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string",
+                "description": "Where the local value is read from (.dev.vars, or .env with Alchemy)."
+              },
+              "set": {
+                "type": "boolean",
+                "description": "efforge already wrote a working local value; false means fill it in."
+              },
+              "secret": {
+                "type": "boolean",
+                "description": "The value is a secret: the deployed one is never printed or committed."
+              }
+            },
+            "required": [
+              "name",
+              "description",
+              "file",
+              "set",
+              "secret"
+            ],
+            "additionalProperties": true
+          },
+          "description": "Env vars added to .env.example (and to the local settings file when there is one), as create and add report them."
+        },
+        "kept": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "review",
+                  "held",
+                  "dropped"
+                ],
+                "description": "review: you changed it and so did efforge's template; held: efforge's, held back to keep the project consistent; dropped: efforge no longer generates it, and you changed it."
+              },
+              "reason": {
+                "type": "string"
+              },
+              "lines": {
+                "type": "string",
+                "description": "The exact lines that would let efforge apply it."
+              }
+            },
+            "required": [
+              "path",
+              "status",
+              "reason"
+            ],
+            "additionalProperties": true
+          },
+          "description": "Files upgrade won't change for you, each with why."
+        },
+        "needsAction": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "enum": [
+                  "effect-overrides",
+                  "package-manager",
+                  "split-set",
+                  "missing-seam",
+                  "install"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "fix": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "A command after which this is fixed, or null (then `message` and `lines` say what to change)."
+              },
+              "lines": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "message",
+              "fix"
+            ],
+            "additionalProperties": true
+          },
+          "description": "What breaks the project now. Not empty: exit code 2."
+        },
+        "nextSteps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string"
+              },
+              "cwd": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "command",
+              "cwd"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Things to know after the upgrade, one line each, as add gives them (when it brings the session gates: what they change and what pnpm check fails on)."
+        },
+        "diff": {
+          "type": "string",
+          "description": "With --diff: what it changed, as a git diff."
+        }
+      },
+      "required": [
+        "efforge",
+        "contract",
+        "ok",
+        "check",
+        "dryRun",
+        "directory",
+        "stack",
+        "efforgeVersion",
+        "status",
+        "created",
+        "changed",
+        "removed",
+        "installed",
+        "env",
+        "kept",
+        "needsAction",
+        "nextSteps",
+        "warnings",
+        "notes"
+      ],
+      "additionalProperties": true,
+      "title": "efforge upgrade --json"
+    }
+  ],
+  "title": "efforge upgrade --json"
+}

@@ -2,10 +2,15 @@
   "id": "auth/better-auth",
   "title": "Better Auth",
   "description": "Email and password sign-in with Better Auth, a guarded /app and a user menu.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/auth-better-auth.md",
   "files": [
     {
       "path": "files/core/Auth.ts",
       "target": "packages/core/src/Auth.ts"
+    },
+    {
+      "path": "files/core/auth.test.ts",
+      "target": "packages/core/test/auth.test.ts"
     },
     {
       "path": "files/shared/server/auth.ts",
@@ -14,6 +19,10 @@
     {
       "path": "files/server/auth-live.ts",
       "target": "apps/web/src/server/auth-live.ts"
+    },
+    {
+      "path": "files/shared/server/auth-url.ts",
+      "target": "apps/web/src/server/auth-url.ts"
     },
     {
       "path": "files/shared/server/auth-route.ts",
@@ -26,6 +35,26 @@
     {
       "path": "../better-auth/files/shared/server/require-session.ts",
       "target": "apps/web/src/server/require-session.ts"
+    },
+    {
+      "path": "../better-auth/files/shared/server/owner.ts",
+      "target": "apps/web/src/server/owner.ts"
+    },
+    {
+      "path": "../better-auth/files/shared/server/socket-session.ts",
+      "target": "apps/web/src/server/socket-session.ts"
+    },
+    {
+      "path": "../better-auth/files/shared/server/public-server-fns.json",
+      "target": "apps/web/src/server/public-server-fns.json"
+    },
+    {
+      "path": "../better-auth/files/shared/server/api-session.ts",
+      "target": "apps/web/src/server/api-session.ts"
+    },
+    {
+      "path": "../better-auth/files/shared/server/public-api-paths.json",
+      "target": "apps/web/src/server/public-api-paths.json"
     },
     {
       "path": "files/lib/auth-client.ts",
@@ -56,12 +85,18 @@
       "target": "apps/web/src/routes/sign-up.tsx"
     },
     {
-      "path": "files/shared/routes/app/index.tsx",
-      "target": "apps/web/src/routes/app/index.tsx"
-    },
-    {
       "path": "files/routes/app.tsx",
       "target": "apps/web/src/routes/app.tsx"
+    },
+    {
+      "path": "../../base/files/web/src/components/app-shell.tsx",
+      "target": "apps/web/src/components/app-shell.tsx",
+      "ifAbsent": true
+    },
+    {
+      "path": "../../base/files/web/src/lib/project.ts",
+      "target": "apps/web/src/lib/project.ts",
+      "ifAbsent": true
     },
     {
       "path": "files/shared/server/db/pg-drizzle.ts",
@@ -232,6 +267,19 @@
       }
     }
   ],
+  "card": {
+    "export": "auth",
+    "files": [
+      {
+        "path": "files/card/auth.tsx",
+        "target": "apps/web/src/capabilities/auth.tsx"
+      },
+      {
+        "path": "files/card/account.ts",
+        "target": "apps/web/src/server/account.ts"
+      }
+    ]
+  },
   "dependencies": {
     "apps/web": [
       "better-auth"
@@ -241,32 +289,34 @@
   "envVars": [
     {
       "name": "BETTER_AUTH_SECRET",
+      "secret": true,
       "example": "change-me-to-a-long-random-string",
-      "description": "Signs sessions and cookies (local: .dev.vars; production: wrangler secret put BETTER_AUTH_SECRET)"
+      "dev": "dev-only-secret-replace-me-with-openssl-rand-base64-32",
+      "description": "Signs sessions and cookies (production: a Worker secret, `wrangler secret put BETTER_AUTH_SECRET` or the deploy env with Alchemy)"
     },
     {
       "name": "BETTER_AUTH_URL",
-      "example": "http://localhost:5173",
-      "description": "Public origin of the app, used for redirects and trusted origins (a Worker var in production)"
+      "example": "https://app.example.com",
+      "dev": "",
+      "description": "Public origin of the deployed app, used for redirects and trusted origins (a Worker var). When unset, the origin comes from each request (under pnpm dev, localhost on any port)."
     }
   ],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "Email and password accounts with Better Auth. Server code reads the signed-in user through the `Auth` service: `Auth.currentSession` fails with `Unauthorized` when nobody is signed in. Pages under `/app` send signed-out visitors to `/sign-in`, and `requireSession` guards server functions. Better Auth keeps users and sessions in the database, so it needs one.",
+    "service": {
+      "name": "Auth",
+      "file": "packages/core/src/Auth.ts",
+      "errors": [
+        "Unauthorized"
+      ]
+    },
+    "limits": [
+      "Under `pnpm dev`, sign-in works from `localhost` and `127.0.0.1` on any port. From another host (a LAN address, a tunnel), set `BETTER_AUTH_URL` to that origin."
+    ]
+  },
   "transforms": [
-    {
-      "name": "addDevVar",
-      "args": {
-        "name": "BETTER_AUTH_SECRET",
-        "value": "dev-only-secret-replace-me-with-openssl-rand-base64-32"
-      }
-    },
-    {
-      "name": "addDevVar",
-      "args": {
-        "name": "BETTER_AUTH_URL",
-        "value": "http://localhost:5173"
-      }
-    },
     {
       "name": "addExport",
       "args": {
@@ -300,6 +350,29 @@
         "item": "authRoute",
         "import": "authRoute",
         "from": "./auth-route"
+      }
+    },
+    {
+      "name": "addArrayItem",
+      "args": {
+        "file": "apps/web/src/server/routes.ts",
+        "name": "workerRoutes",
+        "item": "requireApiSession",
+        "import": "requireApiSession",
+        "from": "./api-session",
+        "at": "start"
+      }
+    },
+    {
+      "name": "addArrayItem",
+      "args": {
+        "file": "apps/web/src/start.ts",
+        "name": "functionMiddleware",
+        "item": "sessionGate",
+        "import": "sessionGate",
+        "from": "./server/require-session",
+        "at": "start",
+        "ifMissing": "apps/web/src/start.ts has no `const functionMiddleware = [...]` list passed to createStart (a project made before efforge 0.3), so server functions are guarded only where they chain `.middleware([requireSession])`, and the project's lint names any that don't. `npx -y create-efforge upgrade` brings the list; or add `functionMiddleware: [sessionGate]` to createStart's options yourself, with `import { sessionGate } from \"./server/require-session\"`."
       }
     },
     {
@@ -369,7 +442,7 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "auth",
-        "content": "## Auth (Better Auth)\n\n- Server: `apps/web/src/server/auth.ts` builds the Better Auth instance (`makeAuth`); `auth-live.ts` provides it and the `Auth` service from `@repo/core`. Read the session in Effect code through `Auth.currentSession`, never from cookies directly.\n- `/api/auth/*` is served by `auth-route.ts` (a `workerRoutes` entry). Client: `authClient` in `apps/web/src/lib/auth-client.ts`.\n- Route guard: `routes/app.tsx` redirects signed-out visitors to `/sign-in?redirect=...`; build redirects with `safeRedirect`, never from raw input."
+        "content": "## Auth (Better Auth)\n\n- Server: `apps/web/src/server/auth.ts` builds the Better Auth instance (`makeAuth`); `auth-live.ts` provides it and the `Auth` service from `@repo/core`. Read the session in Effect code through `Auth.currentSession`, never from cookies directly.\n- `/api/auth/*` is served by `auth-route.ts` (a `workerRoutes` entry). Client: `authClient` in `apps/web/src/lib/auth-client.ts`.\n- Route guard: `routes/app.tsx` redirects signed-out visitors to `/sign-in?redirect=...`; build redirects with `safeRedirect`, never from raw input.\n- Server functions: `sessionGate` (`require-session.ts`) runs before every server function, from `functionMiddleware` in `apps/web/src/start.ts`, and refuses a call without a session with `Unauthorized`. Only the functions listed in `apps/web/src/server/public-server-fns.json` (by file and name) answer signed-out visitors; keep that list short. Chain `.middleware([requireSession])` too, to get `context.session` in the handler: the lookup still runs once, and the lint rule `efforge/server-fn-session` asks for it as early feedback.\n- Routes: `requireApiSession` (`api-session.ts`), first in `workerRoutes`, answers 401 to any request under `/api/` without a session, whether a Worker route or a route file's `server: { handlers }` would answer it; `public-api-paths.json` lists the exceptions (`/api/auth/`). A route outside `/api/` checks the session itself: a WebSocket upgrade with `requireSocketSession` from `socket-session.ts`, which closes a socket without a session with 4401 \"Not signed in\", anything else with `signedIn(request.headers)` from the same file. Keep `socket-session.ts` and `api-session.ts` out of anything the browser loads.\n- Sign-up is open: anyone can register and then call every server function, the demos that spend included (the AI key, the test email, the browser container). A session stops anonymous callers, not registered ones. To close sign-up, set `emailAndPassword: { enabled: true, disableSignUp: true }` in `makeAuth` (`auth.ts`): existing users still sign in, and no one new can register.\n- Whose data: the storage card's uploads and the workflows card's runs belong to the signed-in user (`owner.ts`, per user); no other user can list, open, delete or watch them. The notes are shared by every user on purpose.\n- Start-up on Workers: never await a promise that outlives the request that made it, and never await one across requests. Better Auth finishes starting in a promise (`auth.$context`) that, under `pnpm dev`, loads a module (I/O owned by the request that started it). `auth-live.ts` hands it to `waitUntil` instead of awaiting it while building the layer: the layer is built once per isolate, so an await there makes every request that arrives meanwhile wait on another request's work, which workerd fails with \"the Worker's code had hung\", and a request that ends first would leave the promise cancelled. Keep layer construction synchronous; pass slow start-up work to `waitUntil`."
       }
     },
     {
@@ -400,7 +473,7 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "auth-secret",
-        "content": "- `BETTER_AUTH_SECRET` signs sessions: set it as a Worker secret (`.dev.vars` locally, `wrangler secret put BETTER_AUTH_SECRET` in production). Never log or return it. `BETTER_AUTH_URL` is the public origin; when unset Better Auth infers it from the request."
+        "content": "- `BETTER_AUTH_SECRET` signs sessions: set it as a Worker secret (`.dev.vars` locally, `wrangler secret put BETTER_AUTH_SECRET` in production). Never log or return it. `BETTER_AUTH_URL` is the public origin and always wins when set. Unset, Better Auth takes it from the request (under `pnpm dev`, from localhost on any port); set it to sign in from another host in development, such as a phone on your network or a tunnel."
       },
       "when": {
         "infra": [
@@ -412,7 +485,7 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "auth-secret",
-        "content": "- `BETTER_AUTH_SECRET` signs sessions: Alchemy passes it to the Worker from `.env` locally and from the deploy workflow secret in CI. Never log or return it. `BETTER_AUTH_URL` is the public origin; when unset Better Auth infers it from the request."
+        "content": "- `BETTER_AUTH_SECRET` signs sessions: Alchemy passes it to the Worker from `.env` locally and from the deploy workflow secret in CI. Never log or return it. `BETTER_AUTH_URL` is the public origin and always wins when set. Unset, Better Auth takes it from the request (under `pnpm dev`, from localhost on any port); set it to sign in from another host in development, such as a phone on your network or a tunnel."
       },
       "when": {
         "infra": [

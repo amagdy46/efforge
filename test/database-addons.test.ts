@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from "node:fs"
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect, it } from "@effect/vitest"
 import { Effect, Path } from "effect"
@@ -40,7 +41,9 @@ it("postgres + drizzle: Hyperdrive binding, compose file, drizzle layer", async 
   expect(text(tree, "packages/core/src/Database.ts")).toContain("Context.Service")
   expect(tree.has("packages/db/drizzle.config.ts")).toBe(true)
   expect(text(tree, ".env.example")).toContain("DATABASE_URL=postgres://")
-  expect(text(tree, "apps/web/src/server/runtime.ts")).toContain("Effect.provide(effect, AppLayer)")
+  expect(text(tree, "apps/web/src/server/runtime.ts")).toContain(
+    "Effect.provide(effect, checkSettings(AppLayer))",
+  )
 })
 
 it("registers the database layer in AppLayer, providing the Worker env", async () => {
@@ -82,7 +85,7 @@ it("every combination wires db:migrate at the root and in @repo/db, and lists no
       )
       expect(json(tree, "apps/web/package.json").dependencies["@repo/db"]).toBe("workspace:*")
       expect(text(tree, "apps/web/src/server/notes.ts")).toContain("listNotes")
-      expect(text(tree, "apps/web/src/routes/app/index.tsx")).toContain("listNotes()")
+      expect(text(tree, "apps/web/src/capabilities/registry.ts")).toContain("database")
     }
 })
 
@@ -90,4 +93,33 @@ it("no database means no packages/db", async () => {
   const tree = await gen({ database: "none", orm: "none" })
   expect([...tree.keys()].some((f) => f.startsWith("packages/db/"))).toBe(false)
   expect(text(tree, "apps/web/src/server/layers.ts")).not.toContain("DatabaseLayer")
+})
+
+it("every committed Drizzle snapshot is the version the pinned drizzle-kit writes", () => {
+  // drizzle-kit 1.0.0-rc.5 refuses an older Postgres snapshot ("run drizzle-kit up"), which broke
+  // `pnpm db:generate` on a fresh project; the e2e matrix runs db:generate on every Drizzle stack
+  const want: Record<string, number> = { postgres: 9, sqlite: 7 }
+  const found = readdirSync(new URL("../templates", import.meta.url), { recursive: true })
+    .map(String)
+    .filter((f) => f.endsWith("snapshot.json"))
+  expect(found.length).toBeGreaterThanOrEqual(8)
+  for (const f of found) {
+    const s = JSON.parse(readFileSync(new URL(`../templates/${f}`, import.meta.url), "utf8"))
+    expect(s.version, f).toBe(String(want[s.dialect]))
+  }
+})
+
+it("D1 + Drizzle ignores the flat migrations db:migrate derives; Effect SQL commits its own", async () => {
+  // drizzle-kit's packages/db/drizzle/ is the source; `pnpm db:migrate` copies it to migrations/
+  const drizzle = await gen({ database: "d1", orm: "drizzle" })
+  expect(text(drizzle, "packages/db/.gitignore").split("\n")).toContain("/migrations/")
+  expect([...drizzle.keys()].some((f) => f.startsWith("packages/db/migrations/"))).toBe(false)
+  // with Alchemy, `pnpm dev` applies drizzle/ itself and db:migrate writes nothing
+  expect(
+    (await gen({ database: "d1", orm: "drizzle", infra: "alchemy" })).has("packages/db/.gitignore"),
+  ).toBe(false)
+  // on Effect SQL, migrations/ is the hand-written source, generated at create and committed
+  const effectSql = await gen({ database: "d1", orm: "effect-sql" })
+  expect(effectSql.has("packages/db/.gitignore")).toBe(false)
+  expect([...effectSql.keys()].some((f) => f.startsWith("packages/db/migrations/"))).toBe(true)
 })

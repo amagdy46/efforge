@@ -3,20 +3,22 @@ import type { Tree } from "../tree.ts"
 import { ALCHEMY_FILE, addAlchemyResource } from "./addAlchemyResource.ts"
 import { addArrayItem } from "./addArrayItem.ts"
 import { AUTH_FILE, addAuthPlugin } from "./addAuthPlugin.ts"
-import { addDevVar } from "./addDevVar.ts"
 import { addExport } from "./addExport.ts"
 import { addImport } from "./addImport.ts"
 import { addLayer } from "./addLayer.ts"
-import { addServerFnMiddleware } from "./addServerFnMiddleware.ts"
+import { addTelemetry } from "./addTelemetry.ts"
+import { addRegion } from "./addRegion.ts"
+import { addServerFnMiddleware, unguardedServerFns } from "./addServerFnMiddleware.ts"
 import { addWorkflowSecret, WORKFLOW_FILE } from "./addWorkflowSecret.ts"
 import { addWranglerBinding, WRANGLER_FILE } from "./addWranglerBinding.ts"
 import { AGENTS_FILE, appendAgentsSection } from "./appendAgentsSection.ts"
 import { TransformAnchorMissing, UnknownTransform } from "./errors.ts"
+import { setDeclaration } from "./setDeclaration.ts"
 import { setWranglerValue } from "./setWranglerValue.ts"
 import type { Transform } from "./util.ts"
 
 export type { Transform }
-export { TransformAnchorMissing, UnknownTransform }
+export { TransformAnchorMissing, UnknownTransform, unguardedServerFns }
 
 export interface TransformCall {
   readonly name: string
@@ -38,6 +40,7 @@ const registry: Readonly<Record<string, Entry>> = {
   addArrayItem: { run: addArrayItem, targets: onFile },
   addExport: { run: addExport, targets: onFile },
   addLayer: { run: addLayer, targets: onFile },
+  addTelemetry: { run: addTelemetry, targets: onFile },
   addAuthPlugin: { run: addAuthPlugin, targets: fixed(AUTH_FILE) },
   appendAgentsSection: { run: appendAgentsSection, targets: fixed(AGENTS_FILE) },
   addAlchemyResource: { run: addAlchemyResource, targets: fixed(ALCHEMY_FILE) },
@@ -45,7 +48,8 @@ const registry: Readonly<Record<string, Entry>> = {
   addWranglerBinding: { run: addWranglerBinding, targets: fixed(WRANGLER_FILE) },
   setWranglerValue: { run: setWranglerValue, targets: fixed(WRANGLER_FILE) },
   addServerFnMiddleware: { run: addServerFnMiddleware, targets: onFile },
-  addDevVar: { run: addDevVar, targets: fixed(".dev.vars") },
+  addRegion: { run: addRegion, targets: onFile },
+  setDeclaration: { run: setDeclaration, targets: onFile },
 }
 
 const entry = (name: string): Entry | undefined =>

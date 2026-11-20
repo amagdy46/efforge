@@ -1,8 +1,14 @@
 {
   "id": "extras/realtime",
   "title": "Realtime",
-  "description": "WebSockets: a Realtime service, a hibernating Room Durable Object, a useRoom hook and a demo on /app.",
+  "description": "WebSockets: a Realtime service, a hibernating Room Durable Object, a useRoom hook and a dashboard card.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/extras-realtime.md",
   "files": [
+    {
+      "path": "../../base/files/core/src/server-only.ts",
+      "target": "packages/core/src/server-only.ts",
+      "ifAbsent": true
+    },
     {
       "path": "files/core-realtime.ts",
       "target": "packages/core/src/realtime.ts"
@@ -24,23 +30,46 @@
       "target": "apps/web/src/lib/use-room.ts"
     },
     {
-      "path": "files/realtime-demo.tsx",
-      "target": "apps/web/src/components/realtime-demo.tsx"
-    },
-    {
       "path": "files/realtime-limits.ts",
       "target": "packages/core/src/realtime-limits.ts"
     },
     {
       "path": "files/realtime-limits.test.ts",
       "target": "packages/core/test/realtime-limits.test.ts"
+    },
+    {
+      "path": "files/realtime.test.ts",
+      "target": "packages/core/test/realtime.test.ts"
     }
   ],
+  "card": {
+    "export": "realtime",
+    "files": [
+      {
+        "path": "files/card/realtime.tsx",
+        "target": "apps/web/src/capabilities/realtime.tsx"
+      },
+      {
+        "path": "files/card/realtime-demo.ts",
+        "target": "apps/web/src/server/realtime-demo.ts"
+      }
+    ]
+  },
   "dependencies": {},
   "devDependencies": {},
   "envVars": [],
   "requires": [],
   "conflicts": [],
+  "guide": {
+    "purpose": "WebSocket rooms. Each room is a Durable Object (`Room`) that hibernates while idle. On the server, the `Realtime` service connects clients, broadcasts to a room and counts its connections; in the UI, the `useRoom` hook joins a room.",
+    "service": {
+      "name": "Realtime",
+      "file": "packages/core/src/realtime.ts",
+      "errors": [
+        "RealtimeError"
+      ]
+    }
+  },
   "transforms": [
     {
       "name": "addExport",
@@ -80,11 +109,18 @@
     {
       "name": "addArrayItem",
       "args": {
-        "file": "apps/web/src/components/widgets.tsx",
-        "name": "widgets",
-        "item": "<RealtimeDemo key=\"realtime\" />",
-        "import": "RealtimeDemo",
-        "from": "./realtime-demo"
+        "file": "apps/web/src/server/realtime-route.ts",
+        "name": "upgradeGuards",
+        "item": "requireSocketSession",
+        "import": "requireSocketSession",
+        "from": "./socket-session",
+        "ifMissing": "apps/web/src/server/realtime-route.ts has no upgradeGuards list (it predates the session check for WebSockets), so the realtime room still lets anyone join. In realtimeRoute, before connecting, add `const refused = await requireSocketSession(request)` and `if (refused !== undefined) return refused`, with `import { requireSocketSession } from \"./socket-session\"`."
+      },
+      "when": {
+        "auth": [
+          "better-auth",
+          "better-auth-orgs"
+        ]
       }
     },
     {
@@ -128,7 +164,7 @@
       "name": "appendAgentsSection",
       "args": {
         "id": "realtime",
-        "content": "## Realtime\n\n- Rooms are a Durable Object (`Room`, exported from `apps/web/src/server.ts`); WebSocket upgrades are handled by a Worker route in `server/routes.ts`.\n- Use the `Realtime` service from `@repo/core` on the server and the `useRoom` hook in `apps/web/src/lib/use-room.ts` in the UI.\n- Keep message payloads small and validate incoming messages with `Schema` before using them."
+        "content": "## Realtime\n\n- Rooms are a Durable Object (`Room`, exported from `apps/web/src/server.ts`); WebSocket upgrades are handled by a Worker route in `server/routes.ts`.\n- Use the `Realtime` service from `@repo/core` on the server and the `useRoom` hook in `apps/web/src/lib/use-room.ts` in the UI.\n- Keep message payloads small and validate incoming messages with `Schema` before using them.\n- Access: with auth, `realtime-route.ts` runs its `upgradeGuards` first, and `requireSocketSession` closes a socket without a session with 4401 \"Not signed in\" (`useRoom` reports `refused`). Without auth the list is empty and anyone who can reach the app can join a room and read it.\n- `useRoom` sends a ping as soon as a socket opens. The room counts and sends only to sockets that have pinged, and closes one that has not 10 seconds after the handshake (a client that left mid-handshake)."
       }
     }
   ]

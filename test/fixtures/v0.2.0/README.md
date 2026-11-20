@@ -17,3 +17,8 @@ The defaults filled in `--auth=better-auth-orgs`. Only these files were kept: th
 overrides, `effect` 4.0.5), `efforge.jsonc` with the recorded hashes, the dashboard
 (`apps/web/src/routes/app/index.tsx`, which does not render `widgets`), and the files
 the two add-ons transform.
+
+`d1-effect-sql-auth-rest/` holds every other file that same command generated, unchanged except
+that `.gitignore` is stored as `gitignore` (so git does not apply it here). Copied over
+`d1-effect-sql-auth/`, with `gitignore` renamed back, the two are the whole 0.2.0 project: the e2e
+test of `docs/upgrading.md`'s worked example installs and upgrades it.

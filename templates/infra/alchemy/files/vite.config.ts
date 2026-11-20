@@ -3,6 +3,7 @@ import tailwindcss from "@tailwindcss/vite"
 import { tanstackStart } from "@tanstack/react-start/plugin/vite"
 import viteReact from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
+import { clientGuard, regions } from "./regions.ts"
 
 // `alchemy dev` / `alchemy deploy` inject their own resource-aware Cloudflare plugin (with every
 // binding from infra/alchemy.run.ts) and set this variable. A plain `vite build` (pnpm build,
@@ -23,6 +24,8 @@ export default defineConfig({
           },
           viteEnvironment: { name: "ssr" },
         }),
+    regions(),
+    clientGuard(),
     tanstackStart(),
     tailwindcss(),
     viteReact(),

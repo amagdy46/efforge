@@ -15,6 +15,10 @@ export const versions: Record<string, string> = {
   "@effect/ai-anthropic": effect4,
   "@effect/ai-openai": effect4,
   "@effect/ai-openrouter": effect4,
+  "@effect/atom-react": effect4,
+  // experimental upstream (extras/cluster): an API may change in a patch release, so it moves only with effect
+  "@effect/platform-cloudflare": effect4,
+  "@effect/sql-sqlite-node": effect4,
   alchemy: "2.0.0-beta.87",
   // the Cloudflare provider, split out of `alchemy` in 2.0.0-beta.87; keep it on the alchemy version
   "@alchemy.run/cloudflare": "2.0.0-beta.87",
@@ -134,3 +138,54 @@ export const efforgeVersion: string = packageRoot?.version ?? "0.0.0"
 
 /** The shipped `templates/` dir, next to `src/` and `dist/`. */
 export const templatesDir: string = join(packageRoot?.dir ?? import.meta.dirname, "templates")
+
+/**
+ * Pins that move together: bumping one without the others breaks a build or the lint toolchain.
+ * `upgrade --check` names the set when any member differs, so nobody bumps half of one. `match`
+ * lists exact names or `effectLockstep`-style patterns.
+ */
+export const pinSets: ReadonlyArray<{
+  readonly id: string
+  readonly match: ReadonlyArray<string>
+  readonly why: string
+}> = [
+  {
+    id: "effect",
+    match: effectLockstep,
+    why: "Effect's packages are released together and only work at one shared version; the overrides in pnpm-workspace.yaml must match the catalog's effect (ADR 0005)",
+  },
+  {
+    id: "drizzle",
+    match: ["drizzle-orm", "drizzle-kit"],
+    why: "drizzle-kit writes the migrations drizzle-orm reads; they are released as a pair",
+  },
+  {
+    id: "alchemy",
+    match: ["alchemy", "@alchemy.run/cloudflare"],
+    why: "the Cloudflare provider was split out of alchemy and is released on the same version",
+  },
+  {
+    id: "lint-toolchain",
+    match: ["@effect/tsgo", "typescript", "oxlint", "oxlint-tsgolint", "vite-plus", "vitest"],
+    why: "@effect/tsgo patches only the TypeScript and Oxlint versions it lists, and vite-plus bundles its own oxlint and vitest (ADR 0001)",
+  },
+  {
+    id: "tanstack",
+    match: ["@tanstack/react-start", "@tanstack/react-router", "@tanstack/router-cli"],
+    why: "the router CLI is versioned with the router generator @tanstack/react-start depends on",
+  },
+  {
+    id: "react",
+    match: ["react", "react-dom", "@types/react", "@types/react-dom"],
+    why: "react and react-dom must be the same version, and their types follow them",
+  },
+  {
+    id: "tailwind",
+    match: ["tailwindcss", "@tailwindcss/vite"],
+    why: "the Vite plugin is released with tailwindcss",
+  },
+]
+
+/** The set `name` belongs to, or undefined. */
+export const pinSetOf = (name: string): (typeof pinSets)[number] | undefined =>
+  pinSets.find((s) => s.match.some((p) => matchesPattern(name, p)))

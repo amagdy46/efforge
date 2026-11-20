@@ -2,12 +2,14 @@
   "id": "infra/alchemy",
   "title": "Alchemy",
   "description": "Infrastructure as Effects (Alchemy v2): infra/alchemy.run.ts declares the Worker and its bindings instead of wrangler.jsonc, with PR preview stages deployed from GitHub Actions.",
+  "docs": "https://github.com/amagdy46/efforge/blob/main/docs/addons/infra-alchemy.md",
   "files": [
     { "path": "files/alchemy.run.ts", "target": "infra/alchemy.run.ts" },
     { "path": "files/tsconfig.json", "target": "infra/tsconfig.json" },
     { "path": "files/README.md", "target": "infra/README.md" },
     { "path": "files/github/deploy.yml", "target": ".github/workflows/deploy.yml" },
-    { "path": "files/vite.config.ts", "target": "apps/web/vite.config.ts" }
+    { "path": "files/vite.config.ts", "target": "apps/web/vite.config.ts" },
+    { "path": "../../base/files/web/regions.ts", "target": "apps/web/regions.ts", "ifAbsent": true }
   ],
   "dependencies": {},
   "devDependencies": {
@@ -24,12 +26,30 @@
     {
       "name": "CLOUDFLARE_ACCOUNT_ID",
       "example": "your-account-id",
-      "description": "Needed by `pnpm run deploy` (with CLOUDFLARE_API_TOKEN, or a login from `pnpm exec alchemy login`)."
+
+      "dev": "",
+      "description": "Needed by `pnpm run deploy`, with CLOUDFLARE_API_TOKEN; `pnpm exec alchemy provider check-env -c infra/alchemy.run.ts` checks both."
     }
   ],
   "requires": [],
   "conflicts": [],
-  "transforms": [],
+  "guide": {
+    "purpose": "Declares the Worker and its bindings in TypeScript, in `infra/alchemy.run.ts`, instead of `wrangler.jsonc`, which it removes. `pnpm dev` and `pnpm run deploy` go through Alchemy, and `.github/workflows/deploy.yml` deploys a preview stage for each pull request.",
+    "limits": [
+      "It uses an Alchemy 2.0 beta; the exact version is under Dependencies.",
+      "Local settings are in `.env`, not `.dev.vars`: `efforge add infra/alchemy` moves them there.",
+      "On D1, `pnpm db:migrate` is not used: `pnpm dev` and `pnpm run deploy` apply the migrations."
+    ]
+  },
+  "transforms": [
+    {
+      "name": "appendAgentsSection",
+      "args": {
+        "id": "alchemy",
+        "content": "## Infrastructure (Alchemy)\n\n- `infra/alchemy.run.ts` declares the Worker and every resource it binds. There is no `wrangler.jsonc`: add a binding as a resource there and pass it in the `env` of `Cloudflare.Website.Vite`, under the name effect-cf reads. `efforge add` inserts resources above `// efforge:resources`; keep that line.\n- Settings come from `Config` calls in `alchemy.run.ts`: from `.env` under `pnpm dev`, and from `--env-file` or the environment when deploying. Never write a secret's value into `alchemy.run.ts`, and never commit `.env` or `.env.production`.\n- `pnpm dev` runs stage `dev_$USER`; `pnpm run deploy --stage <name>` creates or updates a stage and `pnpm run destroy --stage <name>` removes one. Write `pnpm run deploy`: `pnpm deploy` is pnpm's own command.\n- Local state lives in `.alchemy/` (gitignored); CI keeps it in a Cloudflare-hosted store. `.github/workflows/deploy.yml` deploys `main` to `prod` and each pull request to `pr-<number>`: a new setting the Worker reads goes in its `env` and in the repository secrets.\n- `pnpm typecheck` checks `infra/` too (`tsc -p infra`)."
+      }
+    }
+  ],
   "scripts": {
     ".": {
       "dev": "alchemy dev infra/alchemy.run.ts",
