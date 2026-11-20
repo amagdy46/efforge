@@ -548,6 +548,13 @@
           "items": {
             "type": "string"
           }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Things to know after the upgrade, one line each, as add gives them (when it brings the session gates: what they change and what pnpm check fails on)."
         }
       },
       "required": [
@@ -569,7 +576,8 @@
         "env",
         "kept",
         "steps",
-        "warnings"
+        "warnings",
+        "notes"
       ],
       "additionalProperties": true,
       "title": "efforge upgrade --check --json"
@@ -871,6 +879,13 @@
             "type": "string"
           }
         },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Things to know after the upgrade, one line each, as add gives them (when it brings the session gates: what they change and what pnpm check fails on)."
+        },
         "diff": {
           "type": "string",
           "description": "With --diff: what it changed, as a git diff."
@@ -894,7 +909,8 @@
         "kept",
         "needsAction",
         "nextSteps",
-        "warnings"
+        "warnings",
+        "notes"
       ],
       "additionalProperties": true,
       "title": "efforge upgrade --json"

@@ -40,15 +40,33 @@ export const failureCodec = <const S extends ReadonlyArray<ErrorSchema>>(errors:
 /** A failure's cause as it crosses the wire: JSON. */
 export type WireCause = Schema.Codec.Encoded<ReturnType<typeof failureCodec<[]>>>
 
+/** The `_tag` of each error schema in `S`, in order. */
+export type TagsOf<S extends ReadonlyArray<ErrorSchema>> = {
+  readonly [K in keyof S]: Schema.Schema.Type<S[K]>["_tag"]
+}
+
+/**
+ * Error schemas whose tags are `T`, in the same order: what the browser must
+ * list for a server function that lists `T` (`useServerCall`, `settleCall`).
+ */
+export type ErrorsFor<T extends ReadonlyArray<string>> = {
+  readonly [K in keyof T]: Schema.Codec<{ readonly _tag: T[K]; readonly message: string }, unknown>
+}
+
+declare const listed: unique symbol
+
 /**
  * What a server function returns: the `Exit` of its Effect, encoded for the
  * wire (`Schema.Exit`'s encoding). The value as it is; a failure as its
  * tagged errors with their fields, which `decodeOutcome` turns back into
- * instances of their classes.
+ * instances of their classes. `T` is the tags of the errors the server
+ * function lists, for the type checker only: the browser has to list the
+ * same ones, so the two lists cannot drift apart.
  */
-export type Outcome<A, C> =
+export type Outcome<A, C, T extends ReadonlyArray<string> = ReadonlyArray<string>> = (
   | { readonly _tag: "Success"; readonly value: A }
   | { readonly _tag: "Failure"; readonly cause: C }
+) & { readonly [listed]?: T }
 
 /** The schemas `errors` decode to, plus what every call can fail with. */
 export type Errors<S extends ReadonlyArray<ErrorSchema>> =

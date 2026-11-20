@@ -8,8 +8,7 @@ import { Label } from "@/components/ui/label"
 import { type RoomStatus, useRoom } from "@/lib/use-room"
 import { useServerCall } from "@/lib/use-server-call"
 import { cn } from "@/lib/utils"
-import { MessageTooLarge, RealtimeError } from "@repo/core/realtime"
-import { announce } from "@/server/realtime-demo"
+import { announce, AnnounceErrors } from "@/server/realtime-demo"
 import program from "../../../../packages/core/src/realtime.ts?region=card"
 import serverFn from "../server/realtime-demo.ts?region=card"
 import hook from "../lib/use-room.ts?region=card"
@@ -26,7 +25,7 @@ const statusText: Record<RoomStatus, string> = {
 function RealtimeDemo() {
   const { messages, status, reason, send } = useRoom("demo")
   const [text, setText] = useState("")
-  const server = useServerCall(announce, MessageTooLarge, RealtimeError)
+  const server = useServerCall(announce, ...AnnounceErrors)
   const tooLarge = isMessageTooLarge(text)
 
   const submit = (event: SubmitEvent) => {

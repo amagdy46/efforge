@@ -15,7 +15,10 @@ const StartInput = Schema.Struct({
   failFirstAttempt: Schema.Boolean,
 })
 
-/** Starts a run that belongs to the caller; `MissingName` arrives as itself. */
+/** What `startWorkflow` can fail with; each arrives as itself. */
+export const StartWorkflowErrors = [MissingName, JobError] as const
+
+/** Starts a run that belongs to the caller. */
 export const startWorkflow = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(StartInput))
   .handler(({ data }) =>
@@ -24,11 +27,13 @@ export const startWorkflow = createServerFn({ method: "POST" })
         const owner = yield* currentOwner
         return yield* startExample(owner, data)
       }),
-      MissingName,
-      JobError,
+      ...StartWorkflowErrors,
     ),
   )
 // #endregion
+
+/** What `watchWorkflow` can fail with: a run that is not the caller's is `UnknownRun`. */
+export const WatchWorkflowErrors = [UnknownRun, JobError] as const
 
 /** The caller's run's new events and its status; the output travels as JSON text. */
 export const watchWorkflow = createServerFn({ method: "GET" })
@@ -44,7 +49,6 @@ export const watchWorkflow = createServerFn({ method: "GET" })
           outputJson: JSON.stringify(run.output ?? null),
         })),
       ),
-      UnknownRun,
-      JobError,
+      ...WatchWorkflowErrors,
     ),
   )

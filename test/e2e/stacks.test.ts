@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process"
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -212,6 +213,41 @@ const checkDbGenerate = (dir: string) => {
   if (files() !== before) throw new Error("pnpm db:generate changed files in packages/db")
 }
 
+/**
+ * A server function's errors and the list its caller passes are one definition, held by types:
+ * the runtime card's `greet` lists `GreetErrors`, and a caller that lists anything else (one
+ * missing, none, another error) does not typecheck, while the same classes written out do.
+ */
+const checkErrorLists = (dir: string) => {
+  const probe = join(dir, "apps/web/src/error-list-probe.tsx")
+  writeFileSync(
+    probe,
+    [
+      'import { InvalidName } from "@repo/core/greeting"',
+      'import { settleCall, useServerCall } from "@/lib/use-server-call"',
+      'import { greet, GreetErrors } from "@/server/greeting"',
+      "",
+      "export function Probe() {",
+      "  const spread = useServerCall(greet, ...GreetErrors)",
+      "  const written = useServerCall(greet, InvalidName)",
+      "  // @ts-expect-error greet lists an error, so the caller must too",
+      "  const none = useServerCall(greet)",
+      "  // @ts-expect-error not the list greet has",
+      "  const more = useServerCall(greet, InvalidName, InvalidName)",
+      "  // @ts-expect-error settleCall is held to it too",
+      '  void settleCall(greet({ data: { name: "x" } }))',
+      "  return [spread, written, none, more].length",
+      "}",
+      "",
+    ].join("\n"),
+  )
+  try {
+    sh(join(dir, "apps/web"), "pnpm exec tsc --noEmit")
+  } finally {
+    rmSync(probe, { force: true })
+  }
+}
+
 /** Generates `config` into a tmp dir, installs, then runs the generated project's full gate: typecheck, check, test, build. */
 const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
   Effect.gen(function* () {
@@ -219,6 +255,7 @@ const buildStack = (config: StackConfig): Effect.Effect<void, unknown> =>
     yield* checkDoctor(dir)
     if (config.orm === "drizzle") yield* Effect.try(() => checkDbGenerate(dir))
     yield* Effect.try(() => sh(dir, "pnpm typecheck && pnpm check && pnpm test && pnpm build"))
+    yield* Effect.try(() => checkErrorLists(dir))
     // a minimal stack's card files may have nothing outside their regions; auth and database ones do
     const checked = yield* Effect.try(() => checkRegionsOnly(dir))
     if (checked === 0 && (config.auth !== "none" || config.database !== "none"))
@@ -686,6 +723,107 @@ const upgradeOld = (ref: string, flags: string, edited: boolean): Effect.Effect<
     rmSync(work, { recursive: true, force: true })
   })
 
+/** A line as the guide quotes it and as a run prints it: versions and counts left out. */
+const shapeOf = (line: string) =>
+  line
+    .replace(/\d+\.\d+\.\d+/g, "<version>")
+    .replace(/\d+/g, "<n>")
+    .trimEnd()
+
+/**
+ * The `<!-- output: <command> -->` blocks of docs/upgrading.md's worked example, each in order:
+ * its lines, with `...` where the guide leaves lines out.
+ */
+const guideBlocks = (): Map<string, string[]> =>
+  new Map(
+    [
+      ...readFileSync(join(repo, "docs/upgrading.md"), "utf8").matchAll(
+        /<!-- output: (.+?) -->\n```text\n([\s\S]*?)```/g,
+      ),
+    ].map((m) => [m[1] as string, (m[2] as string).split("\n").filter((l) => l.trim() !== "")]),
+  )
+
+/** The quoted lines `block` has that `printed` lacks, in order (`...` skips any number of lines). */
+const notPrinted = (block: ReadonlyArray<string>, printed: string): string[] => {
+  const lines = printed.split("\n").map(shapeOf)
+  const missing: string[] = []
+  let at = 0
+  // the first quoted line may come anywhere
+  let gap = true
+  for (const quoted of block) {
+    if (quoted.trim() === "...") {
+      gap = true
+      continue
+    }
+    const want = shapeOf(quoted)
+    // the next line, or after a `...` any later one
+    const found = gap
+      ? lines.indexOf(want, at)
+      : lines.slice(at).findIndex((l) => l.trim() !== "") + at
+    if (found === -1 || lines[found] !== want) missing.push(quoted)
+    else at = found + 1
+    gap = false
+  }
+  return missing
+}
+
+/**
+ * docs/upgrading.md walks a 0.2.0 project through doctor, upgrade --check and upgrade. That project
+ * is the committed fixture (test/fixtures/v0.2.0: the files add reads, and the rest of what 0.2.0
+ * generated), installed, with the owner's renamed dashboard heading committed. Each quoted block is
+ * held to what this efforge prints for it, counts and versions aside.
+ */
+const upgradingGuide = (): Effect.Effect<void, unknown> =>
+  Effect.gen(function* () {
+    const blocks = guideBlocks()
+    if ([...blocks.keys()].join(",") !== "doctor,upgrade --check,upgrade")
+      throw new Error(`docs/upgrading.md output blocks: ${[...blocks.keys()].join(", ")}`)
+    mkdirSync(e2eRoot, { recursive: true })
+    const work = mkdtempSync(`${e2eRoot}/upgrading-guide-`)
+    const dir = join(work, "old-db")
+    const fixtures = join(repo, "test/fixtures/v0.2.0")
+    cpSync(join(fixtures, "d1-effect-sql-auth"), dir, { recursive: true })
+    cpSync(join(fixtures, "d1-effect-sql-auth-rest"), dir, { recursive: true })
+    for (const stored of filesUnder(dir).filter((f) => f.endsWith("/gitignore"))) {
+      cpSync(stored, stored.replace(/gitignore$/, ".gitignore"))
+      rmSync(stored)
+    }
+    const dashboard = join(dir, "apps/web/src/routes/app/index.tsx")
+    writeFileSync(
+      dashboard,
+      readFileSync(dashboard, "utf8").replace(">Dashboard</h1>", ">Acme dashboard</h1>"),
+    )
+    yield* Effect.try(() => sh(dir, "pnpm install"))
+    yield* Effect.try(() =>
+      sh(
+        dir,
+        "git init -q && git add -A && git -c user.name=e2e -c user.email=e2e@localhost commit -qm owner",
+      ),
+    )
+    const efforge = (args: string) => {
+      const r = spawnSync(`node ${JSON.stringify(join(repo, "src/bin.ts"))} ${args}`, {
+        cwd: dir,
+        shell: true,
+        encoding: "utf8",
+        env: { ...process.env, NO_COLOR: "1", CI: "1" },
+      })
+      return { out: `${r.stdout}${r.stderr}`, code: r.status }
+    }
+    const problems: string[] = []
+    for (const [command, exit] of [
+      ["doctor", 2],
+      ["upgrade --check", 2],
+      ["upgrade", 0],
+    ] as const) {
+      const { out, code } = efforge(command)
+      if (code !== exit) problems.push(`${command} exited ${code}, the guide says ${exit}`)
+      for (const line of notPrinted(blocks.get(command) ?? [], out))
+        problems.push(`${command} no longer prints:\n  ${line}\n--- it printed:\n${out}`)
+    }
+    if (problems.length > 0) throw new Error(problems.join("\n\n"))
+    rmSync(work, { recursive: true, force: true })
+  })
+
 describe("upgrade an old project", () => {
   const releases: Array<[string, string, string]> = [
     ["0.2.0", "v0.2.0", "--database=d1 --orm=effect-sql"],
@@ -702,6 +840,11 @@ describe("upgrade an old project", () => {
       "--database=d1 --orm=drizzle --auth=better-auth --extras=storage,email,realtime",
     ],
   ]
+  it.effect(
+    "docs/upgrading.md's 0.2.0 example: each quoted line is what doctor, upgrade --check and upgrade print",
+    () => upgradingGuide(),
+    { timeout: 20 * 60 * 1000 },
+  )
   for (const [version, ref, flags] of releases)
     for (const edited of [false, true])
       it.effect(

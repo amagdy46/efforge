@@ -54,7 +54,7 @@ capability working, next to the Effect code behind it, and adding an add-on adds
   separate in the manifest because they import base files such a project does not have.
 - The landing page's labels and file paths for each slot option live in `lib/stack.ts` in base. A
   new add-on (a new slot option) needs a row there as well as its card.
-- Region lines are kept to 80 characters (the code panel at 1440 px); a repo test checks every
+- Region lines are kept to 80 characters (the code column is laid out to hold 80 characters beside the demo from 1280 px); a repo test checks every
   region a registered card shows, on every stack.
 - The generated lint config turns off `import/default` only for the files that import
   `?region=card` modules (TypeScript checks default imports, and the rule cannot see the default

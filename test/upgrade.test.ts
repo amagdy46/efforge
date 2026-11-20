@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
+import { stripVTControlCharacters } from "node:util"
 import { dirname, join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { Effect, Layer } from "effect"
@@ -839,4 +840,83 @@ it("upgrade --diff shows what it changed, from before it wrote", async () => {
   lowerPnpm(dir)
   const doc = JSON.parse((await cli(["upgrade", "--json", "--diff", "--no-install"], dir)).stdout)
   expect(doc.diff).toContain('-  "packageManager": "pnpm@12.4.2"')
+})
+
+it("upgrade bringing the session gates to a project made before them says what add auth says: --check, --json and text", async () => {
+  // a project made before the gates: no start.ts, and efforge.jsonc never recorded one
+  const dir = await project()
+  rmSync(join(dir, "apps/web/src/start.ts"))
+  const text = read(dir, "efforge.jsonc")
+  const m = JSON.parse(text.slice(text.indexOf("{")))
+  delete m.files["apps/web/src/start.ts"]
+  writeFileSync(join(dir, "efforge.jsonc"), renderManifest(m))
+  writeFileSync(
+    join(dir, "apps/web/src/server/export.ts"),
+    'import { createServerFn } from "@tanstack/react-start"\n\nconst rows = createServerFn({ method: "GET" }).handler(() => "rows")\n\nexport const exportAll = createServerFn({ method: "GET" }).handler(() => rows())\n',
+  )
+  const r = await check(dir)
+  expect(r.changes.get("apps/web/src/start.ts")).toContain("sessionGate")
+  expect(r.notes).toHaveLength(1)
+  const [note] = r.notes
+  expect(note).toMatch(/^Every server function now requires a session/)
+  expect(note).toContain(
+    "rows (apps/web/src/server/export.ts), exportAll (apps/web/src/server/export.ts)",
+  )
+  expect(note).toContain("pnpm check fails on each of them")
+  expect(note).toContain("Every request under /api/ now requires a session too")
+  expect(note).toContain("A route outside /api/ is not checked")
+  // efforge's own server functions chain requireSession, and the public ones are public
+  for (const name of ["greet", "listNotes", "getSession", "getAppState", "getStack"])
+    expect(note).not.toContain(`${name} (`)
+  // the same line in each document, and in text
+  const checked = JSON.parse((await cli(["upgrade", "--check", "--json"], dir)).stdout)
+  expect(checked.notes).toEqual(r.notes)
+  const plain = await cli(["upgrade", "--dry-run"], dir)
+  expect(stripVTControlCharacters(plain.stdout).replace(/\s+/g, " ")).toContain(
+    "A route outside /api/ is not checked",
+  )
+  const applied = JSON.parse((await cli(["upgrade", "--json", "--no-install"], dir)).stdout)
+  expect(applied.notes).toEqual(r.notes)
+  // once the gates are there, nothing more to say
+  expect((await check(dir)).notes).toEqual([])
+})
+
+it("a declaration a refreshed file needs is not added to a kept file without the imports it uses", async () => {
+  const dir = await project()
+  const greeting = "apps/web/src/server/greeting.ts"
+  const card = "apps/web/src/capabilities/runtime.tsx"
+  // a server file from before the shared error lists, changed by its owner: no GreetErrors, and
+  // no InvalidName import
+  edit(dir, greeting, (t) =>
+    t
+      .replace(
+        'import { greet as greetProgram, InvalidName } from "@repo/core/greeting"',
+        'import { greet as greetProgram } from "@repo/core/greeting"',
+      )
+      .replace(
+        /\/\*\* What `greet` can fail with[^\n]*\nexport const GreetErrors = \[InvalidName\] as const\n\n/,
+        "",
+      )
+      .replace(
+        "runOutcome(greetProgram(data.name), ...GreetErrors)",
+        "runOutcome(greetProgram(data.name))",
+      )
+      .concat("// the owner's\n"),
+  )
+  expect(read(dir, greeting)).not.toContain("GreetErrors")
+  // the card as an older efforge wrote it, so upgrade would refresh it to one that imports GreetErrors
+  olderTemplate(
+    dir,
+    card,
+    read(dir, card)
+      .replace("import { greet, GreetErrors } from", "import { greet } from")
+      .replace("useServerCall(greet, ...GreetErrors)", "useServerCall(greet)"),
+  )
+  const r = await check(dir)
+  const planned = r.changes.get(greeting)
+  // either the file gets the import with the declaration, or the card is held with the lines
+  if (planned?.includes("GreetErrors")) expect(planned).toMatch(/import \{[^}]*InvalidName/)
+  else expect(r.kept.map((k) => k.path)).toContain(card)
+  apply(dir, r)
+  await consistent(dir, r)
 })

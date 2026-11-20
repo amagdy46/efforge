@@ -3,12 +3,12 @@ import { FailureNote, Pending } from "@/components/demo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { EmptyPrompt, LlmError, LlmNotConfigured } from "@repo/core/llm"
+import { LlmError, LlmNotConfigured } from "@repo/core/llm"
 import { Schema } from "effect"
 import { asFailure } from "@/lib/failure"
 import type { Failure } from "@/lib/outcome"
 import { settleCall } from "@/lib/use-server-call"
-import { type AnswerPart, askModel } from "@/server/ai-demo"
+import { type AnswerPart, askModel, AskModelErrors } from "@/server/ai-demo"
 import program from "../../../../packages/core/src/llm.ts?region=card"
 import serverFn from "../server/ai-demo.ts?region=card"
 import type { Capability } from "./types"
@@ -48,7 +48,7 @@ function useAnswer() {
     current.current += 1
     const asked = current.current
     setAnswer({ status: "waiting" })
-    const outcome = await settleCall(askModel({ data: { prompt } }), EmptyPrompt, LlmNotConfigured)
+    const outcome = await settleCall(askModel({ data: { prompt } }), ...AskModelErrors)
     if (asked !== current.current) return false
     if (!outcome.ok) {
       setAnswer({ status: "failed", text: "", ...outcome })

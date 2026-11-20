@@ -6,14 +6,14 @@ import { runOutcome } from "./outcome"
 // #region card
 const AnnounceInput = Schema.Struct({ text: Schema.String })
 
-/**
- * Broadcasts to the room from the server, through the `Realtime` service.
- * Its tagged errors reach the browser as these classes.
- */
+/** What `announce` can fail with; the card lists the same, as classes. */
+export const AnnounceErrors = [MessageTooLarge, RealtimeError] as const
+
+/** Broadcasts to the room from the server, through the `Realtime` service. */
 export const announce = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(AnnounceInput))
   .handler(({ data }) => {
     const program = announceProgram("demo", data.text)
-    return runOutcome(program, MessageTooLarge, RealtimeError)
+    return runOutcome(program, ...AnnounceErrors)
   })
 // #endregion
