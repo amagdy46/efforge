@@ -838,6 +838,96 @@ const bindingsCheck: Check = {
     }),
 }
 
+// --- Durable Objects ----------------------------------------------------------------------------
+
+const SERVER_ENTRY = "apps/web/src/server.ts"
+
+/** The value names `file` re-exports (`export { A, B } from ...`); `*` re-exports count as unknown. */
+const reExported = (file: string, text: string): { names: Set<string>; star: boolean } => {
+  const names = new Set<string>()
+  let star = false
+  for (const d of parseTs(file, text).getExportDeclarations()) {
+    if (d.isTypeOnly()) continue
+    if (d.isNamespaceExport()) star = true
+    for (const n of d.getNamedExports())
+      if (!n.isTypeOnly()) names.add(n.getAliasNode()?.getText() ?? n.getName())
+  }
+  return { names, star }
+}
+
+/**
+ * Every Durable Object class a binding names must be exported from the Worker entry, and, with
+ * wrangler, created by a migration: a class without one fails the deploy, and a binding to a
+ * class the entry doesn't export fails at the first request.
+ */
+const durableObjectsCheck: Check = {
+  id: "durable-objects",
+  title: "Durable Objects",
+  run: (ctx) =>
+    Effect.sync(() => {
+      const stack = ctx.manifest?.stack
+      if (stack === undefined) return skipped("efforge.jsonc isn't valid, so the stack is unknown.")
+      const classes =
+        stack.infra === "alchemy"
+          ? transformsOf(ctx, stack, "addAlchemyResource").flatMap(({ t, addon }) => {
+              const m = /Cloudflare\.DurableObject\("([^"]+)"/.exec(t.args.code ?? "")
+              return m === null ? [] : [{ name: m[1] as string, addon: addon.id }]
+            })
+          : transformsOf(ctx, stack, "addWranglerBinding")
+              .filter(({ t }) => t.args.key === "durable_objects.bindings")
+              .flatMap(({ t, addon }) => {
+                const v = record(JSON.parse(t.args.value as string))
+                return typeof v.class_name === "string"
+                  ? [{ name: v.class_name, addon: addon.id }]
+                  : []
+              })
+      if (classes.length === 0) return ok("This stack has no Durable Objects.")
+      const problems: string[] = []
+      const entry = ctx.read(SERVER_ENTRY)
+      const exported = entry === undefined ? undefined : reExported(SERVER_ENTRY, entry)
+      const unexported =
+        exported === undefined || exported.star
+          ? []
+          : classes.filter((c) => !exported.names.has(c.name))
+      if (entry === undefined) problems.push(`${SERVER_ENTRY} is missing.`)
+      if (unexported.length > 0)
+        problems.push(
+          `${SERVER_ENTRY} doesn't export ${unexported.map((c) => `${c.name} (${c.addon})`).join(", ")}; Cloudflare finds a Durable Object class on the Worker entry.`,
+        )
+      let unmigrated: typeof classes = []
+      if (stack.infra !== "alchemy") {
+        const doc = jsonc(ctx.read("wrangler.jsonc"))
+        if (doc !== undefined) {
+          const created = new Set<string>()
+          for (const m of Array.isArray(doc.migrations) ? doc.migrations : [])
+            for (const key of ["new_sqlite_classes", "new_classes"]) {
+              const list = record(m)[key]
+              if (Array.isArray(list))
+                for (const c of list) if (typeof c === "string") created.add(c)
+            }
+          unmigrated = classes.filter((c) => !created.has(c.name))
+          if (unmigrated.length > 0)
+            problems.push(
+              `No migration in wrangler.jsonc creates ${unmigrated.map((c) => `${c.name} (${c.addon})`).join(", ")}; the deploy fails without one.`,
+            )
+        }
+      }
+      if (problems.length > 0)
+        return {
+          status: "fail" as const,
+          message: problems.join(" "),
+          fix: null,
+          details: {
+            unexported: unexported.map((c) => c.name),
+            unmigrated: unmigrated.map((c) => c.name),
+          },
+        }
+      return ok(
+        `${SERVER_ENTRY} exports the ${classes.length} Durable Object ${classes.length === 1 ? "class" : "classes"} this stack binds (${classes.map((c) => c.name).join(", ")})${stack.infra === "alchemy" ? "; Alchemy writes their migrations" : ", and a migration in wrangler.jsonc creates each"}.`,
+      )
+    }),
+}
+
 // --- Database -----------------------------------------------------------------------------------
 
 const migrationsCheck: Check = {
@@ -1103,6 +1193,7 @@ export const checks: ReadonlyArray<Check> = [
   peersCheck,
   envCheck,
   bindingsCheck,
+  durableObjectsCheck,
   migrationsCheck,
   postgresCheck,
   layersCheck,

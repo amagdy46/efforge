@@ -49,6 +49,7 @@
   --temper-7: #8a4f6e;
   --temper-8: #6b7078;
   --temper-9: #3d7f73;
+  --temper-10: #5e7a2a;
 }
 
 .dark {
@@ -89,6 +90,7 @@
   --temper-7: #c58aa8;
   --temper-8: #a3a7ae;
   --temper-9: #7fbfb2;
+  --temper-10: #a9c774;
 }
 
 @theme inline {

@@ -90,7 +90,8 @@
               "realtime",
               "browser",
               "storage",
-              "email"
+              "email",
+              "cluster"
             ]
           }
         }
@@ -221,7 +222,8 @@
                     "realtime",
                     "browser",
                     "storage",
-                    "email"
+                    "email",
+                    "cluster"
                   ]
                 }
               }

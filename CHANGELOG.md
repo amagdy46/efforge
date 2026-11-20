@@ -66,6 +66,9 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - Every service call is a named span (`Notes.list`, `Storage.put`, `Auth.currentSession`, ...) and every server function call is one (`serverFn.addNote`). Nothing records them until a tracer is set; then a trace reads by name.
 - `layers.ts` has a telemetry slot, `TelemetryLive`, underneath `AppLayer`, so a tracer there reaches what a layer forks while it builds as well as each request. Add-ons fill it with the new `addTelemetry` transform.
 - The generated `AGENTS.md` says how to add an error to a service and handle it in a component, to restart `pnpm dev` after adding a dependency, and where the Local Explorer is (`/cdn-cgi/local/explorer/`: D1 rows, R2 objects, Durable Object storage, Workflows, traces).
+- `efforge add cluster` (experimental): Effect Cluster, Effect Workflow and a durable queue on Durable Objects, through Effect's `@effect/platform-cloudflare` 4.1.4, pinned exactly with `effect`. A `Counter` entity keeps its count in its own SQLite; a `Review` workflow runs two activities around a durable wait for an approval; a `GreetingQueue` is drained by the request that offers to it, since nothing runs a worker in the background on Workers. The dashboard card, labelled experimental, increments a counter, starts and approves a run step by step, and offers a greeting; counters and runs are per user. It works on wrangler and on Alchemy (four `DurableObject` resources), beside `extras/workflows` and `extras/realtime`. `docs/cluster.md` walks through it and says what experimental means here: a durable sleep that is a run's first wait wakes about a minute late in 4.1.4, `pnpm dev` needs a restart after a handler changes, and a deploy is not tested.
+- `doctor` checks that every Durable Object class a binding names is created by a migration in `wrangler.jsonc` and exported from the Worker entry.
+- A tenth layer colour, Moss, so a project with every add-on and cluster repeats none.
 
 ### Changed
 
@@ -167,6 +170,8 @@ Coding agents can drive efforge from start to finish: every choice has a flag, n
 - With Alchemy and the AI add-on, `pnpm dev` starts without `LLM_API_KEY`. Before, Alchemy refused to plan.
 - `vite.config.ts` no longer warns about `./regions` on every `pnpm dev` and `pnpm build`.
 - The browser add-on passes the lint of a project made by efforge 0.2.x (it read `_tag`, which that lint forbids).
+- `scripts/history.ts` read `src/history.data.ts` with `JSON.parse`, which fails on the formatted file; it went on with an empty history, so the next release would have dropped every earlier one's record. It imports the module now.
+- `add` wrote a re-export wider than 100 characters on one line, which `pnpm check` then reported; `addExport` writes it one name per line, as `create`'s formatter does.
 
 ## 0.2.1 (2026-11-18)
 

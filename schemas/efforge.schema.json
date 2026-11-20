@@ -74,7 +74,8 @@
               "realtime",
               "browser",
               "storage",
-              "email"
+              "email",
+              "cluster"
             ]
           }
         }

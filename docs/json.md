@@ -1349,6 +1349,12 @@ npx -y create-efforge doctor --json --cwd my-app
       "fix": null
     },
     {
+      "id": "durable-objects",
+      "status": "ok",
+      "message": "This stack has no Durable Objects.",
+      "fix": null
+    },
+    {
       "id": "migrations",
       "status": "warn",
       "message": "2 of 2 migrations aren't applied to the local D1 database (0001_init.sql, 0002_auth.sql), so pnpm dev runs against missing tables.",
@@ -2128,7 +2134,7 @@ npx -y create-efforge add --json --cwd my-app
   "ok": false,
   "error": {
     "code": "NoAddonIds",
-    "message": "Name the add-ons to add: infra/alchemy, ai/effect-ai-byok, extras/workflows, extras/realtime, extras/browser, extras/storage, extras/email. What each one adds: npx -y create-efforge list --json --cwd my-app",
+    "message": "Name the add-ons to add: infra/alchemy, ai/effect-ai-byok, extras/workflows, extras/realtime, extras/browser, extras/storage, extras/email, extras/cluster. What each one adds: npx -y create-efforge list --json --cwd my-app",
     "fix": null,
     "available": [
       "infra/alchemy",
@@ -2137,7 +2143,8 @@ npx -y create-efforge add --json --cwd my-app
       "extras/realtime",
       "extras/browser",
       "extras/storage",
-      "extras/email"
+      "extras/email",
+      "extras/cluster"
     ]
   }
 }

@@ -76,7 +76,7 @@ export const realtime: Capability = {
 
 Every field is required except `layer`:
 
-- `id` is the card's id on the landing page too: `lib/stack.ts` links a stack item to `/app#<id>` when the registry has that id. The ids it expects are `runtime`, `database`, `auth`, `ai`, and each extra's own id (`workflows`, `realtime`, `browser`, `storage`, `email`).
+- `id` is the card's id on the landing page too: `lib/stack.ts` links a stack item to `/app#<id>` when the registry has that id. The ids it expects are `runtime`, `database`, `auth`, `ai`, and each extra's own id (`workflows`, `realtime`, `browser`, `storage`, `email`, `cluster`).
 - `layer.name` is the expression's name in `layers.ts` (what `addLayer` added). The layer graph uses it to show `provides` and `needs`, and the card takes that layer's tempering colour. Leave `layer` out for a capability without a layer.
 - `test.name` is the `it.effect` name of a test the card's code is about, one that swaps in a test layer. Every card has one: the add-on ships it (step 4).
 - `agents` is a `##` heading the add-on appends to `AGENTS.md` with `appendAgentsSection`, exactly as written there. Every card's add-on appends one.

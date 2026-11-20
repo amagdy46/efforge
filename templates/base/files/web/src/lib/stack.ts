@@ -37,6 +37,7 @@ const extras: Record<string, { label: string; path: string }> = {
   browser: { label: "Browser rendering", path: "packages/core/src/browser.ts" },
   storage: { label: "Storage", path: "packages/core/src/storage.ts" },
   email: { label: "Email", path: "packages/core/src/mailer.ts" },
+  cluster: { label: "Cluster (experimental)", path: "packages/core/src/cluster.ts" },
 }
 
 const chosen = (value: string) => value !== "none"
