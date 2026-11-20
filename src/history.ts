@@ -45,13 +45,25 @@ export const releasesSince = (version: string): ReadonlyArray<readonly [string, 
   return all.slice(Math.max(0, from))
 }
 
+/**
+ * The release a project itself got: the one that made (or last upgraded) it, the newest record at
+ * or before `version`. "Missing now means you removed it" is judged against this one alone. What a
+ * later release added, this CLI's own output included once it is recorded, is new to the project,
+ * not something its owner took out. (An `add` run by a newer efforge can write a later release's
+ * lines; one of those the owner removed is put back, which is the safe direction.)
+ */
+export const ownRelease = (version: string): ReadonlyArray<readonly [string, Release]> =>
+  releasesSince(version).slice(0, 1)
+
 /** True when efforge `version` has a record (a release this CLI knows). */
 export const knownRelease = (version: string): boolean => Object.hasOwn(releases, version)
 
-/** Every fingerprint the releases since `version` wrote for `file`, or undefined when none did. */
-export const recordFor = (version: string, file: string): Set<number> | undefined => {
+const recordOf = (
+  list: ReadonlyArray<readonly [string, Release]>,
+  file: string,
+): Set<number> | undefined => {
   let out: Set<number> | undefined
-  for (const [, r] of releasesSince(version)) {
+  for (const [, r] of list) {
     const text = r.records[file]
     if (text === undefined) continue
     out ??= new Set()
@@ -59,6 +71,14 @@ export const recordFor = (version: string, file: string): Set<number> | undefine
   }
   return out
 }
+
+/** Every fingerprint the releases since `version` wrote for `file`, or undefined when none did. */
+export const recordFor = (version: string, file: string): Set<number> | undefined =>
+  recordOf(releasesSince(version), file)
+
+/** The fingerprints the project's own release (`ownRelease`) wrote for `file`, if it wrote it. */
+export const ownRecordFor = (version: string, file: string): Set<number> | undefined =>
+  recordOf(ownRelease(version), file)
 
 /** True when a release since `version` pinned `name` at `pin`. */
 export const efforgePinned = (version: string, name: string, pin: string): boolean =>
@@ -69,7 +89,7 @@ export const efforgeScript = (version: string, file: string, name: string, comma
   releasesSince(version).some(([, r]) => r.scripts[file]?.[name]?.includes(command) === true)
 
 /**
- * True when a release since `version` wrote script `name` in `file` for a stack like `stack`: a
+ * True when the project's own release wrote script `name` in `file` for a stack like `stack`: a
  * script missing now is one the owner removed. Any other is new, and `upgrade` adds it.
  */
 export const efforgeWroteScript = (
@@ -78,7 +98,7 @@ export const efforgeWroteScript = (
   name: string,
   stack: { readonly [slot: string]: unknown },
 ) =>
-  releasesSince(version).some(([, r]) => {
+  ownRelease(version).some(([, r]) => {
     if (r.scripts[file]?.[name] === undefined) return false
     const only = r.scriptStacks?.[file]?.[name]
     if (only === undefined) return true
@@ -90,14 +110,14 @@ export const efforgeWroteScript = (
     })
   })
 
-/** True when a release since `version` declared `dep` in `file`: missing now means removed. */
+/** True when the project's own release declared `dep` in `file`: missing now means removed. */
 export const efforgeDeclared = (version: string, file: string, dep: string) =>
-  releasesSince(version).some(([, r]) => r.dependencies[file]?.includes(dep) === true)
+  ownRelease(version).some(([, r]) => r.dependencies[file]?.includes(dep) === true)
 
-/** True when a release since `version` generated `file` (for some stack). */
+/** True when the project's own release generated `file` (for some stack): missing means removed. */
 export const efforgeGenerated = (version: string, file: string) =>
-  releasesSince(version).some(([, r]) => r.records[file] !== undefined)
+  ownRelease(version).some(([, r]) => r.records[file] !== undefined)
 
-/** True when every release since `version` wrote no root `engines`. */
+/** True when the project's own release wrote no root `engines`. */
 export const enginesNew = (version: string) =>
-  releasesSince(version).every(([, r]) => r.engines === null)
+  ownRelease(version).every(([, r]) => r.engines === null)

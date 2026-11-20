@@ -849,12 +849,14 @@ it("upgrade --diff shows what it changed, from before it wrote", async () => {
 })
 
 it("upgrade bringing the session gates to a project made before them says what add auth says: --check, --json and text", async () => {
-  // a project made before the gates: no start.ts, and efforge.jsonc never recorded one
+  // a project made before the gates (by 0.2.1, which wrote no start.ts): no start.ts, and
+  // efforge.jsonc never recorded one. Made by this efforge, a missing start.ts is one you removed
   const dir = await project()
   rmSync(join(dir, "apps/web/src/start.ts"))
   const text = read(dir, "efforge.jsonc")
   const m = JSON.parse(text.slice(text.indexOf("{")))
   delete m.files["apps/web/src/start.ts"]
+  m.efforgeVersion = "0.2.1"
   writeFileSync(join(dir, "efforge.jsonc"), renderManifest(m))
   writeFileSync(
     join(dir, "apps/web/src/server/export.ts"),

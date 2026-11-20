@@ -67,22 +67,26 @@ export const decodeRecord = (text: string): Set<number> => {
 
 /**
  * How `disk` relates to `today` (efforge's render now) given `record` (every fingerprint the
- * releases since the project's own wrote for this file), or undefined when there is no record:
+ * releases since the project's own wrote for this file), or undefined when there is no record, and
+ * `own` (what the project's own release wrote; `record` when not given):
  *
  * - `current`: the same tokens in the same runs (formatting aside)
- * - `refresh`: everything on disk that today lacks is efforge's older output, and nothing an older
- *   release wrote that today still has is missing: an older efforge's file, unedited
+ * - `refresh`: everything on disk that today lacks is efforge's older output, and nothing the
+ *   project's own release wrote that today still has is missing: an older efforge's file, unedited
  * - `yours`: the owner added to it, and it has everything today's has
  * - `review`: the owner changed it and today's differs too (or, without a record, any difference)
  *
  * "Missing" means a stretch of at least SPAN runs in a row, which is what removing even one token
- * leaves; a single run is a phrase today's file also uses somewhere an older one didn't.
+ * leaves; a single run is a phrase today's file also uses somewhere an older one didn't. It is
+ * judged against `own`, not `record`: `record` holds later releases too (this one, once recorded),
+ * and their new lines are new to an older file, not removed from it.
  */
 export const compareWithRecord = (
   disk: string,
   today: string,
   record: ReadonlySet<number> | undefined,
   name?: string,
+  own: ReadonlySet<number> | undefined = record,
 ): "current" | "refresh" | "yours" | "review" => {
   const d = shingles(disk, name)
   const todayRuns = runs(today, name)
@@ -93,7 +97,7 @@ export const compareWithRecord = (
   if (
     record !== undefined &&
     onlyDisk.every((x) => record.has(x)) &&
-    !removed(todayRuns, d, record)
+    !removed(todayRuns, d, own ?? new Set())
   )
     return "refresh"
   if (onlyToday.length === 0) return "yours"

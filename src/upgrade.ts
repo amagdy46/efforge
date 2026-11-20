@@ -31,6 +31,8 @@ import {
   efforgeScript,
   efforgeWroteScript,
   enginesNew,
+  ownRecordFor,
+  ownRelease,
   recordFor,
   releasesSince,
 } from "./history.ts"
@@ -597,7 +599,7 @@ export const planUpgrade = (
     // a workspace package a release generated that the project no longer has (removed, renamed):
     // nothing goes back into it
     const gone = new Set(
-      releasesSince(made)
+      ownRelease(made)
         .flatMap(([, r]) => Object.keys(r.dependencies))
         .filter((p) => p !== "package.json" && at(p) === undefined)
         .map((p) => p.slice(0, -"/package.json".length)),
@@ -629,7 +631,13 @@ export const planUpgrade = (
         const s =
           lf(text) === template
             ? "current"
-            : compareWithRecord(text, template, recordFor(made, path), name)
+            : compareWithRecord(
+                text,
+                template,
+                recordFor(made, path),
+                name,
+                ownRecordFor(made, path),
+              )
         files.push({ path, status: s })
         if (s === "current") rehash.set(path, todayHashes[path] as string)
         if (s === "refresh") {
@@ -641,7 +649,7 @@ export const planUpgrade = (
       const s =
         lf(text) === template || sameStructure(path, text, template)
           ? "current"
-          : compareWithRecord(text, template, recordFor(made, path), name)
+          : compareWithRecord(text, template, recordFor(made, path), name, ownRecordFor(made, path))
       files.push({ path, status: s, inPlace: true })
       if (s === "refresh") changes.set(path, eolOf(text, template))
     }
@@ -682,8 +690,9 @@ export const planUpgrade = (
           const before = tree.get(f)
           const after = next.get(f)
           if (before === undefined || after === undefined || after === before) continue
-          const rec = recordFor(made, f)
-          if (rec === undefined) continue
+          if (recordFor(made, f) === undefined) continue
+          // only the project's own release: a later one's addition is new here, not removed
+          const rec = ownRecordFor(made, f) ?? new Set<number>()
           const was = shingles(before, name)
           const added = [...shingles(after, name)].filter((x) => !was.has(x))
           if (added.some((x) => rec.has(x))) continue // a release wrote it: you removed it
