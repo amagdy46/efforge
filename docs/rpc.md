@@ -31,7 +31,7 @@ Use a server function for a form post, for data a page needs when it first rende
 
 `npx -y create-efforge add rpc` adds an Effect RPC group and a typed client for it. The group is a contract in `packages/core`: each call's payload, success and tagged error, as `Schema`. The server serves the whole group at `POST /api/rpc`, and the client is built from the same group, so the two cannot drift apart.
 
-Here is the whole idea in about 30 lines (imports left out). The add-on writes these parts in their own files, with tests, and with a session rule on stacks with auth:
+Here is the whole idea in about 35 lines (imports left out). The add-on writes these parts in their own files, with tests, and with a session rule on stacks with auth:
 
 ```ts
 // packages/core/src/rpc.ts: the contract, shared by the server and the browser
@@ -46,18 +46,21 @@ export const AppRpcsHandlers = AppRpcs.toLayer({
   Countdown: ({ from }) => Stream.iterate(from, (n) => n - 1).pipe(Stream.take(from + 1)),
 })
 
-// apps/web/src/server/rpc.ts: the server, a layer in AppLayer
+// apps/web/src/server/rpc.ts: a layer in AppLayer; a fresh RPC server per request
+const RpcServices = Layer.mergeAll(AppRpcsHandlers, RpcSerialization.layerNdjson)
 export const RpcLive = Layer.effect(
   RpcHandler,
-  Effect.map(RpcServer.toHttpEffect(AppRpcs), HttpEffect.toWebHandler),
-).pipe(Layer.provide([AppRpcsHandlers, RpcSerialization.layerNdjson]))
+  Effect.map(Effect.context<Layer.Success<typeof RpcServices>>(), (services) =>
+    HttpEffect.toWebHandler(Effect.provide(Effect.flatten(RpcServer.toHttpEffect(AppRpcs)), services)),
+  ),
+).pipe(Layer.provide(RpcServices))
 
 // apps/web/src/routes/api/rpc.ts: a TanStack Start server route serves it
 export const Route = createFileRoute("/api/rpc")({
   server: {
     handlers: {
       POST: ({ request }) =>
-        runtime.runPromise(Effect.service(RpcHandler)).then((handle) => handle(request)),
+        runtime.runPromise(RpcHandler.use((handle) => Effect.promise(() => handle(request)))),
     },
   },
 })
@@ -76,7 +79,7 @@ const greet = useAtomSet(greetAtom)
 
 What the add-on decides for you:
 
-- **The server is a layer.** `RpcLive` is in `AppLayer`, built once per Worker isolate. The handlers run on the same layers as the server functions (the database card's `Notes`, Better Auth), not on copies, and the telemetry slot under `AppLayer` reaches the RPC server, so each call is a span named `rpc.Greet`, as a server function's is `serverFn.greet`.
+- **The server is a layer; each request gets its own RPC server.** `RpcLive` is in `AppLayer`, and builds a fresh RPC server inside each request on `AppLayer`'s services: on Workers, I/O such as a Postgres socket belongs to the request that started it. The handlers run on the same layers as the server functions (the database card's `Notes`, Better Auth), not on copies, and the telemetry slot under `AppLayer` reaches the RPC server, so each call is a span named `rpc.Greet`, as a server function's is `serverFn.greet`.
 - **Errors are the same idea as a server function's.** Declare them with `Schema.TaggedError` and a brand, and set them as a call's `error`. In the browser, the failure is the class with its fields (`instanceof InvalidName`, `length`); the dashboard shows it with the same `FailureNote`. A field holding a driver's error is `cause: ServerOnly` and stays on the server. A call that got no RPC answer at all fails with `RpcClientError`.
 - **The session rule is the same.** On a stack with auth, `/api/rpc` is under `/api/`, so `requireApiSession` refuses a call without a session with 401 `Unauthorized` before RPC runs. The client reads that answer back as `Unauthorized`, the class a server function's session gate gives, so the browser matches it the same way. Behind the gate, the group's `RpcSession` middleware checks the session again from the RPC request's cookies and gives each handler `Auth` for the caller.
 - **Streams stream.** A call with `stream: true` is sent as newline-delimited JSON over one HTTP response; the countdown on the dashboard shows each number as it arrives.

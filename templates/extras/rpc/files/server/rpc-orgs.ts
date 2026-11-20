@@ -40,20 +40,29 @@ const RpcSessionLive = Layer.effect(
   ),
 )
 
+/** AppLayer's database layer; Effect builds it once, so this is the same one. */
+const Database = DatabaseLayer.pipe(Layer.provide(WorkerEnvLive))
+
 // #region card
 /** Each call is a span named after it (`rpc.Greet`), as `serverFn.greet` is. */
 const serve = RpcServer.toHttpEffect(SessionRpcs, { spanPrefix: "rpc" })
 
-const handler = Effect.map(serve, HttpEffect.toWebHandler)
+/** What the calls run on: AppLayer's own Notes and Better Auth. */
+const RpcServices = AppRpcsHandlers.pipe(
+  Layer.merge(RpcSessionLive),
+  Layer.merge(RpcSerialization.layerNdjson),
+  Layer.provide([AuthLive, Database]),
+)
 
 /**
- * Serves the group at /api/rpc behind the session rule. Built once per
- * isolate inside AppLayer: the handlers get AppLayer's own Notes and Better
- * Auth, and the telemetry slot traces each call.
+ * Serves the group at /api/rpc, from AppLayer, so the telemetry slot traces
+ * each call. Each request gets its own RPC server: on Workers, I/O belongs
+ * to the request that started it.
  */
-export const RpcLive = Layer.effect(RpcHandler, handler).pipe(
-  Layer.provide([AppRpcsHandlers, RpcSessionLive]),
-  Layer.provide([AuthLive, DatabaseLayer.pipe(Layer.provide(WorkerEnvLive))]),
-  Layer.provide(RpcSerialization.layerNdjson),
-)
+export const RpcLive = Layer.effect(
+  RpcHandler,
+  Effect.map(Effect.context<Layer.Success<typeof RpcServices>>(), (services) =>
+    HttpEffect.toWebHandler(Effect.provide(Effect.flatten(serve), services)),
+  ),
+).pipe(Layer.provide(RpcServices))
 // #endregion

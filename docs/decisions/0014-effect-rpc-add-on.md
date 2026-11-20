@@ -24,14 +24,20 @@ classes, streams and auth with the least code, for about 64 KiB of gzipped clien
   (`greet` on every stack, `Notes` with a database). Core's tests reach both without the web
   app. `rpcOverHttp` there is the one protocol the browser and the tests use: ndjson over HTTP,
   where an answer other than 2xx is an error.
-- **The server is a layer in `AppLayer`.** `RpcLive` (`apps/web/src/server/rpc.ts`) builds
-  `RpcServer.toHttpEffect` once per isolate and provides the exported layers its handlers need
-  (`AuthLive`, `DatabaseLayer`), which Effect shares with `AppLayer` by reference. Being in
-  `AppLayer` puts it above the telemetry slot, so the fiber the RPC server forks while it builds
-  is traced. Calls are spans named `rpc.<Call>`, beside `serverFn.<name>`. The graph shows it
-  as one layer that provides `RpcHandler`; it reads no binding or setting of its own.
+- **The server is a layer in `AppLayer`, the RPC server is per request.** `RpcLive`
+  (`apps/web/src/server/rpc.ts`) provides the exported layers its handlers need (`AuthLive`,
+  `DatabaseLayer`), which Effect shares with `AppLayer` by reference, captures those services,
+  and builds `RpcServer.toHttpEffect` inside each request (`HttpEffect.toWebHandler` on the captured services). The
+  research's shape, one server forked when the layer builds, broke on Postgres in the browser
+  flow: workerd cancelled calls as hung, because the server fiber belonged to the request that
+  built the runtime, and on Postgres the runtime closes `AppLayer` (and Better Auth's pool) when
+  that call returns. Being in `AppLayer` keeps it above the telemetry slot. Calls are spans named
+  `rpc.<Call>`, beside `serverFn.<name>`. The graph shows it as one layer that provides
+  `RpcHandler`; it reads no binding or setting of its own.
 - **A TanStack Start server route serves it** (`routes/api/rpc.ts`), not a Worker route: it is
-  the Start answer to a Start question, and it runs inside Start's request context.
+  the Start answer to a Start question, and it runs inside Start's request context. It answers
+  inside the runtime call, so on Postgres `AppLayer` is open while the call runs; a stream's
+  later parts run after that call returns, so on Postgres a stream must not use the database.
 - **The session rule is the route gate, then a middleware.** `/api/rpc` stays behind
   `requireApiSession` and off `public-api-paths.json`. The gate answers 401 before RPC runs,
   which is no RPC answer, so `RpcSessionClient`, the client half of the group's `RpcSession`

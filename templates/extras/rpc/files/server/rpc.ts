@@ -14,13 +14,18 @@ export class RpcHandler extends Context.Service<
 /** Each call is a span named after it (`rpc.Greet`), as `serverFn.greet` is. */
 const serve = RpcServer.toHttpEffect(AppRpcs, { spanPrefix: "rpc" })
 
-const handler = Effect.map(serve, HttpEffect.toWebHandler)
+/** What the calls run on: the handlers' programs. */
+const RpcServices = Layer.merge(AppRpcsHandlers, RpcSerialization.layerNdjson)
 
 /**
- * Serves the group at /api/rpc. Built once per isolate inside AppLayer, so
- * the telemetry slot under AppLayer traces every call.
+ * Serves the group at /api/rpc, from AppLayer, so the telemetry slot traces
+ * each call. Each request gets its own RPC server: on Workers, I/O belongs
+ * to the request that started it.
  */
-export const RpcLive = Layer.effect(RpcHandler, handler).pipe(
-  Layer.provide([AppRpcsHandlers, RpcSerialization.layerNdjson]),
-)
+export const RpcLive = Layer.effect(
+  RpcHandler,
+  Effect.map(Effect.context<Layer.Success<typeof RpcServices>>(), (services) =>
+    HttpEffect.toWebHandler(Effect.provide(Effect.flatten(serve), services)),
+  ),
+).pipe(Layer.provide(RpcServices))
 // #endregion
