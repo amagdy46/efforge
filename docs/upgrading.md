@@ -111,7 +111,7 @@ A held server file still gets `requireSession` on its server functions, which th
 
 ## Without the new CLI
 
-If you can't run a newer efforge, repair a 0.2.0 project by hand. Any `efforge add` from 0.2.1 on does the same.
+If you can't run a newer efforge, repair a 0.2.0 project by hand. `efforge add` from 0.2.1 does the same; from 0.3.0 on, `add` writes nothing on a 0.2.x project and asks for `upgrade` first.
 
 1. In the root `package.json`, set `"packageManager": "pnpm@12.21.0"`. pnpm 12.4.2 ignores the overrides below.
 2. In `pnpm-workspace.yaml`, add these lines under `overrides:`, with your catalog's `effect` version (4.0.5 for 0.2.0):
